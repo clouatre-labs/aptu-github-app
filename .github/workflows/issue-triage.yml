@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
+
+name: Triage New Issues
+
+on:
+  issues:
+    types: [opened]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number }}
+  cancel-in-progress: false  # Never cancel in-progress triage; partial label state is worse than a queue
+
+jobs:
+  triage:
+    name: Triage Issue
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Run Aptu issue triage
+        uses: clouatre-labs/aptu@5545c56f0f4bf52a3dc918ec48a56c309280447c # v0.10.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+          provider: gemini
+          model: gemini-3.1-flash-lite
+          no-comment: 'false'  # Labels only; comment posted for non-self-dogfood repo
+          fallback-provider: 'openrouter'
+          fallback-model: 'inception/mercury-2'

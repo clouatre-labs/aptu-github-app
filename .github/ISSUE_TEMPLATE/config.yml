@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
+
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & Discussions
+    url: https://github.com/orgs/clouatre-labs/discussions
+    about: Ask questions and discuss ideas here.
+  - name: Report a Security Vulnerability
+    url: https://github.com/clouatre-labs/aptu-github-app/blob/main/SECURITY.md
+    about: Please report security vulnerabilities privately.

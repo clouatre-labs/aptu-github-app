@@ -1,0 +1,97 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
+
+version = 1
+SPDX-PackageName = "aptu-github-app"
+SPDX-PackageSupplier = "aptu-github-app Contributors"
+SPDX-PackageDownloadLocation = "https://github.com/clouatre-labs/aptu-github-app"
+
+[[annotations]]
+path = "**.ts"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "**.toml"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "**.yaml"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "**.yml"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "**.json"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "**.md"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = ".github/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "worker/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "docs/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "LICENSE"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "SECURITY.md"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "CONTRIBUTING.md"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "README.md"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = ".gitignore"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = ".editorconfig"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
+SPDX-License-Identifier = "Apache-2.0"
