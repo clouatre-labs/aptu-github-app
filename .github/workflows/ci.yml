@@ -53,7 +53,7 @@ jobs:
       - name: Install dependencies
         run: bun install
       - name: Biome check
-        run: bun run biome check
+        run: bunx biome check .
 
   typecheck:
     name: Type Check
@@ -70,7 +70,7 @@ jobs:
       - name: Install dependencies
         run: bun install
       - name: TypeScript type check
-        run: bun run tsc --noEmit
+        run: bun run --cwd worker tsc --noEmit
 
   test:
     name: Test
