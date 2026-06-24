@@ -1,0 +1,7 @@
+{
+  "name": "aptu-github-app",
+  "private": true,
+  "workspaces": [
+    "worker"
+  ]
+}
