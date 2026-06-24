@@ -1,0 +1,22 @@
+{
+  "name": "aptu-webhook",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "tsc": "tsc --noEmit",
+    "test": "vitest run",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@octokit/auth-app": "^7",
+    "@octokit/request": "^9"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4",
+    "typescript": "^5",
+    "vitest": "^3",
+    "@types/node": "^22",
+    "wrangler": "^4"
+  }
+}

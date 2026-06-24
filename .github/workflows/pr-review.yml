@@ -4,15 +4,14 @@
 name: Triage Pull Requests
 
 on:
-  pull_request:
-    types: [opened, synchronize]
-  workflow_dispatch:
+  repository_dispatch:
+    types: [aptu-review]
 
 permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: false  # Never cancel in-progress reviews; partial review state is worse than a queue
+  group: ${{ github.workflow }}-${{ github.event.client_payload.originating_repo }}-${{ github.event.client_payload.pull_number }}
+  cancel-in-progress: false
 
 jobs:
   review:
@@ -20,19 +19,16 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
     permissions:
-      pull-requests: write
-      issues: write
       contents: read
-      attestations: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v7.0.0
 
       - name: Review PR
         uses: clouatre-labs/aptu@5545c56f0f4bf52a3dc918ec48a56c309280447c # v0.10.1
-        continue-on-error: true  # Non-blocking - AI review is advisory
+        continue-on-error: true
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ github.event.client_payload.installation_token }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
           openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
@@ -43,3 +39,5 @@ jobs:
           fallback-model: 'inception/mercury-2'
           instructions-file: .github/instructions/pr-review.md
           repo-path: ${{ github.workspace }}
+          repo: ${{ github.event.client_payload.originating_repo }}
+          pull-number: ${{ github.event.client_payload.pull_number }}
