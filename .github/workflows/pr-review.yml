@@ -6,11 +6,20 @@ name: Triage Pull Requests
 on:
   repository_dispatch:
     types: [aptu-review]
+  workflow_dispatch:
+    inputs:
+      originating_repo:
+        required: true
+        description: 'Repository in owner/repo format'
+      pull_number:
+        required: true
+        description: 'PR number'
 
-permissions: {}
+permissions:
+  contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.client_payload.originating_repo }}-${{ github.event.client_payload.pull_number }}
+  group: ${{ github.workflow }}-${{ github.event.client_payload.originating_repo || github.event.inputs.originating_repo }}-${{ github.event.client_payload.pull_number || github.event.inputs.pull_number }}
   cancel-in-progress: false
 
 jobs:
@@ -18,26 +27,31 @@ jobs:
     name: Review PR
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
-    permissions:
-      contents: read
+    env:
+      ORIGINATING_REPO: ${{ github.event.client_payload.originating_repo || github.event.inputs.originating_repo }}
+      PULL_NUMBER: ${{ github.event.client_payload.pull_number || github.event.inputs.pull_number }}
+      INSTALLATION_TOKEN: ${{ github.event.client_payload.installation_token }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v7.0.0
 
+      - name: Install aptu CLI
+        run: |
+          mkdir -p /tmp/aptu-bin
+          cd /tmp/aptu-bin
+          curl -fsSL https://github.com/clouatre-labs/aptu/releases/download/v0.10.1/aptu-aarch64-unknown-linux-musl.tar.gz -o aptu.tar.gz
+          tar xzf aptu.tar.gz
+          mv aptu /usr/local/bin/aptu
+          chmod +x /usr/local/bin/aptu
+          rm -rf /tmp/aptu-bin
+
       - name: Review PR
-        uses: clouatre-labs/aptu@5545c56f0f4bf52a3dc918ec48a56c309280447c # v0.10.1
+        env:
+          GH_TOKEN: ${{ env.INSTALLATION_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          APTU_AI__PROVIDER: gemini
+          APTU_AI__MODEL: gemini-3.1-flash-lite
+        run: |
+          aptu pr review --comment --force ${{ env.ORIGINATING_REPO }}#${{ env.PULL_NUMBER }}
         continue-on-error: true
-        with:
-          github-token: ${{ github.event.client_payload.installation_token }}
-          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
-          openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
-          provider: gemini
-          model: gemini-3.1-flash-lite
-          skip-labeled: 'false'
-          fallback-provider: 'openrouter'
-          fallback-model: 'inception/mercury-2'
-          instructions-file: .github/instructions/pr-review.md
-          repo-path: ${{ github.workspace }}
-          repo: ${{ github.event.client_payload.originating_repo }}
-          pull-number: ${{ github.event.client_payload.pull_number }}
