@@ -1,6 +1,3 @@
-<!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- SPDX-FileCopyrightText: 2026 aptu-github-app Contributors -->
-
 # Contributing to aptu-github-app
 
 ## Quick Start

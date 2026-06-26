@@ -1,6 +1,3 @@
-<!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- SPDX-FileCopyrightText: 2026 aptu-github-app Contributors -->
-
 # aptu-github-app
 
 A Cloudflare Worker and GitHub Actions that automate issue triage and PR review for repositories
