@@ -1,6 +1,3 @@
-<!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- SPDX-FileCopyrightText: 2026 aptu-github-app Contributors -->
-
 # aptu-github-app
 
 A Cloudflare Worker and GitHub Actions that automate issue triage and PR review for repositories
@@ -25,6 +22,14 @@ server required.
 
 See [clouatre-labs/aptu#94](https://github.com/clouatre-labs/aptu/issues/94) for deployment
 instructions and prerequisites.
+
+## Releases
+
+Merging to `main` triggers [Release Please](https://github.com/googleapis/release-please-action)
+to create GitHub Releases automatically from [Conventional Commits](https://www.conventionalcommits.org/).
+No manual version bump is required. Each release generates a changelog entry and a tagged
+GitHub Release. See the [Releases & Versioning](https://github.com/clouatre-labs/aptu-github-app/blob/main/CONTRIBUTING.md#releases--versioning)
+section of CONTRIBUTING.md for details.
 
 ## Development
 

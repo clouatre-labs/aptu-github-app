@@ -1,6 +1,3 @@
-<!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- SPDX-FileCopyrightText: 2026 aptu-github-app Contributors -->
-
 # Contributing to aptu-github-app
 
 ## Quick Start
@@ -64,9 +61,39 @@ All pull requests run automated checks:
 - **lint** -- Biome lint and format check
 - **typecheck** -- TypeScript type check
 - **test** -- Bun test suite
+- **release** -- Release Please automation (triggered on merge to main)
 - **ci-result** -- Aggregate gate; sole required status check
 
 All checks must pass before merge.
+
+## Releases & Versioning
+
+This project uses [Release Please](https://github.com/googleapis/release-please-action) to
+automate version management and changelog generation from [Conventional Commits](https://www.conventionalcommits.org/).
+
+### How It Works
+
+1. Every merge to `main` triggers the `release.yml` workflow
+2. Release Please scans new commits for conventional commit types (`feat`, `fix`, `docs`, etc.)
+3. It opens or updates a **Release PR** that bumps the version and generates a changelog
+4. Merging the Release PR creates a tagged GitHub Release and updates the manifest
+
+### Important: GITHUB_TOKEN Limitation
+
+Release Please runs using the default `GITHUB_TOKEN`. GitHub Actions workflows triggered by
+`GITHUB_TOKEN` do **not** trigger other workflows (this prevents recursive CI loops). This means
+CI checks (lint, typecheck, test) do **not** run on Release Please PRs.
+
+This is expected behaviour. Contributors should never bump versions manually or merge Release
+PRs with failing status checks (the check is a formality and will always be pending, not
+failing).
+
+### What Contributors Need to Know
+
+- Write conventional commit messages (`feat:`, `fix:`, `docs:`, etc.)
+- Do **not** manually edit version numbers in `package.json`, `wrangler.jsonc`, or any manifest
+- Do **not** manually create GitHub Releases
+- The Release PR can be merged as soon as it appears; the changelog is generated automatically
 
 ## Code Review
 
