@@ -1,6 +1,3 @@
-<!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- SPDX-FileCopyrightText: 2026 aptu-github-app Contributors -->
-
 # PR Review Instructions
 
 ## Scope
@@ -38,6 +35,18 @@ When reviewing `.github/workflows/` changes:
 - Tests use `bun test` with TypeScript.
 - One happy path and one edge case per behavior; do not flag missing tests for behaviors
   already covered by existing tests.
+
+## SPDX Headers
+
+REUSE compliance is managed via `REUSE.toml`. Inline SPDX headers are required only for
+TypeScript (`.ts`) and YAML (`.yml`, `.yaml`) files. Do not flag missing SPDX headers on
+Markdown (`.md`) files; they are covered by the `**.md` annotation in `REUSE.toml`.
+
+## Markdown Links
+
+Flag relative links in Markdown files (e.g., `[text](CONTRIBUTING.md)` or
+`[text](../docs/foo.md)`). All links must be absolute URLs so they resolve correctly in
+GitHub release notes, forks, and mirrored docs.
 
 ## General
 

@@ -60,17 +60,13 @@ All commits must be GPG-signed with DCO sign-off (`git commit -S --signoff`).
 - `CLOUDFLARE_API_TOKEN` -- GitHub Action secret for wrangler deploy
 - `CLOUDFLARE_ACCOUNT_ID` -- GitHub Action variable
 - App private key and ID -- installed via `actions/create-github-app-token` in workflows
-- No secrets in committed files; SPDX headers on all source files
+- No secrets in committed files; SPDX headers on all TypeScript and YAML source files
 
 ## SPDX Headers
 
-All new source files must include SPDX license headers for REUSE compliance:
-
-**Markdown:**
-```html
-<!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- SPDX-FileCopyrightText: 2026 aptu-github-app Contributors -->
-```
+REUSE compliance is managed via `REUSE.toml`. Inline headers are required only for
+TypeScript and YAML files. Markdown files are covered by the `**.md` annotation in
+`REUSE.toml` -- do not add `<!-- SPDX-... -->` comments to `.md` files.
 
 **YAML:**
 ```yaml
@@ -83,6 +79,13 @@ All new source files must include SPDX license headers for REUSE compliance:
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
 ```
+
+## Markdown Links
+
+Always use absolute URLs in Markdown files (e.g.,
+`https://github.com/clouatre-labs/aptu-github-app/blob/main/CONTRIBUTING.md#section`).
+Relative links break when files are rendered outside the repository root (GitHub release
+notes, forks, mirrored docs).
 
 ## Test Conventions
 

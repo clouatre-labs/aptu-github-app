@@ -28,7 +28,8 @@ instructions and prerequisites.
 Merging to `main` triggers [Release Please](https://github.com/googleapis/release-please-action)
 to create GitHub Releases automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 No manual version bump is required. Each release generates a changelog entry and a tagged
-GitHub Release. See [RELEASE.md](docs/RELEASE.md) for the full release process.
+GitHub Release. See the [Releases & Versioning](https://github.com/clouatre-labs/aptu-github-app/blob/main/CONTRIBUTING.md#releases--versioning)
+section of CONTRIBUTING.md for details.
 
 ## Development
 
