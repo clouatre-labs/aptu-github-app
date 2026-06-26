@@ -1,13 +1,15 @@
-<!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- SPDX-FileCopyrightText: 2026 aptu-github-app Contributors -->
-
 # Security Policy
 
 ## Supported Versions
 
+This project is a continuously-deployed Cloudflare Worker. The production endpoint always
+runs the latest commit on `main`; there are no legacy versions in service. Only the current
+release is supported.
+
 | Version | Supported |
 | ------- | --------- |
-| 0.1.x   | Yes       |
+| latest  | Yes       |
+| older   | No        |
 
 ## Verifying Release Signatures
 
@@ -93,7 +95,9 @@ audited on each rotation.
 
 ### REUSE/SPDX
 
-All files carry SPDX license headers, verified by the REUSE standard.
+License metadata is managed via `REUSE.toml`. TypeScript and YAML files carry inline SPDX
+headers; all other file types (Markdown, JSON, TOML, etc.) are covered by glob annotations
+in `REUSE.toml`. Compliance verified by the REUSE standard.
 
 ### Signed Commits
 
