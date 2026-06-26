@@ -26,6 +26,13 @@ server required.
 See [clouatre-labs/aptu#94](https://github.com/clouatre-labs/aptu/issues/94) for deployment
 instructions and prerequisites.
 
+## Releases
+
+Merging to `main` triggers [Release Please](https://github.com/googleapis/release-please-action)
+to create GitHub Releases automatically from [Conventional Commits](https://www.conventionalcommits.org/).
+No manual version bump is required. Each release generates a changelog entry and a tagged
+GitHub Release. See [RELEASE.md](docs/RELEASE.md) for the full release process.
+
 ## Development
 
 **Prerequisites:** [Bun](https://bun.sh/), [Wrangler](https://developers.cloudflare.com/workers/wrangler/)
