@@ -107,6 +107,7 @@ export async function shouldSkipPrDispatch(
     const prFilesResponse = await fetch(
       `https://api.github.com/repos/${repoFullName}/pulls/${prNumber}/files`,
       {
+        signal: AbortSignal.timeout(5000),
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/vnd.github+json',
