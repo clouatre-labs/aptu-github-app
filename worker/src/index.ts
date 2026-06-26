@@ -1,4 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
+
 import { createAppAuth } from '@octokit/auth-app';
+import { isMatch } from 'picomatch';
+import reposConfig from '../../config/repos.json';
 
 export interface Env {
   WEBHOOK_SECRET: string;
@@ -87,6 +92,49 @@ export async function dispatchEvent(
   }
 }
 
+export async function shouldSkipPrDispatch(
+  repoFullName: string,
+  prNumber: number,
+  token: string
+): Promise<boolean> {
+  const repoConfig = reposConfig[repoFullName as keyof typeof reposConfig];
+  if (!repoConfig) return false;
+
+  const excludePatterns = repoConfig.exclude_paths;
+  if (!excludePatterns || excludePatterns.length === 0) return false;
+
+  try {
+    const prFilesResponse = await fetch(
+      `https://api.github.com/repos/${repoFullName}/pulls/${prNumber}/files`,
+      {
+        signal: AbortSignal.timeout(5000),
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'aptu-webhook/1.0',
+        },
+      }
+    );
+
+    if (!prFilesResponse.ok) {
+      return false;
+    }
+
+    interface GitHubFile {
+      filename: string;
+    }
+    const files = (await prFilesResponse.json()) as GitHubFile[];
+    if (!files || files.length === 0) return false;
+
+    return files.every((file) =>
+      excludePatterns.some((pattern) => isMatch(file.filename, pattern))
+    );
+  } catch {
+    return false;
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method !== 'POST')
@@ -137,6 +185,10 @@ export default {
         return new Response('OK', { status: 200 });
       const token = await getInstallationToken(env, installationId);
       const pr = payload.pull_request as { number: number; title: string };
+
+      const shouldSkip = await shouldSkipPrDispatch(repo, pr.number, token);
+      if (shouldSkip) return new Response(null, { status: 204 });
+
       await dispatchEvent(token, env.TARGET_REPO, 'aptu-review', {
         installation_token: token,
         originating_repo: repo,

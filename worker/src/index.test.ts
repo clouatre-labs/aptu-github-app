@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
+
 import { createHmac } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -259,18 +262,32 @@ describe('excluded repos', () => {
   it.each([
     [
       'issues',
-      { action: 'opened', installation: { id: 1 }, issue: { number: 1, title: 'T' }, repository: { full_name: 'clouatre-labs/aptu' } },
+      {
+        action: 'opened',
+        installation: { id: 1 },
+        issue: { number: 1, title: 'T' },
+        repository: { full_name: 'clouatre-labs/aptu' },
+      },
     ],
     [
       'pull_request',
-      { action: 'opened', installation: { id: 1 }, pull_request: { number: 1, title: 'T' }, repository: { full_name: 'clouatre-labs/aptu' } },
+      {
+        action: 'opened',
+        installation: { id: 1 },
+        pull_request: { number: 1, title: 'T' },
+        repository: { full_name: 'clouatre-labs/aptu' },
+      },
     ],
   ])('returns 200 without dispatch for %s.opened when repo is excluded', async (event, payload) => {
     const body = JSON.stringify(payload);
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(
       body,
-      { 'X-GitHub-Event': event, 'X-Hub-Signature-256': sig, 'Content-Type': 'application/json' },
+      {
+        'X-GitHub-Event': event,
+        'X-Hub-Signature-256': sig,
+        'Content-Type': 'application/json',
+      },
       { ...mockEnv, EXCLUDED_REPOS: 'clouatre-labs/aptu' }
     );
     expect(response.status).toBe(200);
@@ -287,10 +304,146 @@ describe('excluded repos', () => {
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(
       body,
-      { 'X-GitHub-Event': 'issues', 'X-Hub-Signature-256': sig, 'Content-Type': 'application/json' },
-      { ...mockEnv, EXCLUDED_REPOS: 'clouatre-labs/aptu, my-org/my-repo, other/third' }
+      {
+        'X-GitHub-Event': 'issues',
+        'X-Hub-Signature-256': sig,
+        'Content-Type': 'application/json',
+      },
+      {
+        ...mockEnv,
+        EXCLUDED_REPOS: 'clouatre-labs/aptu, my-org/my-repo, other/third',
+      }
     );
     expect(response.status).toBe(200);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('path filter config', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+
+  it('returns 204 without dispatch when all PR files match exclude_paths patterns', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          { filename: 'src/data/blog/post.md' },
+          { filename: 'src/assets/images/photo.png' },
+        ]),
+        { status: 200 }
+      )
+    );
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: { number: 42, title: 'Update content' },
+      repository: { full_name: 'clouatre-labs/clouatre.ca' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(204);
+    const prFilesCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/pulls/')
+    );
+    expect(prFilesCalls.length).toBe(1);
+    // biome-ignore lint/style/noNonNullAssertion: length asserted above
+    expect(prFilesCalls[0]![0]).toContain('/pulls/42/files');
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(0);
+  });
+
+  it('returns 204 and dispatches when one file does not match exclude_paths (partial match)', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          { filename: 'src/data/blog/post.md' },
+          { filename: 'worker/src/index.ts' },
+        ]),
+        { status: 200 }
+      )
+    );
+    fetchSpy.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: { number: 43, title: 'Mixed changes' },
+      repository: { full_name: 'clouatre-labs/clouatre.ca' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
+  });
+
+  it('returns 204 and dispatches normally when repo has no entry in config/repos.json', async () => {
+    fetchSpy.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: { number: 44, title: 'Unconfigured repo' },
+      repository: { full_name: 'unconfigured/repo' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(204);
+    const prFilesCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/pulls/')
+    );
+    expect(prFilesCalls.length).toBe(0);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
+  });
+
+  it('returns 204 and dispatches when GitHub API fetch for PR files throws or fails', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response('Internal Server Error', { status: 500 })
+    );
+    fetchSpy.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: { number: 45, title: 'API failure test' },
+      repository: { full_name: 'clouatre-labs/clouatre.ca' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
   });
 });
