@@ -10,13 +10,15 @@
   },
   "dependencies": {
     "@octokit/auth-app": "^7",
-    "@octokit/request": "^9"
+    "@octokit/request": "^9",
+    "picomatch": "^4"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4",
     "typescript": "^5",
     "vitest": "^3",
     "@types/node": "^22",
+    "@types/picomatch": "^3",
     "wrangler": "^4"
   }
 }
