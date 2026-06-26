@@ -3,7 +3,6 @@
 
 import { createAppAuth } from '@octokit/auth-app';
 import { isMatch } from 'picomatch';
-// @ts-expect-error - JSON import
 import reposConfig from '../../config/repos.json';
 
 export interface Env {
@@ -121,14 +120,15 @@ export async function shouldSkipPrDispatch(
       return false;
     }
 
-    // biome-ignore lint/suspicious/noExplicitAny: GitHub API response is untyped
-    const files = (await prFilesResponse.json()) as any[];
+    interface GitHubFile {
+      filename: string;
+    }
+    const files = (await prFilesResponse.json()) as GitHubFile[];
     if (!files || files.length === 0) return false;
 
-    return files.every((file) => {
-      const filename = file.filename as string;
-      return excludePatterns.some((pattern) => isMatch(filename, pattern));
-    });
+    return files.every((file) =>
+      excludePatterns.some((pattern) => isMatch(file.filename, pattern))
+    );
   } catch {
     return false;
   }

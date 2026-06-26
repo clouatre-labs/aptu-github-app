@@ -354,7 +354,8 @@ describe('path filter config', () => {
       String(call[0]).includes('/pulls/')
     );
     expect(prFilesCalls.length).toBe(1);
-    expect(prFilesCalls[0][0]).toContain('/pulls/42/files');
+    // biome-ignore lint/style/noNonNullAssertion: length asserted above
+    expect(prFilesCalls[0]![0]).toContain('/pulls/42/files');
     const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
       String(call[0]).includes('/dispatches')
     );
