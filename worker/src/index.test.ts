@@ -19,6 +19,7 @@ const mockEnv = {
   APP_PRIVATE_KEY: 'fake-key',
   APP_ID: '4134521',
   TARGET_REPO: 'clouatre-labs/aptu-github-app',
+  EXCLUDED_REPOS: '',
 };
 
 async function callHandler(body: string, headers: Record<string, string>) {
@@ -240,5 +241,136 @@ describe('repository_dispatch client_payload', () => {
       originating_repo: 'myorg/myrepo',
       pull_number: 99,
     });
+  });
+});
+
+describe('excluded repos', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 204 }));
+  });
+
+  async function callHandlerWithEnv(
+    body: string,
+    headers: Record<string, string>,
+    env: Record<string, string>
+  ) {
+    const { default: handler } = await import('./index.js');
+    const request = new Request('https://aptu.dev/webhook', {
+      method: 'POST',
+      headers,
+      body,
+    });
+    return handler.fetch(request, env);
+  }
+
+  it('returns 200 without dispatch when issues.opened repo matches EXCLUDED_REPOS', async () => {
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Excluded issue' },
+      repository: { full_name: 'clouatre-labs/aptu' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandlerWithEnv(
+      body,
+      {
+        'X-GitHub-Event': 'issues',
+        'X-Hub-Signature-256': sig,
+        'Content-Type': 'application/json',
+      },
+      { ...mockEnv, EXCLUDED_REPOS: 'clouatre-labs/aptu' }
+    );
+    expect(response.status).toBe(200);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns 200 without dispatch when pull_request.opened repo matches EXCLUDED_REPOS', async () => {
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: { number: 1, title: 'Excluded PR' },
+      repository: { full_name: 'clouatre-labs/aptu' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandlerWithEnv(
+      body,
+      {
+        'X-GitHub-Event': 'pull_request',
+        'X-Hub-Signature-256': sig,
+        'Content-Type': 'application/json',
+      },
+      { ...mockEnv, EXCLUDED_REPOS: 'clouatre-labs/aptu' }
+    );
+    expect(response.status).toBe(200);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns 204 and calls dispatch when issues.opened repo does not match EXCLUDED_REPOS (different repo)', async () => {
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Non-excluded issue' },
+      repository: { full_name: 'other-org/other-repo' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandlerWithEnv(
+      body,
+      {
+        'X-GitHub-Event': 'issues',
+        'X-Hub-Signature-256': sig,
+        'Content-Type': 'application/json',
+      },
+      { ...mockEnv, EXCLUDED_REPOS: 'clouatre-labs/aptu' }
+    );
+    expect(response.status).toBe(204);
+    expect(fetchSpy).toHaveBeenCalledOnce();
+  });
+
+  it('returns 204 and calls dispatch when EXCLUDED_REPOS is empty string', async () => {
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Empty excluded' },
+      repository: { full_name: 'clouatre-labs/aptu' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandlerWithEnv(
+      body,
+      {
+        'X-GitHub-Event': 'issues',
+        'X-Hub-Signature-256': sig,
+        'Content-Type': 'application/json',
+      },
+      { ...mockEnv, EXCLUDED_REPOS: '' }
+    );
+    expect(response.status).toBe(204);
+    expect(fetchSpy).toHaveBeenCalledOnce();
+  });
+
+  it('returns 200 without dispatch when repo matches from comma-separated EXCLUDED_REPOS list', async () => {
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'List excluded' },
+      repository: { full_name: 'my-org/my-repo' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandlerWithEnv(
+      body,
+      {
+        'X-GitHub-Event': 'issues',
+        'X-Hub-Signature-256': sig,
+        'Content-Type': 'application/json',
+      },
+      {
+        ...mockEnv,
+        EXCLUDED_REPOS: 'clouatre-labs/aptu, my-org/my-repo, other/third',
+      }
+    );
+    expect(response.status).toBe(200);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
