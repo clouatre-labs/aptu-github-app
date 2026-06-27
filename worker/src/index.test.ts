@@ -554,9 +554,13 @@ describe('config-driven dispatch', () => {
   });
 
   it('returns 200 without dispatching when config YAML is malformed', async () => {
-    fetchSpy.mockImplementation((url: string | URL | Request) => {
+    fetchSpy.mockImplementation((url: unknown) => {
       const urlStr =
-        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.href
+            : (url as Request).url;
       if (urlStr.includes('/contents/.github/aptu.yml')) {
         return Promise.resolve(
           makeConfigResponse('not: valid: yaml: \n  - broken', 200)
@@ -629,9 +633,13 @@ describe('config-driven dispatch', () => {
   });
 
   it('dispatches when triage.enabled is true on issues.opened', async () => {
-    fetchSpy.mockImplementation((url: string | URL | Request) => {
+    fetchSpy.mockImplementation((url: unknown) => {
       const urlStr =
-        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.href
+            : (url as Request).url;
       if (urlStr.includes('/contents/.github/aptu.yml')) {
         return Promise.resolve(
           makeConfigResponse(
@@ -662,9 +670,13 @@ describe('config-driven dispatch', () => {
   });
 
   it('dispatches when review.enabled is true on pull_request.opened', async () => {
-    fetchSpy.mockImplementation((url: string | URL | Request) => {
+    fetchSpy.mockImplementation((url: unknown) => {
       const urlStr =
-        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.href
+            : (url as Request).url;
       if (urlStr.includes('/contents/.github/aptu.yml')) {
         return Promise.resolve(
           makeConfigResponse(
@@ -734,9 +746,13 @@ describe('config-driven dispatch', () => {
   });
 
   it('forwards config fields in client_payload for PR dispatch', async () => {
-    fetchSpy.mockImplementation((url: string | URL | Request) => {
+    fetchSpy.mockImplementation((url: unknown) => {
       const urlStr =
-        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.href
+            : (url as Request).url;
       if (urlStr.includes('/contents/.github/aptu.yml')) {
         return Promise.resolve(
           makeConfigResponse(
@@ -771,9 +787,13 @@ describe('config-driven dispatch', () => {
   });
 
   it('gracefully handles config fetch timeout/500 by not dispatching', async () => {
-    fetchSpy.mockImplementation((url: string | URL | Request) => {
+    fetchSpy.mockImplementation((url: unknown) => {
       const urlStr =
-        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.href
+            : (url as Request).url;
       if (urlStr.includes('/contents/.github/aptu.yml')) {
         return Promise.resolve(
           new Response('Internal Server Error', { status: 500 })
