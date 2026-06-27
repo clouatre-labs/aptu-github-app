@@ -165,6 +165,8 @@ export default {
       const repo = (payload.repository as { full_name: string }).full_name;
       if (isExcluded(repo, env.EXCLUDED_REPOS))
         return new Response('OK', { status: 200 });
+      if (!repo.includes('/'))
+        return new Response('Bad Request', { status: 400 });
       const token = await getInstallationToken(env, installationId);
       const issue = payload.issue as { number: number; title: string };
       const owner = repo.split('/')[0] ?? '';
@@ -189,6 +191,8 @@ export default {
     ) {
       if (!installationId) return new Response('Bad Request', { status: 400 });
       const repo = (payload.repository as { full_name: string }).full_name;
+      if (!repo.includes('/'))
+        return new Response('Bad Request', { status: 400 });
       if (isExcluded(repo, env.EXCLUDED_REPOS))
         return new Response('OK', { status: 200 });
       const token = await getInstallationToken(env, installationId);

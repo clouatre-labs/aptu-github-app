@@ -44,7 +44,7 @@ function mockEnabledFetch(): ReturnType<typeof vi.fn> {
       );
     }
     return Promise.resolve(new Response(null, { status: 204 }));
-  }) as unknown as ReturnType<typeof vi.spyOn<any, any>>;
+  });
 }
 
 function mockDisabledFetch(): ReturnType<typeof vi.fn> {
@@ -59,7 +59,7 @@ function mockDisabledFetch(): ReturnType<typeof vi.fn> {
       );
     }
     return Promise.resolve(new Response(null, { status: 204 }));
-  }) as unknown as ReturnType<typeof vi.spyOn<any, any>>;
+  });
 }
 
 function mockAbsentConfigFetch(): ReturnType<typeof vi.fn> {
@@ -70,7 +70,7 @@ function mockAbsentConfigFetch(): ReturnType<typeof vi.fn> {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
     return Promise.resolve(new Response(null, { status: 204 }));
-  }) as unknown as ReturnType<typeof vi.spyOn<any, any>>;
+  });
 }
 
 const mockEnv = {
@@ -554,22 +554,16 @@ describe('config-driven dispatch', () => {
   });
 
   it('returns 200 without dispatching when config YAML is malformed', async () => {
-    fetchSpy.mockImplementation(
-      vi.fn((url: string | URL | Request) => {
-        const urlStr =
-          typeof url === 'string'
-            ? url
-            : url instanceof URL
-              ? url.href
-              : url.url;
-        if (urlStr.includes('/contents/.github/aptu.yml')) {
-          return Promise.resolve(
-            makeConfigResponse('not: valid: yaml: \n  - broken', 200)
-          );
-        }
-        return Promise.resolve(new Response(null, { status: 204 }));
-      }) as unknown as ReturnType<typeof vi.spyOn<any, any>>
-    );
+    fetchSpy.mockImplementation((url: string | URL | Request) => {
+      const urlStr =
+        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(
+          makeConfigResponse('not: valid: yaml: \n  - broken', 200)
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
 
     const body = JSON.stringify({
       action: 'opened',
@@ -635,24 +629,18 @@ describe('config-driven dispatch', () => {
   });
 
   it('dispatches when triage.enabled is true on issues.opened', async () => {
-    fetchSpy.mockImplementation(
-      vi.fn((url: string | URL | Request) => {
-        const urlStr =
-          typeof url === 'string'
-            ? url
-            : url instanceof URL
-              ? url.href
-              : url.url;
-        if (urlStr.includes('/contents/.github/aptu.yml')) {
-          return Promise.resolve(
-            makeConfigResponse(
-              'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: false'
-            )
-          );
-        }
-        return Promise.resolve(new Response(null, { status: 204 }));
-      }) as unknown as ReturnType<typeof vi.spyOn<any, any>>
-    );
+    fetchSpy.mockImplementation((url: string | URL | Request) => {
+      const urlStr =
+        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(
+          makeConfigResponse(
+            'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: false'
+          )
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
 
     const body = JSON.stringify({
       action: 'opened',
@@ -674,24 +662,18 @@ describe('config-driven dispatch', () => {
   });
 
   it('dispatches when review.enabled is true on pull_request.opened', async () => {
-    fetchSpy.mockImplementation(
-      vi.fn((url: string | URL | Request) => {
-        const urlStr =
-          typeof url === 'string'
-            ? url
-            : url instanceof URL
-              ? url.href
-              : url.url;
-        if (urlStr.includes('/contents/.github/aptu.yml')) {
-          return Promise.resolve(
-            makeConfigResponse(
-              'version: 1\ntriage:\n  enabled: false\nreview:\n  enabled: true'
-            )
-          );
-        }
-        return Promise.resolve(new Response(null, { status: 204 }));
-      }) as unknown as ReturnType<typeof vi.spyOn<any, any>>
-    );
+    fetchSpy.mockImplementation((url: string | URL | Request) => {
+      const urlStr =
+        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(
+          makeConfigResponse(
+            'version: 1\ntriage:\n  enabled: false\nreview:\n  enabled: true'
+          )
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
 
     const body = JSON.stringify({
       action: 'opened',
@@ -752,24 +734,18 @@ describe('config-driven dispatch', () => {
   });
 
   it('forwards config fields in client_payload for PR dispatch', async () => {
-    fetchSpy.mockImplementation(
-      vi.fn((url: string | URL | Request) => {
-        const urlStr =
-          typeof url === 'string'
-            ? url
-            : url instanceof URL
-              ? url.href
-              : url.url;
-        if (urlStr.includes('/contents/.github/aptu.yml')) {
-          return Promise.resolve(
-            makeConfigResponse(
-              'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\n  skip-labeled: true\n  instructions-file: .github/instructions/review.md'
-            )
-          );
-        }
-        return Promise.resolve(new Response(null, { status: 204 }));
-      }) as unknown as ReturnType<typeof vi.spyOn<any, any>>
-    );
+    fetchSpy.mockImplementation((url: string | URL | Request) => {
+      const urlStr =
+        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(
+          makeConfigResponse(
+            'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\n  skip-labeled: true\n  instructions-file: .github/instructions/review.md'
+          )
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
 
     const body = JSON.stringify({
       action: 'opened',
@@ -795,22 +771,16 @@ describe('config-driven dispatch', () => {
   });
 
   it('gracefully handles config fetch timeout/500 by not dispatching', async () => {
-    fetchSpy.mockImplementation(
-      vi.fn((url: string | URL | Request) => {
-        const urlStr =
-          typeof url === 'string'
-            ? url
-            : url instanceof URL
-              ? url.href
-              : url.url;
-        if (urlStr.includes('/contents/.github/aptu.yml')) {
-          return Promise.resolve(
-            new Response('Internal Server Error', { status: 500 })
-          );
-        }
-        return Promise.resolve(new Response(null, { status: 204 }));
-      }) as unknown as ReturnType<typeof vi.spyOn<any, any>>
-    );
+    fetchSpy.mockImplementation((url: string | URL | Request) => {
+      const urlStr =
+        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(
+          new Response('Internal Server Error', { status: 500 })
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
 
     const body = JSON.stringify({
       action: 'opened',
