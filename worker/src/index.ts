@@ -187,7 +187,7 @@ export default {
 
     if (
       event === 'pull_request' &&
-      (action === 'opened' || action === 'synchronize')
+      (action === 'opened' || action === 'synchronize' || action === 'reopened')
     ) {
       if (!installationId) return new Response('Bad Request', { status: 400 });
       const repo = (payload.repository as { full_name: string }).full_name;
