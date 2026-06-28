@@ -9,10 +9,6 @@ zone_name = "aptu.dev"
 [vars]
 APP_ID = "4134521"
 TARGET_REPO = "clouatre-labs/aptu-github-app"
-# Comma-separated list of repos that handle their own triage natively.
-# Dispatch events are suppressed for these repos (returns 200 without dispatch).
-EXCLUDED_REPOS = "clouatre-labs/aptu"
-
 # Secrets (set post-deploy via CLI):
 #   bunx wrangler secret put WEBHOOK_SECRET
 #   bunx wrangler secret put APP_PRIVATE_KEY

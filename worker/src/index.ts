@@ -11,7 +11,6 @@ export interface Env {
   APP_PRIVATE_KEY: string;
   APP_ID: string;
   TARGET_REPO: string;
-  EXCLUDED_REPOS: string;
 }
 
 export function hexToBytes(hex: string): Uint8Array {
@@ -20,14 +19,6 @@ export function hexToBytes(hex: string): Uint8Array {
     bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
   }
   return bytes;
-}
-
-export function isExcluded(repo: string, excludedRepos: string): boolean {
-  if (!excludedRepos) return false;
-  return excludedRepos
-    .split(',')
-    .map((r) => r.trim())
-    .includes(repo);
 }
 
 export async function validateSignature(
@@ -163,8 +154,6 @@ export default {
     if (event === 'issues' && action === 'opened') {
       if (!installationId) return new Response('Bad Request', { status: 400 });
       const repo = (payload.repository as { full_name: string }).full_name;
-      if (isExcluded(repo, env.EXCLUDED_REPOS))
-        return new Response('OK', { status: 200 });
       if (!repo.includes('/'))
         return new Response('Bad Request', { status: 400 });
       const token = await getInstallationToken(env, installationId);
@@ -193,8 +182,6 @@ export default {
       const repo = (payload.repository as { full_name: string }).full_name;
       if (!repo.includes('/'))
         return new Response('Bad Request', { status: 400 });
-      if (isExcluded(repo, env.EXCLUDED_REPOS))
-        return new Response('OK', { status: 200 });
       const token = await getInstallationToken(env, installationId);
       const pr = payload.pull_request as { number: number; title: string };
 
