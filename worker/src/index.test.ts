@@ -78,7 +78,6 @@ const mockEnv = {
   APP_PRIVATE_KEY: 'fake-key',
   APP_ID: '4134521',
   TARGET_REPO: 'clouatre-labs/aptu-github-app',
-  EXCLUDED_REPOS: '',
 };
 
 async function callHandler(
@@ -311,74 +310,6 @@ describe('repository_dispatch client_payload', () => {
       originating_repo: 'myorg/myrepo',
       pull_number: 99,
     });
-  });
-});
-
-describe('excluded repos', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response(null, { status: 204 }));
-  });
-
-  it.each([
-    [
-      'issues',
-      {
-        action: 'opened',
-        installation: { id: 1 },
-        issue: { number: 1, title: 'T' },
-        repository: { full_name: 'clouatre-labs/aptu' },
-      },
-    ],
-    [
-      'pull_request',
-      {
-        action: 'opened',
-        installation: { id: 1 },
-        pull_request: { number: 1, title: 'T' },
-        repository: { full_name: 'clouatre-labs/aptu' },
-      },
-    ],
-  ])('returns 200 without dispatch for %s.opened when repo is excluded', async (event, payload) => {
-    const body = JSON.stringify(payload);
-    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
-    const response = await callHandler(
-      body,
-      {
-        'X-GitHub-Event': event,
-        'X-Hub-Signature-256': sig,
-        'Content-Type': 'application/json',
-      },
-      { ...mockEnv, EXCLUDED_REPOS: 'clouatre-labs/aptu' }
-    );
-    expect(response.status).toBe(200);
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it('returns 200 without dispatch when repo matches from comma-separated EXCLUDED_REPOS list', async () => {
-    const body = JSON.stringify({
-      action: 'opened',
-      installation: { id: 1 },
-      issue: { number: 1, title: 'T' },
-      repository: { full_name: 'my-org/my-repo' },
-    });
-    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
-    const response = await callHandler(
-      body,
-      {
-        'X-GitHub-Event': 'issues',
-        'X-Hub-Signature-256': sig,
-        'Content-Type': 'application/json',
-      },
-      {
-        ...mockEnv,
-        EXCLUDED_REPOS: 'clouatre-labs/aptu, my-org/my-repo, other/third',
-      }
-    );
-    expect(response.status).toBe(200);
-    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
 
