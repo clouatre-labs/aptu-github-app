@@ -3,6 +3,8 @@
 
 import { parse } from 'yaml';
 
+export const REPO_CONFIG_FETCH_TIMEOUT_MS = 5000;
+
 export interface AptuConfig {
   version: number;
   triage?: { enabled: boolean };
@@ -20,7 +22,7 @@ export async function fetchRepoConfig(
 ): Promise<AptuConfig | null> {
   const url = `https://api.github.com/repos/${owner}/${repo}/contents/.github/aptu.yml`;
   const response = await fetch(url, {
-    signal: AbortSignal.timeout(5000),
+    signal: AbortSignal.timeout(REPO_CONFIG_FETCH_TIMEOUT_MS),
     headers: {
       Authorization: `token ${token}`,
       Accept: 'application/vnd.github+json',
@@ -60,8 +62,12 @@ export function parseConfig(raw: string): AptuConfig | null {
       if (typeof parsed.triage !== 'object' || parsed.triage === null) {
         return null;
       }
+      const triageObj = parsed.triage as Record<string, unknown>;
+      if (typeof triageObj.enabled !== 'boolean') {
+        return null;
+      }
       config.triage = {
-        enabled: Boolean((parsed.triage as Record<string, unknown>).enabled),
+        enabled: triageObj.enabled,
       };
     }
 
@@ -70,8 +76,11 @@ export function parseConfig(raw: string): AptuConfig | null {
         return null;
       }
       const reviewObj = parsed.review as Record<string, unknown>;
+      if (typeof reviewObj.enabled !== 'boolean') {
+        return null;
+      }
       config.review = {
-        enabled: Boolean(reviewObj.enabled),
+        enabled: reviewObj.enabled,
       };
       if (typeof reviewObj['skip-labeled'] === 'boolean') {
         config.review['skip-labeled'] = reviewObj['skip-labeled'];

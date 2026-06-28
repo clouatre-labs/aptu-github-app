@@ -281,10 +281,11 @@ describe('repository_dispatch client_payload', () => {
       String(call[0]).includes('/dispatches')
     ) as [string, RequestInit];
     const parsed = JSON.parse(dispatchCall[1].body as string);
-    expect(parsed.client_payload).toMatchObject({
+    expect(parsed.client_payload).toEqual({
       installation_token: 'mock-installation-token',
       originating_repo: 'myorg/myrepo',
       issue_number: 42,
+      issue_title: 'Payload test',
     });
   });
 
