@@ -2,21 +2,63 @@
 
 A Cloudflare Worker and GitHub Actions that automate issue triage and PR review for repositories
 in the clouatre-labs org, powered by [aptu](https://aptu.dev). The Worker validates GitHub
-webhook signatures and dispatches `repository_dispatch` events to trigger aptu-powered triage
-and review workflows without per-repo configuration.
+webhook signatures, reads each repository's `.github/aptu.yml` opt-in config, and dispatches
+`repository_dispatch` events to trigger aptu-powered triage and review workflows.
 
 ## Architecture
 
 ```
-GitHub event (issues.opened / pull_request_review_requested)
-  -> Cloudflare Worker (verify X-Hub-Signature-256, dispatch repository_dispatch)
+GitHub event (issues.opened / pull_request.opened|synchronize|reopened)
+  -> Cloudflare Worker (verify X-Hub-Signature-256, fetch .github/aptu.yml, dispatch repository_dispatch)
   -> GitHub Actions workflow (actions/create-github-app-token, run aptu CLI)
   -> GitHub Reviews API (inline comments as aptu[bot])
 ```
 
-The Worker is stateless: validate HMAC signature, call `POST /repos/{owner}/{repo}/dispatches`,
-return 200. The workflow handles all App authentication and aptu invocation. No persistent
-server required.
+The Worker is stateless: validate HMAC signature, fetch the target repo's `aptu.yml`, call
+`POST /repos/{owner}/{repo}/dispatches` if opted in, return 200. The workflow handles all App
+authentication and aptu invocation. No persistent server required.
+
+## Repository configuration
+
+Each repository opts in to triage and review by adding a `.github/aptu.yml` file. The Worker
+fetches this file on every webhook event; if the file is absent or invalid, no dispatch occurs.
+
+### Schema
+
+```yaml
+version: 1                                        # required; must be 1
+
+triage:
+  enabled: true                                   # required if triage block present
+
+review:
+  enabled: true                                   # required if review block present
+  instructions-file: .github/instructions/pr-review.md  # optional; path in the target repo
+```
+
+All fields under `triage` and `review` are validated strictly: unknown keys are ignored,
+but a missing `enabled` boolean causes the entire config to be rejected (no dispatch).
+
+### Field reference
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `version` | integer | -- | Config schema version. Must be `1`. |
+| `triage.enabled` | boolean | -- | Dispatch `aptu-triage` on `issues.opened` events. |
+| `review.enabled` | boolean | -- | Dispatch `aptu-review` on `pull_request` opened/synchronize/reopened events. |
+| `review.instructions-file` | string | `.github/instructions/pr-review.md` | Path to PR review instructions file, relative to the target repo root. Passed to aptu as `--instructions-file`. |
+| `review.skip-labeled` | boolean | `false` | Passed to aptu as `--skip-labeled`. Has no effect on PR review events (aptu only acts on it for issue events where labels are present). |
+
+### Minimal opt-in example
+
+```yaml
+version: 1
+triage:
+  enabled: true
+review:
+  enabled: true
+  instructions-file: .github/instructions/pr-review.md
+```
 
 ## Deployment
 
