@@ -1,0 +1,4 @@
+triage:
+  enabled: true
+review:
+  enabled: true
