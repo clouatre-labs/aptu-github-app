@@ -169,6 +169,7 @@ describe('event routing', () => {
   it.each([
     ['opened', 'opened PR'],
     ['synchronize', 'sync PR'],
+    ['reopened', 'reopened PR'],
   ])('returns 204 and calls repository_dispatch for pull_request.%s', async (action) => {
     const body = JSON.stringify({
       action,
