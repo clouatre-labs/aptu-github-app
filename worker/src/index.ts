@@ -4,7 +4,11 @@
 import { createAppAuth } from '@octokit/auth-app';
 import { isMatch } from 'picomatch';
 import reposConfig from '../../config/repos.json';
-import { fetchRepoConfig, shouldDispatch } from './config';
+import {
+  fetchRepoConfig,
+  REPO_CONFIG_FETCH_TIMEOUT_MS,
+  shouldDispatch,
+} from './config';
 
 export interface Env {
   WEBHOOK_SECRET: string;
@@ -99,7 +103,7 @@ export async function shouldSkipPrDispatch(
     const prFilesResponse = await fetch(
       `https://api.github.com/repos/${repoFullName}/pulls/${prNumber}/files`,
       {
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(REPO_CONFIG_FETCH_TIMEOUT_MS),
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/vnd.github+json',
@@ -168,8 +172,6 @@ export default {
         originating_repo: repo,
         issue_number: issue.number,
         issue_title: issue.title,
-        instructions_file: null,
-        skip_labeled: false,
       });
       return new Response(null, { status: 204 });
     }
