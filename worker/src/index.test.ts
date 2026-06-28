@@ -17,6 +17,62 @@ function sign(secret: string, body: string): string {
   return `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
 }
 
+function b64(str: string): string {
+  return Buffer.from(str, 'utf-8').toString('base64');
+}
+
+function makeConfigResponse(yaml: string, status = 200): Response {
+  const encoded = b64(yaml);
+  return new Response(
+    JSON.stringify({ content: encoded, encoding: 'base64' }),
+    {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    }
+  );
+}
+
+function mockEnabledFetch(): ReturnType<typeof vi.fn> {
+  return vi.fn((url: string | URL | Request) => {
+    const urlStr =
+      typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+    if (urlStr.includes('/contents/.github/aptu.yml')) {
+      return Promise.resolve(
+        makeConfigResponse(
+          'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\n  skip-labeled: true\n  instructions-file: .github/instructions/review.md'
+        )
+      );
+    }
+    return Promise.resolve(new Response(null, { status: 204 }));
+  });
+}
+
+function mockDisabledFetch(): ReturnType<typeof vi.fn> {
+  return vi.fn((url: string | URL | Request) => {
+    const urlStr =
+      typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+    if (urlStr.includes('/contents/.github/aptu.yml')) {
+      return Promise.resolve(
+        makeConfigResponse(
+          'version: 1\ntriage:\n  enabled: false\nreview:\n  enabled: false'
+        )
+      );
+    }
+    return Promise.resolve(new Response(null, { status: 204 }));
+  });
+}
+
+function mockAbsentConfigFetch(): ReturnType<typeof vi.fn> {
+  return vi.fn((url: string | URL | Request) => {
+    const urlStr =
+      typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+    if (urlStr.includes('/contents/.github/aptu.yml')) {
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    return Promise.resolve(new Response(null, { status: 204 }));
+  });
+}
+
 const mockEnv = {
   WEBHOOK_SECRET: 'test-secret',
   APP_PRIVATE_KEY: 'fake-key',
@@ -42,9 +98,8 @@ async function callHandler(
 describe('HMAC validation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response(null, { status: 204 }));
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockImplementation(mockEnabledFetch());
   });
 
   it('returns 401 when X-Hub-Signature-256 header is missing', async () => {
@@ -87,9 +142,8 @@ describe('HMAC validation', () => {
 describe('event routing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response(null, { status: 204 }));
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockImplementation(mockEnabledFetch());
   });
 
   it('returns 204 and calls repository_dispatch for issues.opened', async () => {
@@ -106,7 +160,10 @@ describe('event routing', () => {
       'Content-Type': 'application/json',
     });
     expect(response.status).toBe(204);
-    expect(fetchSpy).toHaveBeenCalledOnce();
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
   });
 
   it.each([
@@ -126,7 +183,10 @@ describe('event routing', () => {
       'Content-Type': 'application/json',
     });
     expect(response.status).toBe(204);
-    expect(fetchSpy).toHaveBeenCalledOnce();
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
   });
 
   it.each([
@@ -164,9 +224,8 @@ describe('event routing', () => {
 describe('token generation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response(null, { status: 204 }));
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockImplementation(mockEnabledFetch());
   });
 
   it('createAppAuth receives APP_ID and APP_PRIVATE_KEY from env and requests installation token', async () => {
@@ -201,9 +260,8 @@ describe('token generation', () => {
 describe('repository_dispatch client_payload', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response(null, { status: 204 }));
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockImplementation(mockEnabledFetch());
   });
 
   it('dispatched payload includes installation_token, originating_repo, and issue_number for issues event', async () => {
@@ -219,8 +277,10 @@ describe('repository_dispatch client_payload', () => {
       'X-Hub-Signature-256': sig,
       'Content-Type': 'application/json',
     });
-    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    const parsed = JSON.parse(init.body as string);
+    const dispatchCall = fetchSpy.mock.calls.find((call) =>
+      String(call[0]).includes('/dispatches')
+    ) as [string, RequestInit];
+    const parsed = JSON.parse(dispatchCall[1].body as string);
     expect(parsed.client_payload).toMatchObject({
       installation_token: 'mock-installation-token',
       originating_repo: 'myorg/myrepo',
@@ -241,8 +301,10 @@ describe('repository_dispatch client_payload', () => {
       'X-Hub-Signature-256': sig,
       'Content-Type': 'application/json',
     });
-    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    const parsed = JSON.parse(init.body as string);
+    const dispatchCall = fetchSpy.mock.calls.find((call) =>
+      String(call[0]).includes('/dispatches')
+    ) as [string, RequestInit];
+    const parsed = JSON.parse(dispatchCall[1].body as string);
     expect(parsed.client_payload).toMatchObject({
       installation_token: 'mock-installation-token',
       originating_repo: 'myorg/myrepo',
@@ -372,6 +434,11 @@ describe('path filter config', () => {
         { status: 200 }
       )
     );
+    fetchSpy.mockResolvedValueOnce(
+      makeConfigResponse(
+        'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true'
+      )
+    );
     fetchSpy.mockResolvedValueOnce(new Response(null, { status: 204 }));
 
     const body = JSON.stringify({
@@ -395,6 +462,11 @@ describe('path filter config', () => {
   });
 
   it('returns 204 and dispatches normally when repo has no entry in config/repos.json', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      makeConfigResponse(
+        'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true'
+      )
+    );
     fetchSpy.mockResolvedValueOnce(new Response(null, { status: 204 }));
 
     const body = JSON.stringify({
@@ -425,6 +497,11 @@ describe('path filter config', () => {
     fetchSpy.mockResolvedValueOnce(
       new Response('Internal Server Error', { status: 500 })
     );
+    fetchSpy.mockResolvedValueOnce(
+      makeConfigResponse(
+        'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true'
+      )
+    );
     fetchSpy.mockResolvedValueOnce(new Response(null, { status: 204 }));
 
     const body = JSON.stringify({
@@ -445,5 +522,302 @@ describe('path filter config', () => {
       String(call[0]).includes('/dispatches')
     );
     expect(dispatchCalls.length).toBe(1);
+  });
+});
+
+describe('config-driven dispatch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+
+  it('returns 200 without dispatching when config file is absent (404)', async () => {
+    fetchSpy.mockImplementation(mockAbsentConfigFetch());
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'T' },
+      repository: { full_name: 'owner/repo' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(200);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(0);
+  });
+
+  it('returns 200 without dispatching when config YAML is malformed', async () => {
+    fetchSpy.mockImplementation((url: unknown) => {
+      const urlStr =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.href
+            : (url as Request).url;
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(
+          makeConfigResponse('not: valid: yaml: \n  - broken', 200)
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'T' },
+      repository: { full_name: 'owner/repo' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(200);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(0);
+  });
+
+  it('returns 200 without dispatching when triage.enabled is false on issues.opened', async () => {
+    fetchSpy.mockImplementation(mockDisabledFetch());
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'T' },
+      repository: { full_name: 'owner/repo' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(200);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(0);
+  });
+
+  it('returns 200 without dispatching when review.enabled is false on pull_request.opened', async () => {
+    fetchSpy.mockImplementation(mockDisabledFetch());
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: { number: 1, title: 'T' },
+      repository: { full_name: 'owner/repo' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(200);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(0);
+  });
+
+  it('dispatches when triage.enabled is true on issues.opened', async () => {
+    fetchSpy.mockImplementation((url: unknown) => {
+      const urlStr =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.href
+            : (url as Request).url;
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(
+          makeConfigResponse(
+            'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: false'
+          )
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 5, title: 'Triage enabled' },
+      repository: { full_name: 'owner/repo' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
+  });
+
+  it('dispatches when review.enabled is true on pull_request.opened', async () => {
+    fetchSpy.mockImplementation((url: unknown) => {
+      const urlStr =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.href
+            : (url as Request).url;
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(
+          makeConfigResponse(
+            'version: 1\ntriage:\n  enabled: false\nreview:\n  enabled: true'
+          )
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: { number: 6, title: 'Review enabled' },
+      repository: { full_name: 'owner/repo' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
+  });
+
+  it('dispatches for both issue and PR when triage and review are both enabled', async () => {
+    fetchSpy.mockImplementation(mockEnabledFetch());
+
+    // Issue
+    let body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 7, title: 'Both issue' },
+      repository: { full_name: 'owner/repo' },
+    });
+    let sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const issueResponse = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(issueResponse.status).toBe(204);
+
+    // PR
+    body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: { number: 8, title: 'Both PR' },
+      repository: { full_name: 'owner/repo' },
+    });
+    sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const prResponse = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(prResponse.status).toBe(204);
+
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(2);
+  });
+
+  it('forwards config fields in client_payload for PR dispatch', async () => {
+    fetchSpy.mockImplementation((url: unknown) => {
+      const urlStr =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.href
+            : (url as Request).url;
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(
+          makeConfigResponse(
+            'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\n  skip-labeled: true\n  instructions-file: .github/instructions/review.md'
+          )
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: { number: 9, title: 'Config fields' },
+      repository: { full_name: 'owner/repo' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    const dispatchCall = fetchSpy.mock.calls.find((call) =>
+      String(call[0]).includes('/dispatches')
+    ) as [string, RequestInit];
+    const parsed = JSON.parse(dispatchCall[1].body as string);
+    expect(parsed.client_payload.instructions_file).toBe(
+      '.github/instructions/review.md'
+    );
+    expect(parsed.client_payload.skip_labeled).toBe(true);
+  });
+
+  it('gracefully handles config fetch timeout/500 by not dispatching', async () => {
+    fetchSpy.mockImplementation((url: unknown) => {
+      const urlStr =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.href
+            : (url as Request).url;
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(
+          new Response('Internal Server Error', { status: 500 })
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 10, title: 'Timeout test' },
+      repository: { full_name: 'owner/repo' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(200);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(0);
   });
 });

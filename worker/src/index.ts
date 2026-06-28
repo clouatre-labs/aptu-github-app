@@ -4,6 +4,7 @@
 import { createAppAuth } from '@octokit/auth-app';
 import { isMatch } from 'picomatch';
 import reposConfig from '../../config/repos.json';
+import { fetchRepoConfig, shouldDispatch } from './config';
 
 export interface Env {
   WEBHOOK_SECRET: string;
@@ -164,13 +165,22 @@ export default {
       const repo = (payload.repository as { full_name: string }).full_name;
       if (isExcluded(repo, env.EXCLUDED_REPOS))
         return new Response('OK', { status: 200 });
+      if (!repo.includes('/'))
+        return new Response('Bad Request', { status: 400 });
       const token = await getInstallationToken(env, installationId);
       const issue = payload.issue as { number: number; title: string };
+      const owner = repo.split('/')[0] ?? '';
+      const repoName = repo.split('/')[1] ?? '';
+      const config = await fetchRepoConfig(token, owner, repoName);
+      if (!shouldDispatch(config, 'triage'))
+        return new Response('OK', { status: 200 });
       await dispatchEvent(token, env.TARGET_REPO, 'aptu-triage', {
         installation_token: token,
         originating_repo: repo,
         issue_number: issue.number,
         issue_title: issue.title,
+        instructions_file: null,
+        skip_labeled: false,
       });
       return new Response(null, { status: 204 });
     }
@@ -181,6 +191,8 @@ export default {
     ) {
       if (!installationId) return new Response('Bad Request', { status: 400 });
       const repo = (payload.repository as { full_name: string }).full_name;
+      if (!repo.includes('/'))
+        return new Response('Bad Request', { status: 400 });
       if (isExcluded(repo, env.EXCLUDED_REPOS))
         return new Response('OK', { status: 200 });
       const token = await getInstallationToken(env, installationId);
@@ -189,11 +201,19 @@ export default {
       const shouldSkip = await shouldSkipPrDispatch(repo, pr.number, token);
       if (shouldSkip) return new Response(null, { status: 204 });
 
+      const owner = repo.split('/')[0] ?? '';
+      const repoName = repo.split('/')[1] ?? '';
+      const config = await fetchRepoConfig(token, owner, repoName);
+      if (!shouldDispatch(config, 'review'))
+        return new Response('OK', { status: 200 });
+
       await dispatchEvent(token, env.TARGET_REPO, 'aptu-review', {
         installation_token: token,
         originating_repo: repo,
         pull_number: pr.number,
         pull_title: pr.title,
+        instructions_file: config?.review?.['instructions-file'] ?? null,
+        skip_labeled: config?.review?.['skip-labeled'] ?? false,
       });
       return new Response(null, { status: 204 });
     }
