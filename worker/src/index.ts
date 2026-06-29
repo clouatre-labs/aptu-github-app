@@ -5,6 +5,7 @@ import { createAppAuth } from '@octokit/auth-app';
 import { isMatch } from 'picomatch';
 import reposConfig from '../../config/repos.json';
 import {
+  type AptuConfig,
   fetchRepoConfig,
   REPO_CONFIG_FETCH_TIMEOUT_MS,
   shouldDispatch,
@@ -88,6 +89,23 @@ export async function dispatchEvent(
   }
 }
 
+export async function getDispatchToken(
+  env: Env,
+  installationId: number,
+  targetRepoName: string
+): Promise<string> {
+  const auth = createAppAuth({
+    appId: env.APP_ID,
+    privateKey: env.APP_PRIVATE_KEY,
+  });
+  const result = await auth({
+    type: 'installation',
+    installationId,
+    repositoryNames: [targetRepoName],
+  });
+  return result.token;
+}
+
 export async function shouldSkipPrDispatch(
   repoFullName: string,
   prNumber: number,
@@ -160,19 +178,58 @@ export default {
       const repo = (payload.repository as { full_name: string }).full_name;
       if (!repo.includes('/'))
         return new Response('Bad Request', { status: 400 });
-      const token = await getInstallationToken(env, installationId);
+
+      let token: string;
+      try {
+        token = await getInstallationToken(env, installationId);
+      } catch (error) {
+        console.error(`Failed to get installation token for ${repo}:`, error);
+        return new Response('Internal Server Error', { status: 500 });
+      }
+
       const issue = payload.issue as { number: number; title: string };
       const owner = repo.split('/')[0] ?? '';
       const repoName = repo.split('/')[1] ?? '';
-      const config = await fetchRepoConfig(token, owner, repoName);
+
+      let config: AptuConfig | null = null;
+      try {
+        config = await fetchRepoConfig(token, owner, repoName);
+      } catch (error) {
+        console.error(`Failed to fetch config for ${repo}:`, error);
+        config = null;
+      }
+
       if (!shouldDispatch(config, 'triage'))
         return new Response('OK', { status: 200 });
-      await dispatchEvent(token, env.TARGET_REPO, 'aptu-triage', {
-        installation_token: token,
-        originating_repo: repo,
-        issue_number: issue.number,
-        issue_title: issue.title,
-      });
+
+      const targetRepoName = env.TARGET_REPO.split('/')[1] ?? '';
+      let dispatchToken: string;
+      try {
+        dispatchToken = await getDispatchToken(
+          env,
+          installationId,
+          targetRepoName
+        );
+      } catch (error) {
+        console.error(`Failed to get dispatch token for ${repo}:`, error);
+        return new Response('Internal Server Error', { status: 500 });
+      }
+
+      try {
+        await dispatchEvent(dispatchToken, env.TARGET_REPO, 'aptu-triage', {
+          installation_token: token,
+          originating_repo: repo,
+          issue_number: issue.number,
+          issue_title: issue.title,
+        });
+      } catch (error) {
+        console.error(
+          `Failed to dispatch aptu-triage event for ${repo}:`,
+          error
+        );
+        return new Response('Internal Server Error', { status: 500 });
+      }
+
       return new Response(null, { status: 204 });
     }
 
@@ -184,7 +241,15 @@ export default {
       const repo = (payload.repository as { full_name: string }).full_name;
       if (!repo.includes('/'))
         return new Response('Bad Request', { status: 400 });
-      const token = await getInstallationToken(env, installationId);
+
+      let token: string;
+      try {
+        token = await getInstallationToken(env, installationId);
+      } catch (error) {
+        console.error(`Failed to get installation token for ${repo}:`, error);
+        return new Response('Internal Server Error', { status: 500 });
+      }
+
       const pr = payload.pull_request as { number: number; title: string };
 
       const shouldSkip = await shouldSkipPrDispatch(repo, pr.number, token);
@@ -192,18 +257,48 @@ export default {
 
       const owner = repo.split('/')[0] ?? '';
       const repoName = repo.split('/')[1] ?? '';
-      const config = await fetchRepoConfig(token, owner, repoName);
+
+      let config: AptuConfig | null = null;
+      try {
+        config = await fetchRepoConfig(token, owner, repoName);
+      } catch (error) {
+        console.error(`Failed to fetch config for ${repo}:`, error);
+        config = null;
+      }
+
       if (!shouldDispatch(config, 'review'))
         return new Response('OK', { status: 200 });
 
-      await dispatchEvent(token, env.TARGET_REPO, 'aptu-review', {
-        installation_token: token,
-        originating_repo: repo,
-        pull_number: pr.number,
-        pull_title: pr.title,
-        instructions_file: config?.review?.['instructions-file'] ?? null,
-        skip_labeled: config?.review?.['skip-labeled'] ?? false,
-      });
+      const targetRepoName = env.TARGET_REPO.split('/')[1] ?? '';
+      let dispatchToken: string;
+      try {
+        dispatchToken = await getDispatchToken(
+          env,
+          installationId,
+          targetRepoName
+        );
+      } catch (error) {
+        console.error(`Failed to get dispatch token for ${repo}:`, error);
+        return new Response('Internal Server Error', { status: 500 });
+      }
+
+      try {
+        await dispatchEvent(dispatchToken, env.TARGET_REPO, 'aptu-review', {
+          installation_token: token,
+          originating_repo: repo,
+          pull_number: pr.number,
+          pull_title: pr.title,
+          instructions_file: config?.review?.['instructions-file'] ?? null,
+          skip_labeled: config?.review?.['skip-labeled'] ?? false,
+        });
+      } catch (error) {
+        console.error(
+          `Failed to dispatch aptu-review event for ${repo}:`,
+          error
+        );
+        return new Response('Internal Server Error', { status: 500 });
+      }
+
       return new Response(null, { status: 204 });
     }
 

@@ -754,3 +754,142 @@ describe('config-driven dispatch', () => {
     expect(dispatchCalls.length).toBe(0);
   });
 });
+
+describe('error handling', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+
+  it('returns 500 when getInstallationToken throws on issues.opened', async () => {
+    const { createAppAuth } = await import('@octokit/auth-app');
+    // biome-ignore lint/suspicious/noExplicitAny: mocking requires casting to any
+    (createAppAuth as any).mockImplementation(() =>
+      vi.fn().mockRejectedValue(new Error('Invalid credentials'))
+    );
+    fetchSpy.mockImplementation(mockEnabledFetch());
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: { full_name: 'owner/repo' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(500);
+  });
+
+  it('returns 500 when dispatchEvent throws on issues.opened', async () => {
+    const { createAppAuth } = await import('@octokit/auth-app');
+    // biome-ignore lint/suspicious/noExplicitAny: mocking requires casting to any
+    (createAppAuth as any).mockImplementation(() =>
+      vi.fn().mockResolvedValue({ token: 'mock-token' })
+    );
+
+    fetchSpy.mockImplementation((url: unknown) => {
+      const urlStr =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.href
+            : (url as Request).url;
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(
+          makeConfigResponse(
+            'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\n'
+          )
+        );
+      }
+      if (urlStr.includes('/dispatches')) {
+        return Promise.resolve(new Response('Forbidden', { status: 403 }));
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: { full_name: 'owner/repo' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(500);
+  });
+
+  it('returns 500 when getInstallationToken throws on pull_request.opened', async () => {
+    const { createAppAuth } = await import('@octokit/auth-app');
+    // biome-ignore lint/suspicious/noExplicitAny: mocking requires casting to any
+    (createAppAuth as any).mockImplementation(() =>
+      vi.fn().mockRejectedValue(new Error('Network error'))
+    );
+    fetchSpy.mockImplementation(mockEnabledFetch());
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: { number: 1, title: 'Test PR' },
+      repository: { full_name: 'owner/repo' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(500);
+  });
+
+  it('returns 500 when dispatchEvent throws on pull_request.opened', async () => {
+    const { createAppAuth } = await import('@octokit/auth-app');
+    // biome-ignore lint/suspicious/noExplicitAny: mocking requires casting to any
+    (createAppAuth as any).mockImplementation(() =>
+      vi.fn().mockResolvedValue({ token: 'mock-token' })
+    );
+
+    fetchSpy.mockImplementation((url: unknown) => {
+      const urlStr =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.href
+            : (url as Request).url;
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(
+          makeConfigResponse(
+            'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\n'
+          )
+        );
+      }
+      if (urlStr.includes('/dispatches')) {
+        return Promise.resolve(
+          new Response('Service Unavailable', { status: 503 })
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: { number: 1, title: 'Test PR' },
+      repository: { full_name: 'owner/repo' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(500);
+  });
+});
