@@ -791,7 +791,7 @@ describe('error handling', () => {
       vi.fn().mockResolvedValue({ token: 'mock-token' })
     );
 
-    fetchSpy.mockImplementation((url: string | URL | Request) => {
+    fetchSpy.mockImplementation((url: unknown) => {
       const urlStr =
         typeof url === 'string'
           ? url
@@ -856,7 +856,7 @@ describe('error handling', () => {
       vi.fn().mockResolvedValue({ token: 'mock-token' })
     );
 
-    fetchSpy.mockImplementation((url: string | URL | Request) => {
+    fetchSpy.mockImplementation((url: unknown) => {
       const urlStr =
         typeof url === 'string'
           ? url
