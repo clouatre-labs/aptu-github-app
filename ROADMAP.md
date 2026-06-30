@@ -46,9 +46,22 @@ Milestone: [Phase 3: Public Release](https://github.com/clouatre-labs/aptu-githu
 - [x] Caller-supplied AI keys: add `ai` block to `.github/aptu.yml` schema; thread through dispatch payload (#34)
 - [x] Move `exclude_paths` from `repos.json` into `.github/aptu.yml` -- external installations can configure path filters without a fork (#33)
 - [ ] Per-installation quota and rate limiting via Cloudflare Durable Objects (not KV -- see #29 comments) (#29)
-- [ ] Implement `@aptu` mention commands, or remove from app description (#30)
 - [ ] Landing page at aptu.dev (Astro + Tailwind, Cloudflare Pages) (#2)
 - [ ] Remove or graduate `ALLOWED_OWNERS` allowlist once quota controls and caller-supplied keys are in place
+
+## Phase 4: Mention Commands
+
+_This phase requires Phase 3 (quota/rate limiting #29) to be complete first._
+
+Implement `@aptu` mention commands triggered by comments on issues and pull requests.
+Without rate limiting, mention commands create a DoS vector -- authenticated or not,
+every `@aptu` mention would consume AI API credits. Phase 3 (#29) must gate deployment.
+
+- [ ] Permission gating: `GET /repos/{owner}/{repo}/collaborators/{username}/permission` to verify commenter can trigger commands
+- [ ] Dispatch payload: include comment context (issue/PR number, comment body, author)
+- [ ] Workflow differentiation: distinguish mention-triggered runs from auto-triggered runs in the dispatch event type
+- [ ] Supported commands: `@aptu review` (trigger PR review), `@aptu triage` (trigger issue triage), `@aptu summarize` (summarize issue/PR thread)
+- [ ] Feature tracked in #30
 
 ## What We Won't Build
 
