@@ -29,22 +29,22 @@ required. See #34.
 - [x] Config-driven opt-in via `.github/aptu.yml` per repo
 - [x] Per-repo `exclude_paths` support via `config/repos.json`
 
-## Phase 2: Multi-Account Support
+## Phase 2: Multi-Account Support (complete)
 
 Enable installation on accounts outside `clouatre-labs` (starting with `clouatre` personal
 account). Milestone: [Phase 2: Multi-Account Support](https://github.com/clouatre-labs/aptu-github-app/milestone/1).
 
-- [ ] Fix dispatch token: use App-level token for `repository_dispatch` call, not installation token (#27)
-- [ ] Add `ALLOWED_OWNERS` allowlist to worker to gate external installations (#28)
-- [ ] Add error handling: try/catch around `dispatchEvent`, `getInstallationToken`, `fetchRepoConfig` (#32)
+- [x] Fix dispatch token: use scoped token (repositoryNames) for `repository_dispatch` call, not installation token (#27)
+- [x] Add `ALLOWED_OWNERS` allowlist to worker to gate external installations (#28)
+- [x] Add error handling: try/catch around `dispatchEvent`, `getInstallationToken`, `fetchRepoConfig` (#32)
 
 ## Phase 3: Public Release
 
 Open the app to any GitHub account. Requires Phase 2 complete.
 Milestone: [Phase 3: Public Release](https://github.com/clouatre-labs/aptu-github-app/milestone/2).
 
-- [ ] Caller-supplied AI keys: add `ai` block to `.github/aptu.yml` schema; thread through dispatch payload (#34)
-- [ ] Move `exclude_paths` from `repos.json` into `.github/aptu.yml` -- external installations can configure path filters without a fork (#33)
+- [x] Caller-supplied AI keys: add `ai` block to `.github/aptu.yml` schema; thread through dispatch payload (#34)
+- [x] Move `exclude_paths` from `repos.json` into `.github/aptu.yml` -- external installations can configure path filters without a fork (#33)
 - [ ] Per-installation quota and rate limiting via Cloudflare Durable Objects (not KV -- see #29 comments) (#29)
 - [ ] Implement `@aptu` mention commands, or remove from app description (#30)
 - [ ] Landing page at aptu.dev (Astro + Tailwind, Cloudflare Pages) (#2)
