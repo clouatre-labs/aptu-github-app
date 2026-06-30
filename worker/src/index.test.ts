@@ -337,6 +337,9 @@ describe('path filter config', () => {
   });
 
   it('returns 204 without dispatch when all PR files match exclude_paths patterns', async () => {
+    // Mock config fetch (404 - no aptu.yml)
+    fetchSpy.mockResolvedValueOnce(new Response('Not Found', { status: 404 }));
+    // Mock PR files fetch - all files match exclude_paths in repos.json
     fetchSpy.mockResolvedValueOnce(
       new Response(
         JSON.stringify([
@@ -377,6 +380,13 @@ describe('path filter config', () => {
   });
 
   it('returns 204 and dispatches when one file does not match exclude_paths (partial match)', async () => {
+    // Mock config fetch - includes exclude_paths in aptu.yml
+    fetchSpy.mockResolvedValueOnce(
+      makeConfigResponse(
+        'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nexclude_paths:\n  - "src/data/**"'
+      )
+    );
+    // Mock PR files fetch - one file doesn't match exclude_paths so should dispatch
     fetchSpy.mockResolvedValueOnce(
       new Response(
         JSON.stringify([
@@ -386,11 +396,7 @@ describe('path filter config', () => {
         { status: 200 }
       )
     );
-    fetchSpy.mockResolvedValueOnce(
-      makeConfigResponse(
-        'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true'
-      )
-    );
+    // Mock dispatch event
     fetchSpy.mockResolvedValueOnce(new Response(null, { status: 204 }));
 
     const body = JSON.stringify({
@@ -417,11 +423,13 @@ describe('path filter config', () => {
   });
 
   it('returns 204 and dispatches normally when repo has no entry in config/repos.json', async () => {
+    // Mock config fetch - no exclude_paths defined, repo not in repos.json
     fetchSpy.mockResolvedValueOnce(
       makeConfigResponse(
         'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true'
       )
     );
+    // Mock dispatch event (no PR files fetch should be made)
     fetchSpy.mockResolvedValueOnce(new Response(null, { status: 204 }));
 
     const body = JSON.stringify({
@@ -452,14 +460,17 @@ describe('path filter config', () => {
   });
 
   it('returns 204 and dispatches when GitHub API fetch for PR files throws or fails', async () => {
+    // Mock config fetch - has exclude_paths
+    fetchSpy.mockResolvedValueOnce(
+      makeConfigResponse(
+        'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nexclude_paths:\n  - "docs/**"'
+      )
+    );
+    // Mock PR files fetch failure - should return false (dispatch)
     fetchSpy.mockResolvedValueOnce(
       new Response('Internal Server Error', { status: 500 })
     );
-    fetchSpy.mockResolvedValueOnce(
-      makeConfigResponse(
-        'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true'
-      )
-    );
+    // Mock dispatch event
     fetchSpy.mockResolvedValueOnce(new Response(null, { status: 204 }));
 
     const body = JSON.stringify({
@@ -1158,5 +1169,117 @@ describe('AI configuration and external installations', () => {
       String(call[0]).includes('/dispatches')
     );
     expect(dispatchCall).toBeDefined();
+  });
+});
+
+describe('shouldSkipPrDispatch direct unit tests', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+
+  it('returns true (skip) when both repos.json and aptu.yml have matching exclude_paths (precedence: aptu.yml wins)', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          { filename: 'docs/readme.md' },
+          { filename: 'docs/guide.md' },
+        ]),
+        { status: 200 }
+      )
+    );
+    const { shouldSkipPrDispatch } = await import('./index.js');
+    const result = await shouldSkipPrDispatch(
+      'clouatre-labs/clouatre.ca',
+      42,
+      'mock-token',
+      { version: 1, exclude_paths: ['docs/**'] }
+    );
+    expect(result).toBe(true);
+  });
+
+  it('falls back to repos.json exclude_paths when aptu.yml is null and repos.json has an entry', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          { filename: 'src/data/blog/post.md' },
+          { filename: 'public/audio/podcast.mp3' },
+        ]),
+        { status: 200 }
+      )
+    );
+    const { shouldSkipPrDispatch } = await import('./index.js');
+    const result = await shouldSkipPrDispatch(
+      'clouatre-labs/clouatre.ca',
+      42,
+      'mock-token',
+      null
+    );
+    expect(result).toBe(true);
+  });
+
+  it('falls back to repos.json exclude_paths when aptu.yml has no exclude_paths field and repos.json has an entry', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          { filename: 'src/data/blog/post.md' },
+          { filename: 'public/audio/podcast.mp3' },
+        ]),
+        { status: 200 }
+      )
+    );
+    const { shouldSkipPrDispatch } = await import('./index.js');
+    const result = await shouldSkipPrDispatch(
+      'clouatre-labs/clouatre.ca',
+      42,
+      'mock-token',
+      { version: 1 }
+    );
+    expect(result).toBe(true);
+  });
+
+  it('returns false (dispatch) when both aptu.yml and repos.json are null/no entry', async () => {
+    const { shouldSkipPrDispatch } = await import('./index.js');
+    const result = await shouldSkipPrDispatch(
+      'unknown/repo',
+      42,
+      'mock-token',
+      null
+    );
+    expect(result).toBe(false);
+  });
+
+  it('returns false (dispatch) when aptu.yml has exclude_paths but no PR file matches any pattern', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          { filename: 'worker/src/index.ts' },
+          { filename: 'worker/src/config.ts' },
+        ]),
+        { status: 200 }
+      )
+    );
+    const { shouldSkipPrDispatch } = await import('./index.js');
+    const result = await shouldSkipPrDispatch(
+      'clouatre-labs/clouatre.ca',
+      42,
+      'mock-token',
+      { version: 1, exclude_paths: ['docs/**'] }
+    );
+    expect(result).toBe(false);
+  });
+
+  it('returns false (dispatch) on GitHub API failure even when aptu.yml or repos.json has exclude_paths (error-resilient contract)', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response('Internal Server Error', { status: 500 })
+    );
+    const { shouldSkipPrDispatch } = await import('./index.js');
+    const result = await shouldSkipPrDispatch(
+      'clouatre-labs/clouatre.ca',
+      42,
+      'mock-token',
+      { version: 1, exclude_paths: ['docs/**'] }
+    );
+    expect(result).toBe(false);
   });
 });

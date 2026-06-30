@@ -20,6 +20,7 @@ export interface AptuConfig {
     'instructions-file'?: string;
   };
   ai?: AiConfig;
+  exclude_paths?: string[];
 }
 
 export const AI_KEY_SECRET_PATTERN = /^[A-Z0-9_]+$/;
@@ -119,6 +120,17 @@ export function parseConfig(raw: string): AptuConfig | null {
         model: aiObj.model,
         'api-key-secret': aiObj['api-key-secret'],
       };
+    }
+
+    if (parsed.exclude_paths !== undefined) {
+      if (!Array.isArray(parsed.exclude_paths)) {
+        return null;
+      }
+      const paths = parsed.exclude_paths as unknown[];
+      if (!paths.every((p): p is string => typeof p === 'string')) {
+        return null;
+      }
+      config.exclude_paths = paths as string[];
     }
 
     return config;
