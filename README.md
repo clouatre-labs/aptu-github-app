@@ -9,14 +9,20 @@ webhook signatures, reads each repository's `.github/aptu.yml` opt-in config, an
 
 ```
 GitHub event (issues.opened / pull_request.opened|synchronize|reopened)
-  -> Cloudflare Worker (verify X-Hub-Signature-256, fetch .github/aptu.yml, dispatch repository_dispatch)
+  -> Cloudflare Worker
+       1. Verify X-Hub-Signature-256
+       2. Get installation token (scoped to originating repo)
+       3. Fetch .github/aptu.yml from originating repo
+       4. Check ALLOWED_OWNERS allowlist (or ai block present) -- 403 if neither
+       5. Get dispatch token (scoped to TARGET_REPO)
+       6. POST repository_dispatch to TARGET_REPO
   -> GitHub Actions workflow (actions/create-github-app-token, run aptu CLI)
   -> GitHub Reviews API (inline comments as aptu[bot])
 ```
 
-The Worker is stateless: validate HMAC signature, fetch the target repo's `aptu.yml`, call
-`POST /repos/{owner}/{repo}/dispatches` if opted in, return 200. The workflow handles all App
-authentication and aptu invocation. No persistent server required.
+The Worker is stateless: validate HMAC signature, fetch the target repo's `aptu.yml`, check
+the allowlist, call `POST /repos/{owner}/{repo}/dispatches` if opted in, return 200. The
+workflow handles all App authentication and aptu invocation. No persistent server required.
 
 ## Repository configuration
 
@@ -39,10 +45,16 @@ ai:
   provider: gemini                                # required if ai block present
   model: gemini-3.1-flash-lite                    # required if ai block present
   api-key-secret: GEMINI_API_KEY                  # required; name of GitHub Actions secret
+
+exclude_paths:                                    # optional; suppress PR review on path-only changes
+  - src/data/blog/**
+  - public/audio/**
 ```
 
-All fields under `triage` and `review` are validated strictly: unknown keys are ignored,
-but a missing `enabled` boolean causes the entire config to be rejected (no dispatch).
+All fields under `triage`, `review`, and `ai` are validated strictly: unknown keys are ignored,
+but a missing `enabled` boolean causes the entire config to be rejected (no dispatch). All three
+`ai` fields are required if the `ai` block is present; a partial or empty-string block is
+rejected.
 
 ### Field reference
 
@@ -52,10 +64,11 @@ but a missing `enabled` boolean causes the entire config to be rejected (no disp
 | `triage.enabled` | boolean | -- | Dispatch `aptu-triage` on `issues.opened` events. |
 | `review.enabled` | boolean | -- | Dispatch `aptu-review` on `pull_request` opened/synchronize/reopened events. |
 | `review.instructions-file` | string | `.github/instructions/pr-review.md` | Path to PR review instructions file, relative to the target repo root. Passed to aptu as `--instructions-file`. |
-| `review.skip-labeled` | boolean | `false` | Passed to aptu as `--skip-labeled`. Has no effect on PR review events (aptu only acts on it for issue events where labels are present). |
+| `review.skip-labeled` | boolean | `false` | Skip dispatch when the PR already carries a label. Passed to aptu as `--skip-labeled`. |
 | `ai.provider` | string | -- | AI provider name passed to aptu as `--provider`. Required if `ai` block present. |
 | `ai.model` | string | -- | AI model name passed to aptu as `--model`. Required if `ai` block present. |
-| `ai.api-key-secret` | string | -- | Name of a GitHub Actions secret containing the API key for the provider. Required if `ai` block present. |
+| `ai.api-key-secret` | string | -- | Name of a GitHub Actions secret in the caller's repository containing the API key. Required if `ai` block present. Must match `^[A-Z0-9_]+$`. |
+| `exclude_paths` | string[] | -- | Glob patterns (picomatch). If every file in a PR matches at least one pattern, the review dispatch is suppressed. |
 
 ### Minimal opt-in example
 
@@ -70,11 +83,10 @@ review:
 
 ### External installation example
 
-Repositories installed via a GitHub App installation that is not in the `ALLOWED_OWNERS`
-allowlist must include an `ai` block to specify which AI provider, model, and API key secret
-to use. The `api-key-secret` value is the name of a GitHub Actions secret in the
-`clouatre-labs/aptu-github-app` repository. The workflow resolves the secret dynamically
-via `secrets[payload.ai_key_secret]`.
+Repositories whose owner is not in the `ALLOWED_OWNERS` allowlist must include an `ai` block.
+The `api-key-secret` value is the **name** of a GitHub Actions secret in the caller's own
+repository. The Worker never has access to repository secrets; the workflow resolves the key
+dynamically via `${{ secrets[github.event.client_payload.ai_key_secret] }}`.
 
 ```yaml
 version: 1
@@ -99,9 +111,15 @@ Merging to `main` triggers `deploy.yml`, which deploys the Worker to Cloudflare 
 - `CLOUDFLARE_ACCOUNT_ID` -- Cloudflare account ID (repository variable)
 - `WEBHOOK_SECRET` -- Wrangler secret; must match the value configured in the GitHub App
 
+Required Wrangler variables (set in `wrangler.toml` or via `bunx wrangler secret put`):
+
+- `APP_ID` -- GitHub App ID
+- `TARGET_REPO` -- `owner/repo` that receives `repository_dispatch` events (i.e., this repo)
+- `ALLOWED_OWNERS` -- comma-separated list of GitHub account/org names permitted to use the app without supplying caller AI keys (e.g., `clouatre-labs,clouatre`)
+
 ### DNS prerequisite
 
-The `wrangler.jsonc` configuration binds the Worker to the route `aptu.dev/webhook` using
+The `wrangler.toml` configuration binds the Worker to the route `aptu.dev/webhook` using
 the `routes` pattern. Cloudflare route bindings require a proxied DNS record for the zone
 root to exist; without one the domain does not resolve and GitHub cannot deliver webhooks
 (`ERR_NAME_NOT_RESOLVED`).
@@ -118,7 +136,7 @@ for route-based Workers with no real origin. The address is never contacted; Clo
 intercepts all proxied requests and the Worker route handles `/webhook` before any origin
 is reached.
 
-Note: `custom_domain = true` in `wrangler.jsonc` would have Cloudflare manage DNS
+Note: `custom_domain = true` in `wrangler.toml` would have Cloudflare manage DNS
 automatically, but it binds the Worker to the entire domain. Because only `/webhook` is
 intercepted, the `routes` + `AAAA 100::` pattern is correct.
 
