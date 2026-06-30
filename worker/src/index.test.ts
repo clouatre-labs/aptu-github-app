@@ -13,6 +13,25 @@ vi.mock('@octokit/auth-app', () => ({
 // biome-ignore lint/suspicious/noExplicitAny: spyOn type parameters require any for global fetch overload
 let fetchSpy: ReturnType<typeof vi.spyOn<any, any>>;
 
+const quotaControl = {
+  body: JSON.stringify({ count: 0, exceeded: false, retryAfter: null }),
+  status: 200,
+};
+
+function makeMockQuotaNamespace(): DurableObjectNamespace {
+  const stub = {
+    fetch: vi.fn(() =>
+      Promise.resolve(
+        new Response(quotaControl.body, { status: quotaControl.status })
+      )
+    ),
+  };
+  return {
+    idFromName: vi.fn(() => 'mock-id' as unknown as DurableObjectId),
+    get: vi.fn(() => stub as unknown as DurableObjectStub),
+  } as unknown as DurableObjectNamespace;
+}
+
 function sign(secret: string, body: string): string {
   return `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
 }
@@ -94,6 +113,7 @@ const mockEnv = {
   APP_ID: '4134521',
   TARGET_REPO: 'clouatre-labs/aptu-github-app',
   ALLOWED_OWNERS: 'owner,myorg,clouatre-labs,unconfigured',
+  QUOTA: makeMockQuotaNamespace(),
 };
 
 async function callHandler(
@@ -1281,5 +1301,104 @@ describe('shouldSkipPrDispatch direct unit tests', () => {
       { version: 1, exclude_paths: ['docs/**'] }
     );
     expect(result).toBe(false);
+  });
+});
+
+describe('Quota check integration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockImplementation(mockEnabledFetch());
+    quotaControl.body = JSON.stringify({
+      count: 0,
+      exceeded: false,
+      retryAfter: null,
+    });
+    quotaControl.status = 200;
+  });
+
+  it('returns 429 with Retry-After header when quota exceeded, without dispatching repository_dispatch', async () => {
+    quotaControl.body = JSON.stringify({
+      count: 50,
+      exceeded: true,
+      retryAfter: 3600,
+    });
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: {
+        full_name: 'owner/repo',
+        owner: { login: 'owner' },
+      },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Retry-After')).toBe('3600');
+
+    // No dispatch call should be made for a quota-exceeded request
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(0);
+  });
+
+  it('proceeds to normal dispatch flow when quota not exceeded', async () => {
+    quotaControl.body = JSON.stringify({
+      count: 1,
+      exceeded: false,
+      retryAfter: null,
+    });
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: {
+        full_name: 'owner/repo',
+        owner: { login: 'owner' },
+      },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(204);
+
+    // Dispatch should have been called
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
+  });
+
+  it('returns 500 when quota check fails', async () => {
+    quotaControl.status = 500;
+    quotaControl.body = 'Internal Server Error';
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: {
+        full_name: 'owner/repo',
+        owner: { login: 'owner' },
+      },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(500);
   });
 });

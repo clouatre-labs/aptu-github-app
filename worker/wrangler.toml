@@ -6,6 +6,14 @@ main = "src/index.ts"
 pattern = "aptu.dev/webhook"
 zone_name = "aptu.dev"
 
+[[durable_objects.bindings]]
+name = "QUOTA"
+class_name = "InstallationQuota"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["InstallationQuota"]
+
 [vars]
 APP_ID = "4134521"
 TARGET_REPO = "clouatre-labs/aptu-github-app"
