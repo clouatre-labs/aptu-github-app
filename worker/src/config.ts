@@ -130,7 +130,7 @@ export function parseConfig(raw: string): AptuConfig | null {
       if (!paths.every((p): p is string => typeof p === 'string')) {
         return null;
       }
-      config.exclude_paths = paths;
+      config.exclude_paths = paths as string[];
     }
 
     return config;
