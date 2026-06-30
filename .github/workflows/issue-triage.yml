@@ -28,9 +28,9 @@ jobs:
         uses: clouatre-labs/aptu@fa3d8ce38808061bc5593c3ca1e791c73d0f72c6 # v0.10.2
         with:
           github-token: ${{ github.event.client_payload.installation_token }}
-          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
-          provider: gemini
-          model: gemini-3.1-flash-lite
+          gemini-api-key: ${{ secrets[github.event.client_payload.ai_key_secret] || secrets.GEMINI_API_KEY }}
+          provider: ${{ github.event.client_payload.ai_provider || 'gemini' }}
+          model: ${{ github.event.client_payload.ai_model || 'gemini-3.1-flash-lite' }}
           no-comment: 'false'
           fallback-provider: 'openrouter'
           fallback-model: 'inception/mercury-2'

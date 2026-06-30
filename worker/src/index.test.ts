@@ -73,6 +73,21 @@ function mockAbsentConfigFetch(): ReturnType<typeof vi.fn> {
   });
 }
 
+function mockEnabledWithAiFetch(): ReturnType<typeof vi.fn> {
+  return vi.fn((url: string | URL | Request) => {
+    const urlStr =
+      typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+    if (urlStr.includes('/contents/.github/aptu.yml')) {
+      return Promise.resolve(
+        makeConfigResponse(
+          'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o\n  api-key-secret: OPENAI_API_KEY'
+        )
+      );
+    }
+    return Promise.resolve(new Response(null, { status: 204 }));
+  });
+}
+
 const mockEnv = {
   WEBHOOK_SECRET: 'test-secret',
   APP_PRIVATE_KEY: 'fake-key',
@@ -1007,5 +1022,141 @@ describe('isOwnerAllowed', () => {
     const { isOwnerAllowed } = await import('./index.js');
     expect(isOwnerAllowed('clouatre-labs', 'clouatre-labs,')).toBe(true);
     expect(isOwnerAllowed('other', 'clouatre-labs,')).toBe(false);
+  });
+});
+
+describe('AI configuration and external installations', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+
+  it('includes ai_provider, ai_model, ai_key_secret in client_payload for issues.opened when config.ai is present', async () => {
+    fetchSpy.mockImplementation(mockEnabledWithAiFetch());
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 10 },
+      issue: { number: 42, title: 'Test Issue' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    const dispatchCall = fetchSpy.mock.calls.find((call) =>
+      String(call[0]).includes('/dispatches')
+    ) as [string, RequestInit];
+    const parsed = JSON.parse(dispatchCall[1].body as string);
+    expect(parsed.client_payload).toHaveProperty('ai_provider', 'openai');
+    expect(parsed.client_payload).toHaveProperty('ai_model', 'gpt-4o');
+    expect(parsed.client_payload).toHaveProperty(
+      'ai_key_secret',
+      'OPENAI_API_KEY'
+    );
+    expect(parsed.client_payload).toHaveProperty(
+      'originating_repo',
+      'owner/repo'
+    );
+    expect(parsed.client_payload).toHaveProperty('issue_number', 42);
+    expect(parsed.client_payload).toHaveProperty('issue_title', 'Test Issue');
+  });
+
+  it('includes ai_provider, ai_model, ai_key_secret in client_payload for pull_request when config.ai is present', async () => {
+    fetchSpy.mockImplementation(mockEnabledWithAiFetch());
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 10 },
+      pull_request: { number: 15, title: 'Test PR' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    const dispatchCall = fetchSpy.mock.calls.find((call) =>
+      String(call[0]).includes('/dispatches')
+    ) as [string, RequestInit];
+    const parsed = JSON.parse(dispatchCall[1].body as string);
+    expect(parsed.client_payload).toHaveProperty('ai_provider', 'openai');
+    expect(parsed.client_payload).toHaveProperty('ai_model', 'gpt-4o');
+    expect(parsed.client_payload).toHaveProperty(
+      'ai_key_secret',
+      'OPENAI_API_KEY'
+    );
+  });
+
+  it('omits ai_provider, ai_model, ai_key_secret from client_payload when config.ai is absent', async () => {
+    fetchSpy.mockImplementation(mockEnabledFetch());
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 10 },
+      issue: { number: 42, title: 'Test Issue' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    const dispatchCall = fetchSpy.mock.calls.find((call) =>
+      String(call[0]).includes('/dispatches')
+    ) as [string, RequestInit];
+    const parsed = JSON.parse(dispatchCall[1].body as string);
+    expect(parsed.client_payload).not.toHaveProperty('ai_provider');
+    expect(parsed.client_payload).not.toHaveProperty('ai_model');
+    expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
+  });
+
+  it('returns 403 with diagnostic body when owner not in ALLOWED_OWNERS and ai block absent', async () => {
+    fetchSpy.mockImplementation(mockAbsentConfigFetch());
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: {
+        full_name: 'external/repo',
+        owner: { login: 'external' },
+      },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(403);
+    const body_text = await response.text();
+    expect(body_text).toBe(
+      'External installations require an ai block in .github/aptu.yml'
+    );
+  });
+
+  it('returns 204 and dispatches when owner not in ALLOWED_OWNERS but valid ai block present', async () => {
+    fetchSpy.mockImplementation(mockEnabledWithAiFetch());
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: {
+        full_name: 'external/repo',
+        owner: { login: 'external' },
+      },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(204);
+    const dispatchCall = fetchSpy.mock.calls.find((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCall).toBeDefined();
   });
 });

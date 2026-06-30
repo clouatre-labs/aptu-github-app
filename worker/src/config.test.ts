@@ -42,6 +42,40 @@ describe('parseConfig', () => {
     const raw = '!!!not-valid-base64!!!';
     expect(parseConfig(raw)).toBeNull();
   });
+
+  it('accepts valid full ai block with provider, model, api-key-secret as non-empty strings', () => {
+    const raw = btoa(
+      'version: 1\ntriage:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o\n  api-key-secret: OPENAI_API_KEY'
+    );
+    const config = parseConfig(raw);
+    expect(config).not.toBeNull();
+    expect(config?.ai).toEqual({
+      provider: 'openai',
+      model: 'gpt-4o',
+      'api-key-secret': 'OPENAI_API_KEY',
+    });
+  });
+
+  it('rejects partial ai block with only provider set', () => {
+    const raw = btoa(
+      'version: 1\ntriage:\n  enabled: true\nai:\n  provider: openai'
+    );
+    expect(parseConfig(raw)).toBeNull();
+  });
+
+  it('rejects ai block with empty-string fields', () => {
+    const raw = btoa(
+      'version: 1\ntriage:\n  enabled: true\nai:\n  provider: ""\n  model: gpt-4o\n  api-key-secret: OPENAI_API_KEY'
+    );
+    expect(parseConfig(raw)).toBeNull();
+  });
+
+  it('rejects ai block when api-key-secret is empty string', () => {
+    const raw = btoa(
+      'version: 1\ntriage:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o\n  api-key-secret: ""'
+    );
+    expect(parseConfig(raw)).toBeNull();
+  });
 });
 
 describe('shouldDispatch', () => {

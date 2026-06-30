@@ -5,6 +5,12 @@ import { parse } from 'yaml';
 
 export const REPO_CONFIG_FETCH_TIMEOUT_MS = 5000;
 
+export interface AiConfig {
+  provider: string;
+  model: string;
+  'api-key-secret': string;
+}
+
 export interface AptuConfig {
   version: number;
   triage?: { enabled: boolean };
@@ -13,6 +19,7 @@ export interface AptuConfig {
     'skip-labeled'?: boolean;
     'instructions-file'?: string;
   };
+  ai?: AiConfig;
 }
 
 export async function fetchRepoConfig(
@@ -88,6 +95,28 @@ export function parseConfig(raw: string): AptuConfig | null {
       if (typeof reviewObj['instructions-file'] === 'string') {
         config.review['instructions-file'] = reviewObj['instructions-file'];
       }
+    }
+
+    if (parsed.ai !== undefined) {
+      if (typeof parsed.ai !== 'object' || parsed.ai === null) {
+        return null;
+      }
+      const aiObj = parsed.ai as Record<string, unknown>;
+      if (
+        typeof aiObj.provider !== 'string' ||
+        aiObj.provider === '' ||
+        typeof aiObj.model !== 'string' ||
+        aiObj.model === '' ||
+        typeof aiObj['api-key-secret'] !== 'string' ||
+        aiObj['api-key-secret'] === ''
+      ) {
+        return null;
+      }
+      config.ai = {
+        provider: aiObj.provider,
+        model: aiObj.model,
+        'api-key-secret': aiObj['api-key-secret'],
+      };
     }
 
     return config;
