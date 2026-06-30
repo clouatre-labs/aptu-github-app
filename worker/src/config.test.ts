@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
 
 import { describe, expect, it } from 'vitest';
-import { parseConfig, shouldDispatch } from './config';
+import { AI_KEY_SECRET_PATTERN, parseConfig, shouldDispatch } from './config';
 
 describe('parseConfig', () => {
   it('returns null for version != 1', () => {
@@ -75,6 +75,34 @@ describe('parseConfig', () => {
       'version: 1\ntriage:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o\n  api-key-secret: ""'
     );
     expect(parseConfig(raw)).toBeNull();
+  });
+
+  it('rejects ai block when api-key-secret contains lowercase characters', () => {
+    const raw = btoa(
+      'version: 1\ntriage:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o\n  api-key-secret: gemini_api_key'
+    );
+    expect(parseConfig(raw)).toBeNull();
+  });
+
+  it('rejects ai block when api-key-secret contains a hyphen', () => {
+    const raw = btoa(
+      'version: 1\ntriage:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o\n  api-key-secret: GEMINI-API-KEY'
+    );
+    expect(parseConfig(raw)).toBeNull();
+  });
+});
+
+describe('AI_KEY_SECRET_PATTERN', () => {
+  it('accepts uppercase letters, digits, and underscores', () => {
+    expect(AI_KEY_SECRET_PATTERN.test('GEMINI_API_KEY')).toBe(true);
+    expect(AI_KEY_SECRET_PATTERN.test('MY_KEY_123')).toBe(true);
+  });
+
+  it('rejects empty string, lowercase, hyphens, and spaces', () => {
+    expect(AI_KEY_SECRET_PATTERN.test('')).toBe(false);
+    expect(AI_KEY_SECRET_PATTERN.test('gemini_api_key')).toBe(false);
+    expect(AI_KEY_SECRET_PATTERN.test('GEMINI-API-KEY')).toBe(false);
+    expect(AI_KEY_SECRET_PATTERN.test('MY KEY')).toBe(false);
   });
 });
 

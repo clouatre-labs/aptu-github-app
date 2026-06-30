@@ -22,6 +22,8 @@ export interface AptuConfig {
   ai?: AiConfig;
 }
 
+export const AI_KEY_SECRET_PATTERN = /^[A-Z0-9_]+$/;
+
 export async function fetchRepoConfig(
   token: string,
   owner: string,
@@ -108,7 +110,7 @@ export function parseConfig(raw: string): AptuConfig | null {
         typeof aiObj.model !== 'string' ||
         aiObj.model === '' ||
         typeof aiObj['api-key-secret'] !== 'string' ||
-        aiObj['api-key-secret'] === ''
+        !AI_KEY_SECRET_PATTERN.test(aiObj['api-key-secret'])
       ) {
         return null;
       }
