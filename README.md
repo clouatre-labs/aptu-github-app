@@ -34,6 +34,11 @@ triage:
 review:
   enabled: true                                   # required if review block present
   instructions-file: .github/instructions/pr-review.md  # optional; path in the target repo
+
+ai:
+  provider: gemini                                # required if ai block present
+  model: gemini-3.1-flash-lite                    # required if ai block present
+  api-key-secret: GEMINI_API_KEY                  # required; name of GitHub Actions secret
 ```
 
 All fields under `triage` and `review` are validated strictly: unknown keys are ignored,
@@ -48,6 +53,9 @@ but a missing `enabled` boolean causes the entire config to be rejected (no disp
 | `review.enabled` | boolean | -- | Dispatch `aptu-review` on `pull_request` opened/synchronize/reopened events. |
 | `review.instructions-file` | string | `.github/instructions/pr-review.md` | Path to PR review instructions file, relative to the target repo root. Passed to aptu as `--instructions-file`. |
 | `review.skip-labeled` | boolean | `false` | Passed to aptu as `--skip-labeled`. Has no effect on PR review events (aptu only acts on it for issue events where labels are present). |
+| `ai.provider` | string | -- | AI provider name passed to aptu as `--provider`. Required if `ai` block present. |
+| `ai.model` | string | -- | AI model name passed to aptu as `--model`. Required if `ai` block present. |
+| `ai.api-key-secret` | string | -- | Name of a GitHub Actions secret containing the API key for the provider. Required if `ai` block present. |
 
 ### Minimal opt-in example
 
@@ -58,6 +66,26 @@ triage:
 review:
   enabled: true
   instructions-file: .github/instructions/pr-review.md
+```
+
+### External installation example
+
+Repositories installed via a GitHub App installation that is not in the `ALLOWED_OWNERS`
+allowlist must include an `ai` block to specify which AI provider, model, and API key secret
+to use. The `api-key-secret` value is the name of a GitHub Actions secret in the
+`clouatre-labs/aptu-github-app` repository. The workflow resolves the secret dynamically
+via `secrets[payload.ai_key_secret]`.
+
+```yaml
+version: 1
+triage:
+  enabled: true
+review:
+  enabled: true
+ai:
+  provider: openai
+  model: gpt-4o
+  api-key-secret: OPENAI_API_KEY
 ```
 
 ## Deployment

@@ -192,8 +192,6 @@ export default {
         payload.repository as { owner?: { login: string } } | undefined
       )?.owner?.login;
       if (!repoOwner) return new Response('Forbidden', { status: 403 });
-      if (!isOwnerAllowed(repoOwner, env.ALLOWED_OWNERS))
-        return new Response('Forbidden', { status: 403 });
 
       let token: string;
       try {
@@ -213,6 +211,16 @@ export default {
       } catch (error) {
         console.error(`Failed to fetch config for ${repo}:`, error);
         config = null;
+      }
+
+      if (!isOwnerAllowed(repoOwner, env.ALLOWED_OWNERS) && !config?.ai) {
+        console.error(
+          `External installation rejected (missing ai block): ${repo}`
+        );
+        return new Response(
+          'External installations require an ai block in .github/aptu.yml',
+          { status: 403 }
+        );
       }
 
       if (!shouldDispatch(config, 'triage'))
@@ -237,6 +245,13 @@ export default {
           originating_repo: repo,
           issue_number: issue.number,
           issue_title: issue.title,
+          ...(config?.ai
+            ? {
+                ai_provider: config.ai.provider,
+                ai_model: config.ai.model,
+                ai_key_secret: config.ai['api-key-secret'],
+              }
+            : {}),
         });
       } catch (error) {
         console.error(
@@ -262,8 +277,6 @@ export default {
         payload.repository as { owner?: { login: string } } | undefined
       )?.owner?.login;
       if (!repoOwner) return new Response('Forbidden', { status: 403 });
-      if (!isOwnerAllowed(repoOwner, env.ALLOWED_OWNERS))
-        return new Response('Forbidden', { status: 403 });
 
       let token: string;
       try {
@@ -287,6 +300,16 @@ export default {
       } catch (error) {
         console.error(`Failed to fetch config for ${repo}:`, error);
         config = null;
+      }
+
+      if (!isOwnerAllowed(repoOwner, env.ALLOWED_OWNERS) && !config?.ai) {
+        console.error(
+          `External installation rejected (missing ai block): ${repo}`
+        );
+        return new Response(
+          'External installations require an ai block in .github/aptu.yml',
+          { status: 403 }
+        );
       }
 
       if (!shouldDispatch(config, 'review'))
@@ -313,6 +336,13 @@ export default {
           pull_title: pr.title,
           instructions_file: config?.review?.['instructions-file'] ?? null,
           skip_labeled: config?.review?.['skip-labeled'] ?? false,
+          ...(config?.ai
+            ? {
+                ai_provider: config.ai.provider,
+                ai_model: config.ai.model,
+                ai_key_secret: config.ai['api-key-secret'],
+              }
+            : {}),
         });
       } catch (error) {
         console.error(
