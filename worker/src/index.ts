@@ -213,11 +213,15 @@ export default {
         config = null;
       }
 
-      if (!isOwnerAllowed(repoOwner, env.ALLOWED_OWNERS) && !config?.ai)
+      if (!isOwnerAllowed(repoOwner, env.ALLOWED_OWNERS) && !config?.ai) {
+        console.error(
+          `External installation rejected (missing ai block): ${repo}`
+        );
         return new Response(
           'External installations require an ai block in .github/aptu.yml',
           { status: 403 }
         );
+      }
 
       if (!shouldDispatch(config, 'triage'))
         return new Response('OK', { status: 200 });
@@ -298,11 +302,15 @@ export default {
         config = null;
       }
 
-      if (!isOwnerAllowed(repoOwner, env.ALLOWED_OWNERS) && !config?.ai)
+      if (!isOwnerAllowed(repoOwner, env.ALLOWED_OWNERS) && !config?.ai) {
+        console.error(
+          `External installation rejected (missing ai block): ${repo}`
+        );
         return new Response(
           'External installations require an ai block in .github/aptu.yml',
           { status: 403 }
         );
+      }
 
       if (!shouldDispatch(config, 'review'))
         return new Response('OK', { status: 200 });
