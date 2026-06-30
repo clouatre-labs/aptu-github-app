@@ -126,3 +126,37 @@ describe('shouldDispatch', () => {
     expect(shouldDispatch(config, 'triage')).toBe(true);
   });
 });
+
+describe('parseConfig exclude_paths', () => {
+  it('parses exclude_paths as array of strings from valid YAML, attaches to AptuConfig', () => {
+    const raw = btoa(
+      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nexclude_paths:\n  - "src/data/**"\n  - "docs/**"'
+    );
+    const config = parseConfig(raw);
+    expect(config).not.toBeNull();
+    expect(config?.exclude_paths).toEqual(['src/data/**', 'docs/**']);
+  });
+
+  it('tolerates absence of exclude_paths (existing configs continue to parse)', () => {
+    const raw = btoa(
+      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true'
+    );
+    const config = parseConfig(raw);
+    expect(config).not.toBeNull();
+    expect(config?.exclude_paths).toBeUndefined();
+  });
+
+  it('returns null when exclude_paths is present but is not an array', () => {
+    const raw = btoa(
+      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nexclude_paths: "src/**"'
+    );
+    expect(parseConfig(raw)).toBeNull();
+  });
+
+  it('returns null when exclude_paths array contains non-string elements (numbers, objects)', () => {
+    const raw = btoa(
+      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nexclude_paths:\n  - 42\n  - src/data/**'
+    );
+    expect(parseConfig(raw)).toBeNull();
+  });
+});

@@ -118,12 +118,20 @@ export async function getDispatchToken(
 export async function shouldSkipPrDispatch(
   repoFullName: string,
   prNumber: number,
-  token: string
+  token: string,
+  aptuConfig: AptuConfig | null = null
 ): Promise<boolean> {
   const repoConfig = reposConfig[repoFullName as keyof typeof reposConfig];
-  if (!repoConfig) return false;
 
-  const excludePatterns = repoConfig.exclude_paths;
+  // Precedence: aptu.yml exclude_paths wins, fall back to repos.json
+  let excludePatterns: string[] | undefined;
+
+  if (aptuConfig?.exclude_paths) {
+    excludePatterns = aptuConfig.exclude_paths;
+  } else if (repoConfig) {
+    excludePatterns = repoConfig.exclude_paths;
+  }
+
   if (!excludePatterns || excludePatterns.length === 0) return false;
 
   try {
@@ -288,9 +296,6 @@ export default {
 
       const pr = payload.pull_request as { number: number; title: string };
 
-      const shouldSkip = await shouldSkipPrDispatch(repo, pr.number, token);
-      if (shouldSkip) return new Response(null, { status: 204 });
-
       const owner = repo.split('/')[0] ?? '';
       const repoName = repo.split('/')[1] ?? '';
 
@@ -301,6 +306,14 @@ export default {
         console.error(`Failed to fetch config for ${repo}:`, error);
         config = null;
       }
+
+      const shouldSkip = await shouldSkipPrDispatch(
+        repo,
+        pr.number,
+        token,
+        config
+      );
+      if (shouldSkip) return new Response(null, { status: 204 });
 
       if (!isOwnerAllowed(repoOwner, env.ALLOWED_OWNERS) && !config?.ai) {
         console.error(
