@@ -17,6 +17,7 @@ export interface Env {
   APP_ID: string;
   TARGET_REPO: string;
   ALLOWED_OWNERS: string;
+  QUOTA: DurableObjectNamespace;
 }
 
 export function hexToBytes(hex: string): Uint8Array {
@@ -166,6 +167,48 @@ export async function shouldSkipPrDispatch(
   }
 }
 
+async function checkQuota(
+  env: Env,
+  installationId: number,
+  eventType: string
+): Promise<Response | null> {
+  const quotaId = env.QUOTA.idFromName(String(installationId));
+  const stub = env.QUOTA.get(quotaId);
+  let quotaResponse: Response;
+  try {
+    quotaResponse = await stub.fetch('https://quota/quota', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventType, installationId }),
+    });
+  } catch (error) {
+    console.error(
+      `Quota check failed for installation ${installationId}:`,
+      error
+    );
+    return new Response('Internal Server Error', { status: 500 });
+  }
+  if (!quotaResponse.ok) {
+    const text = await quotaResponse.text();
+    console.error(
+      `Quota check error for installation ${installationId}: ${text}`
+    );
+    return new Response('Internal Server Error', { status: 500 });
+  }
+  const quota = (await quotaResponse.json()) as {
+    count: number;
+    exceeded: boolean;
+    retryAfter: number | null;
+  };
+  if (quota.exceeded) {
+    return new Response(null, {
+      status: 429,
+      headers: { 'Retry-After': String(quota.retryAfter ?? 3600) },
+    });
+  }
+  return null;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method !== 'POST')
@@ -200,6 +243,9 @@ export default {
         payload.repository as { owner?: { login: string } } | undefined
       )?.owner?.login;
       if (!repoOwner) return new Response('Forbidden', { status: 403 });
+
+      const quotaResponse = await checkQuota(env, installationId, 'triage');
+      if (quotaResponse) return quotaResponse;
 
       let token: string;
       try {
@@ -285,6 +331,9 @@ export default {
         payload.repository as { owner?: { login: string } } | undefined
       )?.owner?.login;
       if (!repoOwner) return new Response('Forbidden', { status: 403 });
+
+      const quotaResponse = await checkQuota(env, installationId, 'review');
+      if (quotaResponse) return quotaResponse;
 
       let token: string;
       try {
