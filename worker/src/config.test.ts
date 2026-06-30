@@ -26,9 +26,9 @@ describe('parseConfig', () => {
     expect(config?.version).toBe(1);
     expect(config?.triage?.enabled).toBe(true);
     expect(config?.review?.enabled).toBe(true);
-    expect(
-      (config as unknown) as Record<string, unknown>
-    ).not.toHaveProperty('unknown_field');
+    expect(config as unknown as Record<string, unknown>).not.toHaveProperty(
+      'unknown_field'
+    );
   });
 
   it('returns null when review block exists but enabled field is missing', () => {

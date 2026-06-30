@@ -16,6 +16,7 @@ export interface Env {
   APP_PRIVATE_KEY: string;
   APP_ID: string;
   TARGET_REPO: string;
+  ALLOWED_OWNERS: string;
 }
 
 export function hexToBytes(hex: string): Uint8Array {
@@ -45,6 +46,14 @@ export async function validateSignature(
   const sigHex = sigHeader.slice('sha256='.length);
   const sigBytes = hexToBytes(sigHex);
   return crypto.subtle.verify('HMAC', key, sigBytes, encodedPayload);
+}
+
+export function isOwnerAllowed(repoOwner: string, allowedOwners = ''): boolean {
+  return allowedOwners
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .some((allowed) => allowed.toLowerCase() === repoOwner.toLowerCase());
 }
 
 export async function getInstallationToken(
@@ -179,6 +188,13 @@ export default {
       if (!repo.includes('/'))
         return new Response('Bad Request', { status: 400 });
 
+      const repoOwner = (
+        payload.repository as { owner?: { login: string } } | undefined
+      )?.owner?.login;
+      if (!repoOwner) return new Response('Forbidden', { status: 403 });
+      if (!isOwnerAllowed(repoOwner, env.ALLOWED_OWNERS))
+        return new Response('Forbidden', { status: 403 });
+
       let token: string;
       try {
         token = await getInstallationToken(env, installationId);
@@ -241,6 +257,13 @@ export default {
       const repo = (payload.repository as { full_name: string }).full_name;
       if (!repo.includes('/'))
         return new Response('Bad Request', { status: 400 });
+
+      const repoOwner = (
+        payload.repository as { owner?: { login: string } } | undefined
+      )?.owner?.login;
+      if (!repoOwner) return new Response('Forbidden', { status: 403 });
+      if (!isOwnerAllowed(repoOwner, env.ALLOWED_OWNERS))
+        return new Response('Forbidden', { status: 403 });
 
       let token: string;
       try {
