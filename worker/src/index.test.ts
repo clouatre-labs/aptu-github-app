@@ -78,6 +78,7 @@ const mockEnv = {
   APP_PRIVATE_KEY: 'fake-key',
   APP_ID: '4134521',
   TARGET_REPO: 'clouatre-labs/aptu-github-app',
+  ALLOWED_OWNERS: 'owner,myorg,clouatre-labs,unconfigured',
 };
 
 async function callHandler(
@@ -126,7 +127,7 @@ describe('HMAC validation', () => {
       action: 'opened',
       installation: { id: 1 },
       issue: { number: 1, title: 'Test' },
-      repository: { full_name: 'owner/repo' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -150,7 +151,7 @@ describe('event routing', () => {
       action: 'opened',
       installation: { id: 1 },
       issue: { number: 1, title: 'Test' },
-      repository: { full_name: 'owner/repo' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -174,7 +175,7 @@ describe('event routing', () => {
       action,
       installation: { id: 99 },
       pull_request: { number: 7, title: 'Test PR' },
-      repository: { full_name: 'owner/repo' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -234,7 +235,7 @@ describe('token generation', () => {
       action: 'opened',
       installation: { id: 55 },
       issue: { number: 3, title: 'Token test' },
-      repository: { full_name: 'owner/repo' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     await callHandler(body, {
@@ -269,7 +270,7 @@ describe('repository_dispatch client_payload', () => {
       action: 'opened',
       installation: { id: 10 },
       issue: { number: 42, title: 'Payload test' },
-      repository: { full_name: 'myorg/myrepo' },
+      repository: { full_name: 'myorg/myrepo', owner: { login: 'myorg' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     await callHandler(body, {
@@ -294,7 +295,7 @@ describe('repository_dispatch client_payload', () => {
       action: 'opened',
       installation: { id: 20 },
       pull_request: { number: 99, title: 'PR payload test' },
-      repository: { full_name: 'myorg/myrepo' },
+      repository: { full_name: 'myorg/myrepo', owner: { login: 'myorg' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     await callHandler(body, {
@@ -335,7 +336,10 @@ describe('path filter config', () => {
       action: 'opened',
       installation: { id: 1 },
       pull_request: { number: 42, title: 'Update content' },
-      repository: { full_name: 'clouatre-labs/clouatre.ca' },
+      repository: {
+        full_name: 'clouatre-labs/clouatre.ca',
+        owner: { login: 'clouatre-labs' },
+      },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -378,7 +382,10 @@ describe('path filter config', () => {
       action: 'opened',
       installation: { id: 1 },
       pull_request: { number: 43, title: 'Mixed changes' },
-      repository: { full_name: 'clouatre-labs/clouatre.ca' },
+      repository: {
+        full_name: 'clouatre-labs/clouatre.ca',
+        owner: { login: 'clouatre-labs' },
+      },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -406,7 +413,10 @@ describe('path filter config', () => {
       action: 'opened',
       installation: { id: 1 },
       pull_request: { number: 44, title: 'Unconfigured repo' },
-      repository: { full_name: 'unconfigured/repo' },
+      repository: {
+        full_name: 'unconfigured/repo',
+        owner: { login: 'unconfigured' },
+      },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -441,7 +451,10 @@ describe('path filter config', () => {
       action: 'opened',
       installation: { id: 1 },
       pull_request: { number: 45, title: 'API failure test' },
-      repository: { full_name: 'clouatre-labs/clouatre.ca' },
+      repository: {
+        full_name: 'clouatre-labs/clouatre.ca',
+        owner: { login: 'clouatre-labs' },
+      },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -471,7 +484,7 @@ describe('config-driven dispatch', () => {
       action: 'opened',
       installation: { id: 1 },
       issue: { number: 1, title: 'T' },
-      repository: { full_name: 'owner/repo' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -506,7 +519,7 @@ describe('config-driven dispatch', () => {
       action: 'opened',
       installation: { id: 1 },
       issue: { number: 1, title: 'T' },
-      repository: { full_name: 'owner/repo' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -528,7 +541,7 @@ describe('config-driven dispatch', () => {
       action: 'opened',
       installation: { id: 1 },
       issue: { number: 1, title: 'T' },
-      repository: { full_name: 'owner/repo' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -550,7 +563,7 @@ describe('config-driven dispatch', () => {
       action: 'opened',
       installation: { id: 1 },
       pull_request: { number: 1, title: 'T' },
-      repository: { full_name: 'owner/repo' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -587,7 +600,7 @@ describe('config-driven dispatch', () => {
       action: 'opened',
       installation: { id: 1 },
       issue: { number: 5, title: 'Triage enabled' },
-      repository: { full_name: 'owner/repo' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -624,7 +637,7 @@ describe('config-driven dispatch', () => {
       action: 'opened',
       installation: { id: 1 },
       pull_request: { number: 6, title: 'Review enabled' },
-      repository: { full_name: 'owner/repo' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -647,7 +660,7 @@ describe('config-driven dispatch', () => {
       action: 'opened',
       installation: { id: 1 },
       issue: { number: 7, title: 'Both issue' },
-      repository: { full_name: 'owner/repo' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     let sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const issueResponse = await callHandler(body, {
@@ -662,7 +675,7 @@ describe('config-driven dispatch', () => {
       action: 'opened',
       installation: { id: 1 },
       pull_request: { number: 8, title: 'Both PR' },
-      repository: { full_name: 'owner/repo' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const prResponse = await callHandler(body, {
@@ -700,7 +713,7 @@ describe('config-driven dispatch', () => {
       action: 'opened',
       installation: { id: 1 },
       pull_request: { number: 9, title: 'Config fields' },
-      repository: { full_name: 'owner/repo' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     await callHandler(body, {
@@ -739,7 +752,7 @@ describe('config-driven dispatch', () => {
       action: 'opened',
       installation: { id: 1 },
       issue: { number: 10, title: 'Timeout test' },
-      repository: { full_name: 'owner/repo' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -773,7 +786,7 @@ describe('error handling', () => {
       action: 'opened',
       installation: { id: 1 },
       issue: { number: 1, title: 'Test' },
-      repository: { full_name: 'owner/repo' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -815,7 +828,7 @@ describe('error handling', () => {
       action: 'opened',
       installation: { id: 1 },
       issue: { number: 1, title: 'Test' },
-      repository: { full_name: 'owner/repo' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -838,7 +851,7 @@ describe('error handling', () => {
       action: 'opened',
       installation: { id: 1 },
       pull_request: { number: 1, title: 'Test PR' },
-      repository: { full_name: 'owner/repo' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -882,7 +895,7 @@ describe('error handling', () => {
       action: 'opened',
       installation: { id: 1 },
       pull_request: { number: 1, title: 'Test PR' },
-      repository: { full_name: 'owner/repo' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -891,5 +904,108 @@ describe('error handling', () => {
       'Content-Type': 'application/json',
     });
     expect(response.status).toBe(500);
+  });
+});
+
+describe('allowlist (ALLOWED_OWNERS)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockImplementation(mockEnabledFetch());
+  });
+
+  it('returns 403 when issues.opened owner is not in ALLOWED_OWNERS', async () => {
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: {
+        full_name: 'untrusted/repo',
+        owner: { login: 'untrusted' },
+      },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it('returns 403 when pull_request owner is not in ALLOWED_OWNERS', async () => {
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: { number: 1, title: 'Test PR' },
+      repository: {
+        full_name: 'untrusted/repo',
+        owner: { login: 'untrusted' },
+      },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it('passes through to processing when issues.opened owner is in ALLOWED_OWNERS', async () => {
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: {
+        full_name: 'owner/repo',
+        owner: { login: 'owner' },
+      },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(204);
+  });
+
+  it('returns 403 when repository.owner.login is missing', async () => {
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: { full_name: 'owner/repo' },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(403);
+  });
+});
+
+describe('isOwnerAllowed', () => {
+  it('handles case-insensitive matching', async () => {
+    const { isOwnerAllowed } = await import('./index.js');
+    expect(isOwnerAllowed('Clouatre-Labs', 'clouatre-labs,clouatre')).toBe(
+      true
+    );
+    expect(isOwnerAllowed('CLOUATRE', 'clouatre-labs,clouatre')).toBe(true);
+    expect(isOwnerAllowed('Other', 'clouatre-labs,clouatre')).toBe(false);
+  });
+
+  it('returns false when ALLOWED_OWNERS is empty string', async () => {
+    const { isOwnerAllowed } = await import('./index.js');
+    expect(isOwnerAllowed('clouatre-labs', '')).toBe(false);
+  });
+
+  it('handles trailing comma without producing empty match', async () => {
+    const { isOwnerAllowed } = await import('./index.js');
+    expect(isOwnerAllowed('clouatre-labs', 'clouatre-labs,')).toBe(true);
+    expect(isOwnerAllowed('other', 'clouatre-labs,')).toBe(false);
   });
 });
