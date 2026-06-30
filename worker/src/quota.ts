@@ -6,6 +6,9 @@
 // Rolling 24-hour window: timestamps older than 24h are pruned on each request.
 // After 50 events within the window, returns exceeded=true with a Retry-After header.
 
+export const QUOTA_LIMIT = 50;
+export const QUOTA_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 interface QuotaState {
   timestamps: number[];
 }
@@ -41,7 +44,7 @@ export class InstallationQuota {
     const timestamps = stored?.timestamps ?? [];
 
     const now = Date.now();
-    const windowMs = 24 * 60 * 60 * 1000;
+    const windowMs = QUOTA_WINDOW_MS;
     const cutoff = now - windowMs;
 
     // Prune timestamps older than the rolling 24h window
@@ -52,7 +55,7 @@ export class InstallationQuota {
       }
     }
 
-    if (recent.length >= 50) {
+    if (recent.length >= QUOTA_LIMIT) {
       // Exceeded: calculate retry-after from the oldest timestamp's window expiry
       const oldest = recent[0] as number;
       const retryAfter = Math.ceil((oldest + windowMs - now) / 1000);

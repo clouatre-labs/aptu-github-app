@@ -209,6 +209,16 @@ async function checkQuota(
   return null;
 }
 
+async function enforceQuota(
+  env: Env,
+  installationId: number,
+  eventType: string
+): Promise<Response | null> {
+  const quotaResponse = await checkQuota(env, installationId, eventType);
+  if (quotaResponse) return quotaResponse;
+  return null;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method !== 'POST')
@@ -244,7 +254,7 @@ export default {
       )?.owner?.login;
       if (!repoOwner) return new Response('Forbidden', { status: 403 });
 
-      const quotaResponse = await checkQuota(env, installationId, 'triage');
+      const quotaResponse = await enforceQuota(env, installationId, 'triage');
       if (quotaResponse) return quotaResponse;
 
       let token: string;
@@ -332,7 +342,7 @@ export default {
       )?.owner?.login;
       if (!repoOwner) return new Response('Forbidden', { status: 403 });
 
-      const quotaResponse = await checkQuota(env, installationId, 'review');
+      const quotaResponse = await enforceQuota(env, installationId, 'review');
       if (quotaResponse) return quotaResponse;
 
       let token: string;
