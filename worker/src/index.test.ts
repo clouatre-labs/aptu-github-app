@@ -1317,7 +1317,21 @@ describe('Quota check integration', () => {
     quotaControl.status = 200;
   });
 
-  it('returns 429 with Retry-After header when quota exceeded, without dispatching repository_dispatch', async () => {
+  it.each([
+    {
+      eventHeader: 'issues',
+      bodyField: 'issue',
+      eventLabel: 'issues',
+    },
+    {
+      eventHeader: 'pull_request',
+      bodyField: 'pull_request',
+      eventLabel: 'pull_request',
+    },
+  ])('returns 429 with Retry-After header when quota exceeded for $eventLabel event, without dispatching repository_dispatch', async ({
+    eventHeader,
+    bodyField,
+  }) => {
     quotaControl.body = JSON.stringify({
       count: 50,
       exceeded: true,
@@ -1327,7 +1341,7 @@ describe('Quota check integration', () => {
     const body = JSON.stringify({
       action: 'opened',
       installation: { id: 1 },
-      issue: { number: 1, title: 'Test' },
+      [bodyField]: { number: 1, title: 'Test' },
       repository: {
         full_name: 'owner/repo',
         owner: { login: 'owner' },
@@ -1335,7 +1349,7 @@ describe('Quota check integration', () => {
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
-      'X-GitHub-Event': 'issues',
+      'X-GitHub-Event': eventHeader,
       'X-Hub-Signature-256': sig,
       'Content-Type': 'application/json',
     });
