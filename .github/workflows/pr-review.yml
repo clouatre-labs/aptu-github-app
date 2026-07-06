@@ -41,3 +41,5 @@ jobs:
           repo-path: ${{ github.workspace }}
           repo: ${{ github.event.client_payload.originating_repo }}
           pull-number: ${{ github.event.client_payload.pull_number }}
+          max-prompt-chars: '200000'
+          max-full-content-files: '0'
