@@ -1445,8 +1445,7 @@ describe('mention commands', () => {
           return Promise.resolve(new Response(null, { status: 204 }));
         }
         return Promise.resolve(new Response(null, { status: 204 }));
-      })
-    );
+      }) as ReturnType<typeof vi.fn>);
     quotaControl.body = JSON.stringify({
       count: 0,
       exceeded: false,
@@ -1494,7 +1493,7 @@ describe('mention commands', () => {
     );
     expect(dispatchCalls.length).toBe(1);
     const dispatchBody = JSON.parse(
-      (dispatchCalls[0][1] as RequestInit).body as string
+      (dispatchCalls[0]![1] as RequestInit).body as string
     );
     expect(dispatchBody.event_type).toBe('aptu-triage');
     expect(dispatchBody.client_payload.trigger_type).toBe('mention');
@@ -1529,7 +1528,7 @@ describe('mention commands', () => {
     );
     expect(dispatchCalls.length).toBe(1);
     const dispatchBody = JSON.parse(
-      (dispatchCalls[0][1] as RequestInit).body as string
+      (dispatchCalls[0]![1] as RequestInit).body as string
     );
     expect(dispatchBody.event_type).toBe('aptu-review');
   });
@@ -1563,7 +1562,7 @@ describe('mention commands', () => {
           return Promise.resolve(new Response(null, { status: 204 }));
         }
         return Promise.resolve(new Response(null, { status: 204 }));
-      })
+      }) as ReturnType<typeof vi.fn>
     );
     const body = JSON.stringify({
       action: 'created',
@@ -1617,7 +1616,7 @@ describe('mention commands', () => {
           );
         }
         return Promise.resolve(new Response(null, { status: 204 }));
-      })
+      }) as ReturnType<typeof vi.fn>
     );
     const result = await checkCollaboratorPermission(
       'token',
@@ -1737,7 +1736,7 @@ describe('mention commands', () => {
     );
     expect(dispatchCalls.length).toBe(1);
     const dispatchBody = JSON.parse(
-      (dispatchCalls[0][1] as RequestInit).body as string
+      (dispatchCalls[0]![1] as RequestInit).body as string
     );
     expect(dispatchBody.client_payload.trigger_type).toBe('mention');
     expect(dispatchBody.client_payload.comment_id).toBe(77);

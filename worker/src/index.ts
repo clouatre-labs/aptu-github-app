@@ -281,8 +281,8 @@ export async function handleMentionCommand(
   const [owner, name] = repo.split('/');
   const hasAccess = await checkCollaboratorPermission(
     token,
-    owner,
-    name,
+    owner ?? '',
+    name ?? '',
     comment.user?.login ?? ''
   );
   if (!hasAccess) return new Response('Forbidden', { status: 403 });
