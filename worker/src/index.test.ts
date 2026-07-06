@@ -113,6 +113,7 @@ const mockEnv = {
   APP_ID: '4134521',
   TARGET_REPO: 'clouatre-labs/aptu-github-app',
   ALLOWED_OWNERS: 'owner,myorg,clouatre-labs,unconfigured',
+  APTU_BOT_ID: '0',
   QUOTA: makeMockQuotaNamespace(),
 };
 
@@ -1414,5 +1415,334 @@ describe('Quota check integration', () => {
       'Content-Type': 'application/json',
     });
     expect(response.status).toBe(500);
+  });
+});
+
+describe('mention commands', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockImplementation(
+      vi.fn((url: string | URL | Request) => {
+        const urlStr =
+          typeof url === 'string'
+            ? url
+            : url instanceof URL
+              ? url.href
+              : url.url;
+        if (urlStr.includes('/collaborators/')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                user: { permissions: { pull: true } },
+                role_name: 'read',
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            )
+          );
+        }
+        if (urlStr.includes('/dispatches')) {
+          return Promise.resolve(new Response(null, { status: 204 }));
+        }
+        return Promise.resolve(new Response(null, { status: 204 }));
+      })
+    );
+    quotaControl.body = JSON.stringify({
+      count: 0,
+      exceeded: false,
+      retryAfter: null,
+    });
+    quotaControl.status = 200;
+  });
+
+  it('returns 200 OK without action when comment body does not contain @aptu', async () => {
+    const body = JSON.stringify({
+      action: 'created',
+      installation: { id: 1 },
+      comment: { user: { id: 100, login: 'user1' }, id: 1, body: 'hello' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issue_comment',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(200);
+  });
+
+  it('dispatches aptu-triage when issue comment contains @aptu and commenter has read+ access', async () => {
+    const body = JSON.stringify({
+      action: 'created',
+      installation: { id: 1 },
+      comment: {
+        user: { id: 100, login: 'user1' },
+        id: 42,
+        body: 'please @aptu triage this',
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issue_comment',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
+    const dispatchBody = JSON.parse(
+      (dispatchCalls[0][1] as RequestInit).body as string
+    );
+    expect(dispatchBody.event_type).toBe('aptu-triage');
+    expect(dispatchBody.client_payload.trigger_type).toBe('mention');
+    expect(dispatchBody.client_payload.comment_id).toBe(42);
+    expect(dispatchBody.client_payload.commenter_login).toBe('user1');
+    expect(dispatchBody.client_payload.comment_body).toBe(
+      'please @aptu triage this'
+    );
+    expect(dispatchBody.client_payload.comment_body_truncated).toBe(false);
+  });
+
+  it('dispatches aptu-review when PR review comment contains @aptu and commenter has read+ access', async () => {
+    const body = JSON.stringify({
+      action: 'created',
+      installation: { id: 1 },
+      comment: {
+        user: { id: 100, login: 'user1' },
+        id: 99,
+        body: '@aptu review this',
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request_review_comment',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
+    const dispatchBody = JSON.parse(
+      (dispatchCalls[0][1] as RequestInit).body as string
+    );
+    expect(dispatchBody.event_type).toBe('aptu-review');
+  });
+
+  it('returns false when @aptu appears inside a markdown code fence', async () => {
+    const { hasMentionCommand } = await import('./index.js');
+    expect(hasMentionCommand('```\n@aptu do something\n```')).toBe(false);
+  });
+
+  it('ignores @aptu-other and @aptu_suffix but matches bare @aptu', async () => {
+    const { hasMentionCommand } = await import('./index.js');
+    expect(hasMentionCommand('@aptu-other')).toBe(false);
+    expect(hasMentionCommand('@aptu_suffix')).toBe(false);
+    expect(hasMentionCommand('@aptu')).toBe(true);
+    expect(hasMentionCommand('hello @aptu please')).toBe(true);
+  });
+
+  it('returns false for HTTP 404 from collaborator endpoint', async () => {
+    fetchSpy.mockImplementation(
+      vi.fn((url: string | URL | Request) => {
+        const urlStr =
+          typeof url === 'string'
+            ? url
+            : url instanceof URL
+              ? url.href
+              : url.url;
+        if (urlStr.includes('/collaborators/')) {
+          return Promise.resolve(new Response(null, { status: 404 }));
+        }
+        if (urlStr.includes('/dispatches')) {
+          return Promise.resolve(new Response(null, { status: 204 }));
+        }
+        return Promise.resolve(new Response(null, { status: 204 }));
+      })
+    );
+    const body = JSON.stringify({
+      action: 'created',
+      installation: { id: 1 },
+      comment: {
+        user: { id: 100, login: 'user1' },
+        id: 1,
+        body: '@aptu triage',
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issue_comment',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it('returns true when user.permissions.pull is true', async () => {
+    const { checkCollaboratorPermission } = await import('./index.js');
+    const result = await checkCollaboratorPermission(
+      'token',
+      'owner',
+      'repo',
+      'user1'
+    );
+    expect(result).toBe(true);
+  });
+
+  it('returns true when user.permissions.admin is true', async () => {
+    const { checkCollaboratorPermission } = await import('./index.js');
+    fetchSpy.mockImplementation(
+      vi.fn((url: string | URL | Request) => {
+        const urlStr =
+          typeof url === 'string'
+            ? url
+            : url instanceof URL
+              ? url.href
+              : url.url;
+        if (urlStr.includes('/collaborators/')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                user: { permissions: { admin: true } },
+                role_name: 'admin',
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            )
+          );
+        }
+        return Promise.resolve(new Response(null, { status: 204 }));
+      })
+    );
+    const result = await checkCollaboratorPermission(
+      'token',
+      'owner',
+      'repo',
+      'admin-user'
+    );
+    expect(result).toBe(true);
+  });
+
+  it('enforces quota check before dispatching mention-triggered events', async () => {
+    quotaControl.body = JSON.stringify({
+      count: 50,
+      exceeded: true,
+      retryAfter: 3600,
+    });
+    const body = JSON.stringify({
+      action: 'created',
+      installation: { id: 1 },
+      comment: {
+        user: { id: 100, login: 'user1' },
+        id: 1,
+        body: '@aptu triage',
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issue_comment',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(429);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(0);
+  });
+
+  it('returns 429 when quota is exceeded for mention-triggered events', async () => {
+    quotaControl.body = JSON.stringify({
+      count: 50,
+      exceeded: true,
+      retryAfter: 7200,
+    });
+    const body = JSON.stringify({
+      action: 'created',
+      installation: { id: 1 },
+      comment: {
+        user: { id: 100, login: 'user1' },
+        id: 1,
+        body: '@aptu review this',
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request_review_comment',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Retry-After')).toBe('7200');
+  });
+
+  it('skips dispatch when commenter user ID matches APTU_BOT_ID (self-mention guard)', async () => {
+    const botEnv = { ...mockEnv, APTU_BOT_ID: '999' };
+    const body = JSON.stringify({
+      action: 'created',
+      installation: { id: 1 },
+      comment: {
+        user: { id: 999, login: 'aptu[bot]' },
+        id: 1,
+        body: '@aptu triage',
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(
+      body,
+      {
+        'X-GitHub-Event': 'issue_comment',
+        'X-Hub-Signature-256': sig,
+        'Content-Type': 'application/json',
+      },
+      botEnv
+    );
+    expect(response.status).toBe(200);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(0);
+  });
+
+  it('includes trigger_type=mention and comment context fields in client_payload', async () => {
+    const longBody = 'x'.repeat(5000);
+    const commentBody = `@aptu ${longBody}`;
+    const body = JSON.stringify({
+      action: 'created',
+      installation: { id: 1 },
+      comment: {
+        user: { id: 100, login: 'user1' },
+        id: 77,
+        body: commentBody,
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issue_comment',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
+    const dispatchBody = JSON.parse(
+      (dispatchCalls[0][1] as RequestInit).body as string
+    );
+    expect(dispatchBody.client_payload.trigger_type).toBe('mention');
+    expect(dispatchBody.client_payload.comment_id).toBe(77);
+    expect(dispatchBody.client_payload.commenter_login).toBe('user1');
+    expect(dispatchBody.client_payload.comment_body.length).toBe(4000);
+    expect(dispatchBody.client_payload.comment_body_truncated).toBe(true);
   });
 });

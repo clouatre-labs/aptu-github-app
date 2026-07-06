@@ -17,6 +17,7 @@ export interface Env {
   APP_ID: string;
   TARGET_REPO: string;
   ALLOWED_OWNERS: string;
+  APTU_BOT_ID: string;
   QUOTA: DurableObjectNamespace;
 }
 
@@ -219,6 +220,100 @@ async function enforceQuota(
   return null;
 }
 
+export function hasMentionCommand(body: string): boolean {
+  return /@aptu(?![a-zA-Z0-9_-])/.test(
+    body.replace(/```[\s\S]*?```|`[^`]*`/g, '')
+  );
+}
+
+export async function checkCollaboratorPermission(
+  token: string,
+  owner: string,
+  repo: string,
+  username: string
+): Promise<boolean> {
+  const res = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/collaborators/${username}/permission`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'aptu-webhook/1.0',
+      },
+    }
+  );
+  if (res.status === 404 || !res.ok) return false;
+  const data = (await res.json()) as {
+    user?: { permissions?: Record<string, boolean> };
+    role_name?: string;
+  };
+  const perms = data.user?.permissions;
+  return !!(
+    perms?.admin ||
+    perms?.pull ||
+    ['admin', 'write'].includes(data.role_name ?? '')
+  );
+}
+
+export async function handleMentionCommand(
+  env: Env,
+  event: string,
+  // biome-ignore lint/suspicious/noExplicitAny: webhook payload is untyped
+  payload: Record<string, any>,
+  installationId: number | undefined
+): Promise<Response | null> {
+  const comment = payload.comment as
+    | { user?: { id: number; login: string }; id: number; body?: string }
+    | undefined;
+  if (!comment?.body || !hasMentionCommand(comment.body)) return null;
+  if (!installationId) return new Response('Bad Request', { status: 400 });
+  if (comment.user?.id === Number(env.APTU_BOT_ID)) return null;
+
+  let token: string;
+  try {
+    token = await getInstallationToken(env, installationId);
+  } catch {
+    return new Response('Internal Server Error', { status: 500 });
+  }
+
+  const repo = (payload.repository as { full_name: string }).full_name;
+  const [owner, name] = repo.split('/');
+  const hasAccess = await checkCollaboratorPermission(
+    token,
+    owner,
+    name,
+    comment.user?.login ?? ''
+  );
+  if (!hasAccess) return new Response('Forbidden', { status: 403 });
+
+  const eventType = event === 'issue_comment' ? 'triage' : 'review';
+  const quotaResponse = await enforceQuota(env, installationId, eventType);
+  if (quotaResponse) return quotaResponse;
+
+  const dispatchType =
+    event === 'issue_comment' ? 'aptu-triage' : 'aptu-review';
+  let body = comment.body ?? '';
+  const truncated = body.length > 4000;
+  if (truncated) body = body.slice(0, 4000);
+
+  try {
+    await dispatchEvent(token, env.TARGET_REPO, dispatchType, {
+      installation_token: token,
+      originating_repo: repo,
+      trigger_type: 'mention',
+      comment_id: comment.id,
+      commenter_login: comment.user?.login ?? '',
+      comment_body: body,
+      comment_body_truncated: truncated,
+    });
+  } catch {
+    return new Response('Internal Server Error', { status: 500 });
+  }
+
+  return new Response(null, { status: 204 });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method !== 'POST')
@@ -238,10 +333,14 @@ export default {
     const installationId = (payload.installation as { id: number } | undefined)
       ?.id;
 
-    if (event === 'issue_comment' && action === 'created')
-      return new Response('OK', { status: 200 });
-    if (event === 'pull_request_review_comment' && action === 'created')
-      return new Response('OK', { status: 200 });
+    if (event === 'issue_comment' && action === 'created') {
+      const r = await handleMentionCommand(env, event, payload, installationId);
+      return r ?? new Response('OK', { status: 200 });
+    }
+    if (event === 'pull_request_review_comment' && action === 'created') {
+      const r = await handleMentionCommand(env, event, payload, installationId);
+      return r ?? new Response('OK', { status: 200 });
+    }
 
     if (event === 'issues' && action === 'opened') {
       if (!installationId) return new Response('Bad Request', { status: 400 });
