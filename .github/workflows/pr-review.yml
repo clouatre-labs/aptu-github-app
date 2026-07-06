@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v7.0.0
 
       - name: Review PR
-        uses: clouatre-labs/aptu@fa3d8ce38808061bc5593c3ca1e791c73d0f72c6 # v0.10.2
+        uses: clouatre-labs/aptu@f607469bc1b9073c85ee19f6dd2ef0d24c736815 # v0.10.4
         continue-on-error: true
         with:
           github-token: ${{ github.event.client_payload.installation_token }}
@@ -41,3 +41,5 @@ jobs:
           repo-path: ${{ github.workspace }}
           repo: ${{ github.event.client_payload.originating_repo }}
           pull-number: ${{ github.event.client_payload.pull_number }}
+          max-prompt-chars: '200000'
+          max-full-content-files: '0'
