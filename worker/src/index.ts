@@ -2,11 +2,7 @@
 // SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
 
 import { createAppAuth } from '@octokit/auth-app';
-import {
-  addBreadcrumb,
-  captureException,
-  withSentry,
-} from '@sentry/cloudflare';
+import { captureException, withSentry } from '@sentry/cloudflare';
 import { isMatch } from 'picomatch';
 import reposConfig from '../../config/repos.json';
 import {
@@ -21,7 +17,6 @@ export interface Env {
   APP_PRIVATE_KEY: string;
   APP_ID: string;
   TARGET_REPO: string;
-  ALLOWED_OWNERS: string;
   APTU_BOT_ID: string;
   SENTRY_DSN: string;
   QUOTA: DurableObjectNamespace;
@@ -54,14 +49,6 @@ export async function validateSignature(
   const sigHex = sigHeader.slice('sha256='.length);
   const sigBytes = hexToBytes(sigHex);
   return crypto.subtle.verify('HMAC', key, sigBytes, encodedPayload);
-}
-
-export function isOwnerAllowed(repoOwner: string, allowedOwners = ''): boolean {
-  return allowedOwners
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0)
-    .some((allowed) => allowed.toLowerCase() === repoOwner.toLowerCase());
 }
 
 export async function getInstallationToken(
@@ -390,22 +377,6 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         config = null;
       }
 
-      if (!isOwnerAllowed(repoOwner, env.ALLOWED_OWNERS) && !config?.ai) {
-        addBreadcrumb({
-          message: `External installation rejected (missing ai block): ${repo}`,
-          category: 'auth',
-          level: 'warning',
-          data: { eventType: 'issues.opened', repo },
-        });
-        console.error(
-          `External installation rejected (missing ai block): ${repo}`
-        );
-        return new Response(
-          'External installations require an ai block in .github/aptu.yml',
-          { status: 403 }
-        );
-      }
-
       if (!shouldDispatch(config, 'triage'))
         return new Response('OK', { status: 200 });
 
@@ -496,22 +467,6 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         config
       );
       if (shouldSkip) return new Response(null, { status: 204 });
-
-      if (!isOwnerAllowed(repoOwner, env.ALLOWED_OWNERS) && !config?.ai) {
-        addBreadcrumb({
-          message: `External installation rejected (missing ai block): ${repo}`,
-          category: 'auth',
-          level: 'warning',
-          data: { eventType: 'pull_request', repo },
-        });
-        console.error(
-          `External installation rejected (missing ai block): ${repo}`
-        );
-        return new Response(
-          'External installations require an ai block in .github/aptu.yml',
-          { status: 403 }
-        );
-      }
 
       if (!shouldDispatch(config, 'review'))
         return new Response('OK', { status: 200 });
