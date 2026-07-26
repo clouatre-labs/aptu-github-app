@@ -29,9 +29,9 @@ jobs:
         continue-on-error: true
         with:
           github-token: ${{ github.event.client_payload.installation_token }}
-          anthropic-api-key: ${{ secrets[github.event.client_payload.ai_key_secret] || secrets.ANTHROPIC_API_KEY }}
-          gemini-api-key: ${{ secrets[github.event.client_payload.ai_key_secret] || secrets.GEMINI_API_KEY }}
-          openrouter-api-key: ${{ secrets[github.event.client_payload.ai_key_secret] || secrets.OPENROUTER_API_KEY }}
+          anthropic-api-key: ${{ secrets[github.event.client_payload.ai_key_secret] }}
+          gemini-api-key: ${{ secrets[github.event.client_payload.ai_key_secret] }}
+          openrouter-api-key: ${{ secrets[github.event.client_payload.ai_key_secret] }}
           provider: ${{ github.event.client_payload.ai_provider || 'gemini' }}
           model: ${{ github.event.client_payload.ai_model || 'gemini-3.1-flash-lite' }}
           skip-labeled: ${{ github.event.client_payload.skip_labeled }}
