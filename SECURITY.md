@@ -91,6 +91,8 @@ or environment variables.
 scope); stored as a GitHub Actions secret; 90-day rotation policy; scope documented and
 audited on each rotation.
 
+**Rotation procedures**: See [RUNBOOK.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/docs/RUNBOOK.md#2-secret-rotation).
+
 ## Supply Chain Security
 
 ### REUSE/SPDX
