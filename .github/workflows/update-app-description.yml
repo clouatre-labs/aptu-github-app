@@ -1,0 +1,119 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
+
+name: Update App Description (one-shot)
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  update-description:
+    name: Patch aptu-dev description via App JWT
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Generate JWT and patch App description
+        env:
+          APP_PRIVATE_KEY: ${{ secrets.ORG_APP_PRIVATE_KEY }}
+        run: |
+          node - <<'NODESCRIPT'
+          const crypto = require('crypto');
+          const https  = require('https');
+
+          const APP_ID = 4134521;
+          const key    = process.env.APP_PRIVATE_KEY;
+
+          // Build RS256 JWT (iat - 60s to handle clock skew; exp 10 min)
+          const now    = Math.floor(Date.now() / 1000);
+          const header  = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
+          const payload = Buffer.from(JSON.stringify({ iat: now - 60, exp: now + 600, iss: APP_ID })).toString('base64url');
+          const signer  = crypto.createSign('RSA-SHA256');
+          signer.update(`${header}.${payload}`);
+          const sig = signer.sign(key, 'base64url');
+          const jwt = `${header}.${payload}.${sig}`;
+
+          const description = [
+            '## aptu: AI Code Review and Issue Triage',
+            '',
+            '**Automated AI-powered code review and issue triage, delivered as inline GitHub comments on every PR and issue.**',
+            '',
+            '### What aptu does',
+            '',
+            '- **Reviews pull requests** automatically when opened, updated, or reopened: inline comments, summary, and actionable suggestions',
+            '- **Triages issues** on creation: labels, priority, and duplicate detection',
+            '',
+            '### How it works',
+            '',
+            'aptu runs as a GitHub App. A Cloudflare Worker validates the webhook signature and dispatches events to the aptu pipeline. Results are posted back to your repository via the GitHub API.',
+            '',
+            '### Setup',
+            '',
+            'Each repository must opt in by adding a `.github/aptu.yml` file.',
+            '',
+            'All repositories must supply their own AI API key by adding an `ai` block:',
+            '',
+            '```yaml',
+            'version: 1',
+            'triage:',
+            '  enabled: true',
+            'review:',
+            '  enabled: true',
+            'ai:',
+            '  provider: gemini',
+            '  model: models/gemini-3.1-flash-lite',
+            '  api-key-secret: GEMINI_API_KEY   # name of a GitHub Actions secret in your repo',
+            '```',
+            '',
+            'The `api-key-secret` value is the **name** of a repository secret, not the key itself. All three `ai` fields are required. Repositories without an `ai` block will receive no triage or review.',
+            '',
+            'See https://github.com/clouatre-labs/aptu-github-app for the full configuration schema, field reference, and opt-in examples.',
+            '',
+            '### Permissions requested',
+            '',
+            '| Permission    | Level          | Reason                                        |',
+            '|---------------|----------------|-----------------------------------------------|',
+            '| Contents      | Read and Write | Read config file; dispatch events to pipeline |',
+            '| Issues        | Read and Write | Post triage comments and labels               |',
+            '| Pull requests | Read and Write | Post review comments and summaries            |',
+            '| Metadata      | Read           | Required by GitHub                            |',
+          ].join('\r\n');
+
+          const body = JSON.stringify({ description });
+
+          const options = {
+            hostname: 'api.github.com',
+            path:     '/app',
+            method:   'PATCH',
+            headers:  {
+              'Authorization':        `Bearer ${jwt}`,
+              'Accept':               'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'Content-Type':         'application/json',
+              'Content-Length':       Buffer.byteLength(body),
+              'User-Agent':           'aptu-github-app/update-description',
+            },
+          };
+
+          const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', chunk => { data += chunk; });
+            res.on('end', () => {
+              if (res.statusCode === 200) {
+                const app = JSON.parse(data);
+                console.log(`Updated: ${app.name} (id ${app.id})`);
+                console.log('Description set successfully.');
+              } else {
+                console.error(`PATCH /app returned HTTP ${res.statusCode}`);
+                console.error(data);
+                process.exit(1);
+              }
+            });
+          });
+
+          req.on('error', (err) => { console.error(err); process.exit(1); });
+          req.write(body);
+          req.end();
+          NODESCRIPT
