@@ -21,7 +21,6 @@ new_sqlite_classes = ["InstallationQuota"]
 # After deploy, set the production value with: bunx wrangler secret put SENTRY_DSN
 APP_ID = "4134521"
 TARGET_REPO = "clouatre-labs/aptu-github-app"
-ALLOWED_OWNERS = "clouatre-labs,clouatre"
 # aptu-dev[bot] user ID -- verified via: gh api /users/aptu-dev%5Bbot%5D
 APTU_BOT_ID = "296574906"
 # Secrets (set post-deploy via CLI):

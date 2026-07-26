@@ -118,7 +118,6 @@ const mockEnv = {
   APP_PRIVATE_KEY: 'fake-key',
   APP_ID: '4134521',
   TARGET_REPO: 'clouatre-labs/aptu-github-app',
-  ALLOWED_OWNERS: 'owner,myorg,clouatre-labs,unconfigured',
   APTU_BOT_ID: '0',
   SENTRY_DSN: '',
   QUOTA: makeMockQuotaNamespace(),
@@ -961,109 +960,6 @@ describe('error handling', () => {
   });
 });
 
-describe('allowlist (ALLOWED_OWNERS)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    fetchSpy = vi.spyOn(globalThis, 'fetch');
-    fetchSpy.mockImplementation(mockEnabledFetch());
-  });
-
-  it('returns 403 when issues.opened owner is not in ALLOWED_OWNERS', async () => {
-    const body = JSON.stringify({
-      action: 'opened',
-      installation: { id: 1 },
-      issue: { number: 1, title: 'Test' },
-      repository: {
-        full_name: 'untrusted/repo',
-        owner: { login: 'untrusted' },
-      },
-    });
-    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
-    const response = await callHandler(body, {
-      'X-GitHub-Event': 'issues',
-      'X-Hub-Signature-256': sig,
-      'Content-Type': 'application/json',
-    });
-    expect(response.status).toBe(403);
-  });
-
-  it('returns 403 when pull_request owner is not in ALLOWED_OWNERS', async () => {
-    const body = JSON.stringify({
-      action: 'opened',
-      installation: { id: 1 },
-      pull_request: { number: 1, title: 'Test PR' },
-      repository: {
-        full_name: 'untrusted/repo',
-        owner: { login: 'untrusted' },
-      },
-    });
-    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
-    const response = await callHandler(body, {
-      'X-GitHub-Event': 'pull_request',
-      'X-Hub-Signature-256': sig,
-      'Content-Type': 'application/json',
-    });
-    expect(response.status).toBe(403);
-  });
-
-  it('passes through to processing when issues.opened owner is in ALLOWED_OWNERS', async () => {
-    const body = JSON.stringify({
-      action: 'opened',
-      installation: { id: 1 },
-      issue: { number: 1, title: 'Test' },
-      repository: {
-        full_name: 'owner/repo',
-        owner: { login: 'owner' },
-      },
-    });
-    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
-    const response = await callHandler(body, {
-      'X-GitHub-Event': 'issues',
-      'X-Hub-Signature-256': sig,
-      'Content-Type': 'application/json',
-    });
-    expect(response.status).toBe(204);
-  });
-
-  it('returns 403 when repository.owner.login is missing', async () => {
-    const body = JSON.stringify({
-      action: 'opened',
-      installation: { id: 1 },
-      issue: { number: 1, title: 'Test' },
-      repository: { full_name: 'owner/repo' },
-    });
-    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
-    const response = await callHandler(body, {
-      'X-GitHub-Event': 'issues',
-      'X-Hub-Signature-256': sig,
-      'Content-Type': 'application/json',
-    });
-    expect(response.status).toBe(403);
-  });
-});
-
-describe('isOwnerAllowed', () => {
-  it('handles case-insensitive matching', async () => {
-    const { isOwnerAllowed } = await import('./index.js');
-    expect(isOwnerAllowed('Clouatre-Labs', 'clouatre-labs,clouatre')).toBe(
-      true
-    );
-    expect(isOwnerAllowed('CLOUATRE', 'clouatre-labs,clouatre')).toBe(true);
-    expect(isOwnerAllowed('Other', 'clouatre-labs,clouatre')).toBe(false);
-  });
-
-  it('returns false when ALLOWED_OWNERS is empty string', async () => {
-    const { isOwnerAllowed } = await import('./index.js');
-    expect(isOwnerAllowed('clouatre-labs', '')).toBe(false);
-  });
-
-  it('handles trailing comma without producing empty match', async () => {
-    const { isOwnerAllowed } = await import('./index.js');
-    expect(isOwnerAllowed('clouatre-labs', 'clouatre-labs,')).toBe(true);
-    expect(isOwnerAllowed('other', 'clouatre-labs,')).toBe(false);
-  });
-});
-
 describe('AI configuration and external installations', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1149,54 +1045,6 @@ describe('AI configuration and external installations', () => {
     expect(parsed.client_payload).not.toHaveProperty('ai_provider');
     expect(parsed.client_payload).not.toHaveProperty('ai_model');
     expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
-  });
-
-  it('returns 403 with diagnostic body when owner not in ALLOWED_OWNERS and ai block absent', async () => {
-    fetchSpy.mockImplementation(mockAbsentConfigFetch());
-    const body = JSON.stringify({
-      action: 'opened',
-      installation: { id: 1 },
-      issue: { number: 1, title: 'Test' },
-      repository: {
-        full_name: 'external/repo',
-        owner: { login: 'external' },
-      },
-    });
-    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
-    const response = await callHandler(body, {
-      'X-GitHub-Event': 'issues',
-      'X-Hub-Signature-256': sig,
-      'Content-Type': 'application/json',
-    });
-    expect(response.status).toBe(403);
-    const body_text = await response.text();
-    expect(body_text).toBe(
-      'External installations require an ai block in .github/aptu.yml'
-    );
-  });
-
-  it('returns 204 and dispatches when owner not in ALLOWED_OWNERS but valid ai block present', async () => {
-    fetchSpy.mockImplementation(mockEnabledWithAiFetch());
-    const body = JSON.stringify({
-      action: 'opened',
-      installation: { id: 1 },
-      issue: { number: 1, title: 'Test' },
-      repository: {
-        full_name: 'external/repo',
-        owner: { login: 'external' },
-      },
-    });
-    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
-    const response = await callHandler(body, {
-      'X-GitHub-Event': 'issues',
-      'X-Hub-Signature-256': sig,
-      'Content-Type': 'application/json',
-    });
-    expect(response.status).toBe(204);
-    const dispatchCall = fetchSpy.mock.calls.find((call) =>
-      String(call[0]).includes('/dispatches')
-    );
-    expect(dispatchCall).toBeDefined();
   });
 });
 
@@ -1501,7 +1349,7 @@ describe('mention commands', () => {
     );
     expect(dispatchCalls.length).toBe(1);
     const dispatchBody = JSON.parse(
-      (dispatchCalls[0]![1] as RequestInit).body as string
+      (dispatchCalls[0]?.[1] as RequestInit).body as string
     );
     expect(dispatchBody.event_type).toBe('aptu-triage');
     expect(dispatchBody.client_payload.trigger_type).toBe('mention');
@@ -1536,7 +1384,7 @@ describe('mention commands', () => {
     );
     expect(dispatchCalls.length).toBe(1);
     const dispatchBody = JSON.parse(
-      (dispatchCalls[0]![1] as RequestInit).body as string
+      (dispatchCalls[0]?.[1] as RequestInit).body as string
     );
     expect(dispatchBody.event_type).toBe('aptu-review');
   });
@@ -1744,7 +1592,7 @@ describe('mention commands', () => {
     );
     expect(dispatchCalls.length).toBe(1);
     const dispatchBody = JSON.parse(
-      (dispatchCalls[0]![1] as RequestInit).body as string
+      (dispatchCalls[0]?.[1] as RequestInit).body as string
     );
     expect(dispatchBody.client_payload.trigger_type).toBe('mention');
     expect(dispatchBody.client_payload.comment_id).toBe(77);
@@ -1845,39 +1693,6 @@ describe('Sentry integration', () => {
     // biome-ignore lint/suspicious/noExplicitAny: check sentry call args
     const callArg = (sentryCapture as any).mock.calls[0][1];
     expect(callArg?.tags?.installationId).toBe('1');
-  });
-
-  it('does NOT call captureException for external installation rejection (no Error object)', async () => {
-    const { captureException: sentryCapture } = await import(
-      '@sentry/cloudflare'
-    );
-    // Reset createAppAuth to default mock (successful token)
-    const { createAppAuth: createAppAuthModule } = await import(
-      '@octokit/auth-app'
-    );
-    // biome-ignore lint/suspicious/noExplicitAny: mocking requires casting to any
-    (createAppAuthModule as any).mockImplementation(() =>
-      vi.fn().mockResolvedValue({ token: 'mock-token' })
-    );
-    fetchSpy.mockImplementation(mockAbsentConfigFetch());
-
-    const body = JSON.stringify({
-      action: 'opened',
-      installation: { id: 1 },
-      issue: { number: 1, title: 'Test' },
-      repository: {
-        full_name: 'untrusted/repo',
-        owner: { login: 'untrusted' },
-      },
-    });
-    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
-    const response = await callHandler(body, {
-      'X-GitHub-Event': 'issues',
-      'X-Hub-Signature-256': sig,
-      'Content-Type': 'application/json',
-    });
-    expect(response.status).toBe(403);
-    expect(sentryCapture).not.toHaveBeenCalled();
   });
 
   it('loads withSentry-wrapped handler without crashing', async () => {
