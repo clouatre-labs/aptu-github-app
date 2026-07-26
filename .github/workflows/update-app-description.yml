@@ -17,7 +17,7 @@ jobs:
     steps:
       - name: Generate JWT and patch App description
         env:
-          APP_PRIVATE_KEY: ${{ secrets.ORG_APP_PRIVATE_KEY }}
+          APP_PRIVATE_KEY: ${{ secrets.APTU_DEV_PRIVATE_KEY }}
         run: |
           node - <<'NODESCRIPT'
           const crypto = require('crypto');
