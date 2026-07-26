@@ -153,7 +153,7 @@ review:
   instructions-file: .github/instructions/pr-review.md  # optional
   skip-labeled: false                                     # optional
 
-ai:                          # required for external installations
+ai:                          # required
   provider: gemini
   model: gemini-3.1-flash-lite
   api-key-secret: GEMINI_API_KEY  # name of a secret in the originating repo
@@ -169,14 +169,11 @@ via `${{ secrets[github.event.client_payload.ai_key_secret] }}`.
 
 ## Caller-Supplied AI Keys
 
-Repositories outside `ALLOWED_OWNERS` must include an `ai` block. The `api-key-secret`
-value names a secret in the caller's own repository. The dispatch payload carries the secret
-name (`ai_key_secret`), not the secret value. The workflow uses it as a dynamic secret
-reference; the key is never exposed to the Worker or logged.
-
-Internal repositories in `ALLOWED_OWNERS` may omit the `ai` block; the workflow falls back
-to the secrets stored in this repository (`GEMINI_API_KEY`, `ANTHROPIC_API_KEY`,
-`OPENROUTER_API_KEY`).
+All repositories must include an explicit `ai` block with `api-key-secret` pointing to their
+chosen secret name. The `api-key-secret` value names a secret in the caller's own repository.
+The dispatch payload carries the secret name (`ai_key_secret`), not the secret value. The
+workflow uses it as a dynamic secret reference; the key is never exposed to the Worker or
+logged.
 
 ## Security Boundaries
 
