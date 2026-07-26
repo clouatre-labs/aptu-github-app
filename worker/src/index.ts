@@ -2,6 +2,11 @@
 // SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
 
 import { createAppAuth } from '@octokit/auth-app';
+import {
+  addBreadcrumb,
+  captureException,
+  withSentry,
+} from '@sentry/cloudflare';
 import { isMatch } from 'picomatch';
 import reposConfig from '../../config/repos.json';
 import {
@@ -18,6 +23,7 @@ export interface Env {
   TARGET_REPO: string;
   ALLOWED_OWNERS: string;
   APTU_BOT_ID: string;
+  SENTRY_DSN: string;
   QUOTA: DurableObjectNamespace;
 }
 
@@ -183,6 +189,9 @@ async function checkQuota(
       body: JSON.stringify({ eventType, installationId }),
     });
   } catch (error) {
+    captureException(error, {
+      tags: { eventType, installationId: String(installationId) },
+    });
     console.error(
       `Quota check failed for installation ${installationId}:`,
       error
@@ -191,6 +200,9 @@ async function checkQuota(
   }
   if (!quotaResponse.ok) {
     const text = await quotaResponse.text();
+    captureException(new Error(`Quota check non-2xx: ${text}`), {
+      tags: { eventType, installationId: String(installationId) },
+    });
     console.error(
       `Quota check error for installation ${installationId}: ${text}`
     );
@@ -314,7 +326,7 @@ export async function handleMentionCommand(
   return new Response(null, { status: 204 });
 }
 
-export default {
+export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method !== 'POST')
       return new Response('Method Not Allowed', { status: 405 });
@@ -360,6 +372,7 @@ export default {
       try {
         token = await getInstallationToken(env, installationId);
       } catch (error) {
+        captureException(error, { tags: { eventType: 'issues.opened', repo } });
         console.error(`Failed to get installation token for ${repo}:`, error);
         return new Response('Internal Server Error', { status: 500 });
       }
@@ -372,11 +385,18 @@ export default {
       try {
         config = await fetchRepoConfig(token, owner, repoName);
       } catch (error) {
+        captureException(error, { tags: { eventType: 'issues.opened', repo } });
         console.error(`Failed to fetch config for ${repo}:`, error);
         config = null;
       }
 
       if (!isOwnerAllowed(repoOwner, env.ALLOWED_OWNERS) && !config?.ai) {
+        addBreadcrumb({
+          message: `External installation rejected (missing ai block): ${repo}`,
+          category: 'auth',
+          level: 'warning',
+          data: { eventType: 'issues.opened', repo },
+        });
         console.error(
           `External installation rejected (missing ai block): ${repo}`
         );
@@ -398,6 +418,7 @@ export default {
           targetRepoName
         );
       } catch (error) {
+        captureException(error, { tags: { eventType: 'issues.opened', repo } });
         console.error(`Failed to get dispatch token for ${repo}:`, error);
         return new Response('Internal Server Error', { status: 500 });
       }
@@ -417,6 +438,7 @@ export default {
             : {}),
         });
       } catch (error) {
+        captureException(error, { tags: { eventType: 'issues.opened', repo } });
         console.error(
           `Failed to dispatch aptu-triage event for ${repo}:`,
           error
@@ -448,6 +470,7 @@ export default {
       try {
         token = await getInstallationToken(env, installationId);
       } catch (error) {
+        captureException(error, { tags: { eventType: 'pull_request', repo } });
         console.error(`Failed to get installation token for ${repo}:`, error);
         return new Response('Internal Server Error', { status: 500 });
       }
@@ -461,6 +484,7 @@ export default {
       try {
         config = await fetchRepoConfig(token, owner, repoName);
       } catch (error) {
+        captureException(error, { tags: { eventType: 'pull_request', repo } });
         console.error(`Failed to fetch config for ${repo}:`, error);
         config = null;
       }
@@ -474,6 +498,12 @@ export default {
       if (shouldSkip) return new Response(null, { status: 204 });
 
       if (!isOwnerAllowed(repoOwner, env.ALLOWED_OWNERS) && !config?.ai) {
+        addBreadcrumb({
+          message: `External installation rejected (missing ai block): ${repo}`,
+          category: 'auth',
+          level: 'warning',
+          data: { eventType: 'pull_request', repo },
+        });
         console.error(
           `External installation rejected (missing ai block): ${repo}`
         );
@@ -495,6 +525,7 @@ export default {
           targetRepoName
         );
       } catch (error) {
+        captureException(error, { tags: { eventType: 'pull_request', repo } });
         console.error(`Failed to get dispatch token for ${repo}:`, error);
         return new Response('Internal Server Error', { status: 500 });
       }
@@ -516,6 +547,7 @@ export default {
             : {}),
         });
       } catch (error) {
+        captureException(error, { tags: { eventType: 'pull_request', repo } });
         console.error(
           `Failed to dispatch aptu-review event for ${repo}:`,
           error
@@ -528,4 +560,4 @@ export default {
 
     return new Response('Bad Request', { status: 400 });
   },
-};
+});

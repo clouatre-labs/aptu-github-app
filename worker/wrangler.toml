@@ -1,5 +1,6 @@
 name = "aptu-webhook"
 compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
 main = "src/index.ts"
 
 [[routes]]
@@ -15,6 +16,9 @@ tag = "v1"
 new_sqlite_classes = ["InstallationQuota"]
 
 [vars]
+# SENTRY_DSN = ""  # Set via: bunx wrangler secret put SENTRY_DSN
+# The SENTRY_DSN is used for error tracking via @sentry/cloudflare.
+# After deploy, set the production value with: bunx wrangler secret put SENTRY_DSN
 APP_ID = "4134521"
 TARGET_REPO = "clouatre-labs/aptu-github-app"
 ALLOWED_OWNERS = "clouatre-labs,clouatre"
