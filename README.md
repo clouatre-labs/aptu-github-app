@@ -145,6 +145,11 @@ intercepted, the `routes` + `AAAA 100::` pattern is correct.
 See [clouatre-labs/aptu#94](https://github.com/clouatre-labs/aptu/issues/94) for GitHub
 App registration and credential setup.
 
+### Operator procedures
+
+See [RUNBOOK.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/docs/RUNBOOK.md)
+for post-deploy steps, secret rotation, and incident response.
+
 ## Releases
 
 Merging to `main` triggers [Release Please](https://github.com/googleapis/release-please-action)
