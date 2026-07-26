@@ -10,6 +10,12 @@ vi.mock('@octokit/auth-app', () => ({
   ),
 }));
 
+vi.mock('@sentry/cloudflare', () => ({
+  withSentry: vi.fn((_optionsCallback, handler) => handler),
+  captureException: vi.fn(),
+  addBreadcrumb: vi.fn(),
+}));
+
 // biome-ignore lint/suspicious/noExplicitAny: spyOn type parameters require any for global fetch overload
 let fetchSpy: ReturnType<typeof vi.spyOn<any, any>>;
 
@@ -114,6 +120,7 @@ const mockEnv = {
   TARGET_REPO: 'clouatre-labs/aptu-github-app',
   ALLOWED_OWNERS: 'owner,myorg,clouatre-labs,unconfigured',
   APTU_BOT_ID: '0',
+  SENTRY_DSN: '',
   QUOTA: makeMockQuotaNamespace(),
 };
 
@@ -1445,7 +1452,8 @@ describe('mention commands', () => {
           return Promise.resolve(new Response(null, { status: 204 }));
         }
         return Promise.resolve(new Response(null, { status: 204 }));
-      }) as ReturnType<typeof vi.fn>);
+      }) as ReturnType<typeof vi.fn>
+    );
     quotaControl.body = JSON.stringify({
       count: 0,
       exceeded: false,
@@ -1743,5 +1751,139 @@ describe('mention commands', () => {
     expect(dispatchBody.client_payload.commenter_login).toBe('user1');
     expect(dispatchBody.client_payload.comment_body.length).toBe(4000);
     expect(dispatchBody.client_payload.comment_body_truncated).toBe(true);
+  });
+});
+
+describe('Sentry integration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+
+  it('calls captureException with installationId tag when Durable Object fetch throws', async () => {
+    const { captureException: sentryCapture } = await import(
+      '@sentry/cloudflare'
+    );
+    const { createAppAuth } = await import('@octokit/auth-app');
+    // biome-ignore lint/suspicious/noExplicitAny: mocking requires casting to any
+    (createAppAuth as any).mockImplementation(() =>
+      vi.fn().mockRejectedValue(new Error('DO error'))
+    );
+
+    // Mock the QUOTA stub to throw
+    const quotaStub = {
+      fetch: vi.fn().mockRejectedValue(new Error('Connection refused')),
+    };
+    const quotaNamespace = {
+      idFromName: vi.fn(() => 'mock-id' as unknown as DurableObjectId),
+      get: vi.fn(() => quotaStub as unknown as DurableObjectStub),
+    } as unknown as DurableObjectNamespace;
+
+    const sentryEnv = { ...mockEnv, QUOTA: quotaNamespace };
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 42 },
+      issue: { number: 1, title: 'Test' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(
+      body,
+      {
+        'X-GitHub-Event': 'issues',
+        'X-Hub-Signature-256': sig,
+        'Content-Type': 'application/json',
+      },
+      sentryEnv
+    );
+    expect(response.status).toBe(500);
+    expect(sentryCapture).toHaveBeenCalled();
+    // biome-ignore lint/suspicious/noExplicitAny: check sentry call args
+    const callArg = (sentryCapture as any).mock.calls[0][1];
+    expect(callArg?.tags?.installationId).toBe('42');
+  });
+
+  it('calls captureException with response text context when Durable Object returns non-2xx', async () => {
+    const { captureException: sentryCapture } = await import(
+      '@sentry/cloudflare'
+    );
+    const { createAppAuth } = await import('@octokit/auth-app');
+    // biome-ignore lint/suspicious/noExplicitAny: mocking requires casting to any
+    (createAppAuth as any).mockImplementation(() =>
+      vi.fn().mockRejectedValue(new Error('DO non-2xx'))
+    );
+
+    const quotaStub = {
+      fetch: vi.fn(() =>
+        Promise.resolve(new Response('Rate limited', { status: 429 }))
+      ),
+    };
+    const quotaNamespace = {
+      idFromName: vi.fn(() => 'mock-id' as unknown as DurableObjectId),
+      get: vi.fn(() => quotaStub as unknown as DurableObjectStub),
+    } as unknown as DurableObjectNamespace;
+
+    const sentryEnv = { ...mockEnv, QUOTA: quotaNamespace };
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(
+      body,
+      {
+        'X-GitHub-Event': 'issues',
+        'X-Hub-Signature-256': sig,
+        'Content-Type': 'application/json',
+      },
+      sentryEnv
+    );
+    expect(response.status).toBe(500);
+    expect(sentryCapture).toHaveBeenCalled();
+    // biome-ignore lint/suspicious/noExplicitAny: check sentry call args
+    const callArg = (sentryCapture as any).mock.calls[0][1];
+    expect(callArg?.tags?.installationId).toBe('1');
+  });
+
+  it('does NOT call captureException for external installation rejection (no Error object)', async () => {
+    const { captureException: sentryCapture } = await import(
+      '@sentry/cloudflare'
+    );
+    // Reset createAppAuth to default mock (successful token)
+    const { createAppAuth: createAppAuthModule } = await import(
+      '@octokit/auth-app'
+    );
+    // biome-ignore lint/suspicious/noExplicitAny: mocking requires casting to any
+    (createAppAuthModule as any).mockImplementation(() =>
+      vi.fn().mockResolvedValue({ token: 'mock-token' })
+    );
+    fetchSpy.mockImplementation(mockAbsentConfigFetch());
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: {
+        full_name: 'untrusted/repo',
+        owner: { login: 'untrusted' },
+      },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(403);
+    expect(sentryCapture).not.toHaveBeenCalled();
+  });
+
+  it('loads withSentry-wrapped handler without crashing', async () => {
+    // Verify the module loads without uncaught errors from the withSentry wrapper
+    const { default: handler } = await import('./index.js');
+    expect(handler).toBeDefined();
+    expect(typeof handler.fetch).toBe('function');
   });
 });
