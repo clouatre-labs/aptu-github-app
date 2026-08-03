@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v7.0.0
 
       - name: Run Aptu issue triage
-        uses: clouatre-labs/aptu@79ae8fb83fd8e8dec46217143b2e37b4b5b98111 # v0.10.5
+        uses: clouatre-labs/aptu@46527cd991dbe556b8f10498a72518ef8ce387a6 # v0.10.7
         with:
           github-token: ${{ github.event.client_payload.installation_token }}
           gemini-api-key: ${{ secrets[github.event.client_payload.ai_key_secret] }}
