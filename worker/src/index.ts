@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
 
 import { createAppAuth } from '@octokit/auth-app';
+export { InstallationQuota } from './quota';
 import { captureException, withSentry } from '@sentry/cloudflare';
 import {
   type AptuConfig,
