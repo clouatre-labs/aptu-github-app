@@ -46,9 +46,9 @@ ai:
   model: gemini-3.1-flash-lite                    # required if ai block present
   api-key-secret: GEMINI_API_KEY                  # required; name of GitHub Actions secret
 
-exclude_paths:                                    # optional; suppress PR review on path-only changes
-  - src/data/blog/**
-  - public/audio/**
+path_filters:                                    # optional; suppress PR review when no file qualifies
+  - "src/**"                                     # bare patterns are includes
+  - "!src/data/**"                               # '!'-prefixed patterns are excludes
 ```
 
 All fields under `triage`, `review`, and `ai` are validated strictly: unknown keys are ignored,
@@ -68,7 +68,7 @@ rejected.
 | `ai.provider` | string | -- | AI provider name passed to aptu as `--provider`. Required if `ai` block present. |
 | `ai.model` | string | -- | AI model name passed to aptu as `--model`. Required if `ai` block present. |
 | `ai.api-key-secret` | string | -- | Name of a GitHub Actions secret in the caller's repository containing the API key. Required if `ai` block present. Must match `^[A-Z0-9_]+$`. |
-| `exclude_paths` | string[] | -- | Glob patterns (picomatch). If every file in a PR matches at least one pattern, the review dispatch is suppressed. |
+| `path_filters` | string[] | -- | Glob patterns (picomatch) evaluated against the full PR file list. Bare patterns are includes; `!`-prefixed patterns are excludes. A PR is dispatched if at least one file qualifies (matches an include when includes are present, and matches no exclude). If no file qualifies, the review dispatch is suppressed. |
 
 ### Minimal opt-in example
 

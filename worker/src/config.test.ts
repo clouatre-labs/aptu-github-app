@@ -2,7 +2,12 @@
 // SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
 
 import { describe, expect, it } from 'vitest';
-import { AI_KEY_SECRET_PATTERN, parseConfig, shouldDispatch } from './config';
+import {
+  AI_KEY_SECRET_PATTERN,
+  parseConfig,
+  shouldDispatch,
+  shouldSkipByPathFilters,
+} from './config';
 
 describe('parseConfig', () => {
   it('returns null for version != 1', () => {
@@ -127,36 +132,72 @@ describe('shouldDispatch', () => {
   });
 });
 
-describe('parseConfig exclude_paths', () => {
-  it('parses exclude_paths as array of strings from valid YAML, attaches to AptuConfig', () => {
+describe('parseConfig path_filters', () => {
+  it('parses path_filters as array of strings from valid YAML, attaches to AptuConfig', () => {
     const raw = btoa(
-      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nexclude_paths:\n  - "src/data/**"\n  - "docs/**"'
+      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\npath_filters:\n  - "src/**"\n  - "!src/data/**"'
     );
     const config = parseConfig(raw);
     expect(config).not.toBeNull();
-    expect(config?.exclude_paths).toEqual(['src/data/**', 'docs/**']);
+    expect(config?.path_filters).toEqual(['src/**', '!src/data/**']);
   });
 
-  it('tolerates absence of exclude_paths (existing configs continue to parse)', () => {
+  it('tolerates absence of path_filters (existing configs continue to parse)', () => {
     const raw = btoa(
       'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true'
     );
     const config = parseConfig(raw);
     expect(config).not.toBeNull();
-    expect(config?.exclude_paths).toBeUndefined();
+    expect(config?.path_filters).toBeUndefined();
   });
 
-  it('returns null when exclude_paths is present but is not an array', () => {
+  it('returns null when path_filters is present but is not an array', () => {
     const raw = btoa(
-      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nexclude_paths: "src/**"'
+      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\npath_filters: "src/**"'
     );
     expect(parseConfig(raw)).toBeNull();
   });
 
-  it('returns null when exclude_paths array contains non-string elements (numbers, objects)', () => {
+  it('returns null when path_filters array contains non-string elements (numbers, objects)', () => {
     const raw = btoa(
-      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nexclude_paths:\n  - 42\n  - src/data/**'
+      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\npath_filters:\n  - 42\n  - src/**'
     );
     expect(parseConfig(raw)).toBeNull();
+  });
+});
+
+describe('shouldSkipByPathFilters', () => {
+  it('returns false immediately when patterns array is empty', () => {
+    expect(shouldSkipByPathFilters([], ['src/index.ts'])).toBe(false);
+  });
+
+  it('returns false (dispatch) when include patterns are present but at least one changed file does not match any include', () => {
+    const patterns = ['src/**'];
+    const filenames = ['src/index.ts', 'docs/readme.md'];
+    expect(shouldSkipByPathFilters(patterns, filenames)).toBe(false);
+  });
+
+  it('returns true (skip) when all changed files match at least one include pattern and no exclude', () => {
+    const patterns = ['src/**'];
+    const filenames = ['src/index.ts', 'src/config.ts'];
+    expect(shouldSkipByPathFilters(patterns, filenames)).toBe(true);
+  });
+
+  it('returns false (dispatch) when a file matches an include pattern but also matches an exclude pattern (exclude narrows include scope)', () => {
+    const patterns = ['src/**', '!src/data/**'];
+    const filenames = ['src/data/blog/post.md'];
+    expect(shouldSkipByPathFilters(patterns, filenames)).toBe(false);
+  });
+
+  it('with only exclude patterns and no includes, returns true (skip) when every file matches an exclude', () => {
+    const patterns = ['!docs/**'];
+    const filenames = ['docs/readme.md', 'docs/guide.md'];
+    expect(shouldSkipByPathFilters(patterns, filenames)).toBe(true);
+  });
+
+  it('with only exclude patterns and no includes, returns false (dispatch) when at least one file does not match any exclude', () => {
+    const patterns = ['!docs/**'];
+    const filenames = ['docs/readme.md', 'src/index.ts'];
+    expect(shouldSkipByPathFilters(patterns, filenames)).toBe(false);
   });
 });

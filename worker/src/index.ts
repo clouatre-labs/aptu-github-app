@@ -3,13 +3,12 @@
 
 import { createAppAuth } from '@octokit/auth-app';
 import { captureException, withSentry } from '@sentry/cloudflare';
-import { isMatch } from 'picomatch';
-import reposConfig from '../../config/repos.json';
 import {
   type AptuConfig,
   fetchRepoConfig,
   REPO_CONFIG_FETCH_TIMEOUT_MS,
   shouldDispatch,
+  shouldSkipByPathFilters,
 } from './config';
 
 export interface Env {
@@ -116,18 +115,8 @@ export async function shouldSkipPrDispatch(
   token: string,
   aptuConfig: AptuConfig | null = null
 ): Promise<boolean> {
-  const repoConfig = reposConfig[repoFullName as keyof typeof reposConfig];
-
-  // Precedence: aptu.yml exclude_paths wins, fall back to repos.json
-  let excludePatterns: string[] | undefined;
-
-  if (aptuConfig?.exclude_paths) {
-    excludePatterns = aptuConfig.exclude_paths;
-  } else if (repoConfig) {
-    excludePatterns = repoConfig.exclude_paths;
-  }
-
-  if (!excludePatterns || excludePatterns.length === 0) return false;
+  const pathFilters = aptuConfig?.path_filters;
+  if (!pathFilters || pathFilters.length === 0) return false;
 
   try {
     const prFilesResponse = await fetch(
@@ -153,8 +142,9 @@ export async function shouldSkipPrDispatch(
     const files = (await prFilesResponse.json()) as GitHubFile[];
     if (!files || files.length === 0) return false;
 
-    return files.every((file) =>
-      excludePatterns.some((pattern) => isMatch(file.filename, pattern))
+    return shouldSkipByPathFilters(
+      pathFilters,
+      files.map((f) => f.filename)
     );
   } catch {
     return false;
