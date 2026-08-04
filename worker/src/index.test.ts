@@ -2,7 +2,6 @@
 // SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
 
 import { createHmac } from 'node:crypto';
-import type { MockInstance } from 'vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@octokit/auth-app', () => ({
@@ -17,7 +16,7 @@ vi.mock('@sentry/cloudflare', () => ({
   addBreadcrumb: vi.fn(),
 }));
 
-let fetchSpy: MockInstance<typeof fetch>;
+let fetchSpy: ReturnType<typeof vi.spyOn<typeof globalThis, 'fetch'>>;
 
 const quotaControl = {
   body: JSON.stringify({ count: 0, exceeded: false, retryAfter: null }),
