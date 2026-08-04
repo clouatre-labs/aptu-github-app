@@ -9,8 +9,8 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "@octokit/auth-app": "^7",
-    "@octokit/request": "^9",
+    "@octokit/auth-app": "^8.0.0",
+    "@octokit/request": "^10.0.0",
     "@sentry/cloudflare": "^10.68.0",
     "picomatch": "^4",
     "yaml": "^2.9.0"
