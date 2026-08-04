@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
 
+import { isMatch } from 'picomatch';
 import { parse } from 'yaml';
 
 export const REPO_CONFIG_FETCH_TIMEOUT_MS = 5000;
@@ -20,7 +21,7 @@ export interface AptuConfig {
     'instructions-file'?: string;
   };
   ai?: AiConfig;
-  exclude_paths?: string[];
+  path_filters?: string[];
 }
 
 export const AI_KEY_SECRET_PATTERN = /^[A-Z0-9_]+$/;
@@ -122,15 +123,15 @@ export function parseConfig(raw: string): AptuConfig | null {
       };
     }
 
-    if (parsed.exclude_paths !== undefined) {
-      if (!Array.isArray(parsed.exclude_paths)) {
+    if (parsed.path_filters !== undefined) {
+      if (!Array.isArray(parsed.path_filters)) {
         return null;
       }
-      const paths = parsed.exclude_paths as unknown[];
+      const paths = parsed.path_filters as unknown[];
       if (!paths.every((p): p is string => typeof p === 'string')) {
         return null;
       }
-      config.exclude_paths = paths as string[];
+      config.path_filters = paths as string[];
     }
 
     return config;
@@ -147,4 +148,46 @@ export function shouldDispatch(
     return false;
   }
   return config[feature]?.enabled ?? false;
+}
+
+export function shouldSkipByPathFilters(
+  patterns: string[],
+  filenames: string[]
+): boolean {
+  if (patterns.length === 0) return false;
+
+  const includes: string[] = [];
+  const excludes: string[] = [];
+
+  for (const pattern of patterns) {
+    if (pattern.startsWith('!')) {
+      excludes.push(pattern.slice(1));
+    } else {
+      includes.push(pattern);
+    }
+  }
+
+  // A file "passes" (is considered covered by the filter) when:
+  //   With includes: file matches at least one include AND matches no exclude
+  //   Without includes: file matches at least one exclude
+  // Skip (return true) when ALL files pass the filter.
+  // Dispatch (return false) when at least one file does NOT pass.
+  for (const filename of filenames) {
+    if (includes.length > 0) {
+      // Include-only or mixed mode: file must match an include and no exclude
+      if (!includes.some((p) => isMatch(filename, p))) {
+        return false; // file not covered by any include -> dispatch
+      }
+      if (excludes.some((p) => isMatch(filename, p))) {
+        return false; // file excluded -> dispatch
+      }
+    } else {
+      // Exclude-only mode: file must match an exclude to be covered
+      if (!excludes.some((p) => isMatch(filename, p))) {
+        return false; // file not covered by any exclude -> dispatch
+      }
+    }
+  }
+
+  return true;
 }
