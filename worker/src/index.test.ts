@@ -56,8 +56,11 @@ function makeConfigResponse(yaml: string, status = 200): Response {
   );
 }
 
-function mockEnabledFetch(): ReturnType<typeof vi.fn> {
-  return vi.fn((url: string | URL | Request) => {
+function mockEnabledFetch(): (
+  input: string | URL | Request,
+  init?: RequestInit
+) => Promise<Response> {
+  return (url: string | URL | Request) => {
     const urlStr =
       typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
     if (urlStr.includes('/contents/.github/aptu.yml')) {
@@ -68,11 +71,14 @@ function mockEnabledFetch(): ReturnType<typeof vi.fn> {
       );
     }
     return Promise.resolve(new Response(null, { status: 204 }));
-  });
+  };
 }
 
-function mockDisabledFetch(): ReturnType<typeof vi.fn> {
-  return vi.fn((url: string | URL | Request) => {
+function mockDisabledFetch(): (
+  input: string | URL | Request,
+  init?: RequestInit
+) => Promise<Response> {
+  return (url: string | URL | Request) => {
     const urlStr =
       typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
     if (urlStr.includes('/contents/.github/aptu.yml')) {
@@ -83,22 +89,28 @@ function mockDisabledFetch(): ReturnType<typeof vi.fn> {
       );
     }
     return Promise.resolve(new Response(null, { status: 204 }));
-  });
+  };
 }
 
-function mockAbsentConfigFetch(): ReturnType<typeof vi.fn> {
-  return vi.fn((url: string | URL | Request) => {
+function mockAbsentConfigFetch(): (
+  input: string | URL | Request,
+  init?: RequestInit
+) => Promise<Response> {
+  return (url: string | URL | Request) => {
     const urlStr =
       typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
     if (urlStr.includes('/contents/.github/aptu.yml')) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
     return Promise.resolve(new Response(null, { status: 204 }));
-  });
+  };
 }
 
-function mockEnabledWithAiFetch(): ReturnType<typeof vi.fn> {
-  return vi.fn((url: string | URL | Request) => {
+function mockEnabledWithAiFetch(): (
+  input: string | URL | Request,
+  init?: RequestInit
+) => Promise<Response> {
+  return (url: string | URL | Request) => {
     const urlStr =
       typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
     if (urlStr.includes('/contents/.github/aptu.yml')) {
@@ -109,7 +121,7 @@ function mockEnabledWithAiFetch(): ReturnType<typeof vi.fn> {
       );
     }
     return Promise.resolve(new Response(null, { status: 204 }));
-  });
+  };
 }
 
 const mockEnv = {
@@ -1210,31 +1222,25 @@ describe('mention commands', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchSpy = vi.spyOn(globalThis, 'fetch');
-    fetchSpy.mockImplementation(
-      vi.fn((url: string | URL | Request) => {
-        const urlStr =
-          typeof url === 'string'
-            ? url
-            : url instanceof URL
-              ? url.href
-              : url.url;
-        if (urlStr.includes('/collaborators/')) {
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                user: { permissions: { pull: true } },
-                role_name: 'read',
-              }),
-              { status: 200, headers: { 'Content-Type': 'application/json' } }
-            )
-          );
-        }
-        if (urlStr.includes('/dispatches')) {
-          return Promise.resolve(new Response(null, { status: 204 }));
-        }
+    fetchSpy.mockImplementation((url: string | URL | Request) => {
+      const urlStr =
+        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+      if (urlStr.includes('/collaborators/')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              user: { permissions: { pull: true } },
+              role_name: 'read',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          )
+        );
+      }
+      if (urlStr.includes('/dispatches')) {
         return Promise.resolve(new Response(null, { status: 204 }));
-      }) as ReturnType<typeof vi.fn>
-    );
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
     quotaControl.body = JSON.stringify({
       count: 0,
       exceeded: false,
@@ -1336,23 +1342,17 @@ describe('mention commands', () => {
   });
 
   it('returns false for HTTP 404 from collaborator endpoint', async () => {
-    fetchSpy.mockImplementation(
-      vi.fn((url: string | URL | Request) => {
-        const urlStr =
-          typeof url === 'string'
-            ? url
-            : url instanceof URL
-              ? url.href
-              : url.url;
-        if (urlStr.includes('/collaborators/')) {
-          return Promise.resolve(new Response(null, { status: 404 }));
-        }
-        if (urlStr.includes('/dispatches')) {
-          return Promise.resolve(new Response(null, { status: 204 }));
-        }
+    fetchSpy.mockImplementation((url: string | URL | Request) => {
+      const urlStr =
+        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+      if (urlStr.includes('/collaborators/')) {
+        return Promise.resolve(new Response(null, { status: 404 }));
+      }
+      if (urlStr.includes('/dispatches')) {
         return Promise.resolve(new Response(null, { status: 204 }));
-      }) as ReturnType<typeof vi.fn>
-    );
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
     const body = JSON.stringify({
       action: 'created',
       installation: { id: 1 },
@@ -1385,28 +1385,22 @@ describe('mention commands', () => {
 
   it('returns true when user.permissions.admin is true', async () => {
     const { checkCollaboratorPermission } = await import('./index.js');
-    fetchSpy.mockImplementation(
-      vi.fn((url: string | URL | Request) => {
-        const urlStr =
-          typeof url === 'string'
-            ? url
-            : url instanceof URL
-              ? url.href
-              : url.url;
-        if (urlStr.includes('/collaborators/')) {
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                user: { permissions: { admin: true } },
-                role_name: 'admin',
-              }),
-              { status: 200, headers: { 'Content-Type': 'application/json' } }
-            )
-          );
-        }
-        return Promise.resolve(new Response(null, { status: 204 }));
-      }) as ReturnType<typeof vi.fn>
-    );
+    fetchSpy.mockImplementation((url: string | URL | Request) => {
+      const urlStr =
+        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+      if (urlStr.includes('/collaborators/')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              user: { permissions: { admin: true } },
+              role_name: 'admin',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          )
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
     const result = await checkCollaboratorPermission(
       'token',
       'owner',
