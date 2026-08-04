@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
 
 import { createHmac } from 'node:crypto';
+import type { MockInstance } from 'vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@octokit/auth-app', () => ({
@@ -16,8 +17,7 @@ vi.mock('@sentry/cloudflare', () => ({
   addBreadcrumb: vi.fn(),
 }));
 
-// biome-ignore lint/suspicious/noExplicitAny: spyOn type parameters require any for global fetch overload
-let fetchSpy: ReturnType<typeof vi.spyOn<any, any>>;
+let fetchSpy: MockInstance<typeof fetch>;
 
 const quotaControl = {
   body: JSON.stringify({ count: 0, exceeded: false, retryAfter: null }),

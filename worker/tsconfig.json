@@ -4,7 +4,8 @@
     "lib": ["ES2022"],
     "module": "ES2022",
     "moduleResolution": "bundler",
-    "types": ["@cloudflare/workers-types"],
+    // "node" resolves node:crypto, Buffer used by tests (vitest v4 type compat)
+    "types": ["@cloudflare/workers-types", "node"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
