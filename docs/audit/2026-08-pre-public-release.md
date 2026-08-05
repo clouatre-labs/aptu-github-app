@@ -4,7 +4,8 @@ Audit date: 2026-08-04
 
 Status: Resolved. All blocking and pre-release findings closed as of 2026-08-04. Hardening
 findings deferred with documented decisions below. Fixes verified against `origin/main` at
-commit `586a34f`; PRs #87-#95 apply all remediations.
+commit `586a34f`; PRs #87-#95 apply all remediations. Two post-audit fixes (PR #96 and PR #97)
+were applied on 2026-08-05; see the Post-Audit Fixes section.
 
 ## See Also
 
@@ -44,7 +45,7 @@ CVSS-inspired conventions: Critical, High, Medium, Low, Info.
 | C3 | Cost | **High** | No aggregate quota ceiling across installations; GitHub Actions minutes scale unboundedly | Yes | **Yes** | PR #88 |
 | S6 | Security | **Medium** | `handleMentionCommand` calls `getInstallationToken` + `checkCollaboratorPermission` before `enforceQuota` | Yes | Yes | PR #94 |
 | S7 | Security | **Medium** | No cross-installation aggregate quota cap | Yes | Yes | PR #88 |
-| C5 | Cost | **Medium** | DO `storage.put` runs on every exceeded-quota request, not just on state changes | Yes | No | PR #93 |
+| C5 | Cost | **Medium** | DO `storage.put` runs on every exceeded-quota request, not just on state changes | Yes | No | PR #93 (`InstallationQuota`); PR #97 (`GlobalQuota`) |
 | S10 | Security | **Medium** | 8 known advisories in devDependency chains (postcss, esbuild, undici); no CI gate blocks on them | Yes | No | PR #95 |
 | CI-F4 | CI | **Medium** | `bun-version: latest` in ci.yml -- floating toolchain | Yes | No | PR #90 |
 | CI-F10 | CI | **Medium** | Renovate automerges all github-actions updates including majors unconditionally | Yes | No | PR #89 |
@@ -214,7 +215,7 @@ Durable Object storage operations are billed above the free-tier inclusion.
 **Fix:** Skip `storage.put` on the exceeded path when the pruned list is unchanged from the
 stored list, or write only when the set of timestamps actually changes.
 
-**Resolved:** PR #93 -- Added conditional guard: `storage.put` on the exceeded path is skipped when `recent.length === stored.timestamps.length` (no pruning occurred).
+**Resolved:** PR #93 -- Added conditional guard to `InstallationQuota`: `storage.put` on the exceeded path is skipped when `recent.length === stored.timestamps.length` (no pruning occurred). PR #97 (post-audit) -- Applied the identical guard to `GlobalQuota`, which the original fix missed.
 
 ---
 
@@ -492,3 +493,54 @@ the counter never exceeds `QUOTA_LIMIT`. No code change indicated by static anal
 | 9 -- Hardening | S12 | Add Cloudflare rate limiting rules on the webhook route |
 | 10 -- Cleanup | CI-F8, CI-F9, CI-F11, CI-F12 | Pattern allowlist, REUSE gaps, Renovate alerts, review policy |
 | 11 -- Follow-up | C8, C10 | JWT rate-limit research, DO concurrency load test |
+
+---
+
+## Post-Audit Fixes (2026-08-05)
+
+A post-merge verification pass identified two issues not covered by PRs #87-#95. Both were
+fixed and merged on 2026-08-05.
+
+### PR #96 -- Biome formatting error in `index.ts` (CI blocker)
+
+**Finding:** A spurious blank line at `worker/src/index.ts:10` -- between the
+`export { GlobalQuota, InstallationQuota }` re-export block introduced by PR #88 and the
+`@sentry/cloudflare` import -- caused `biome check` to fail. The current `HEAD` after merging
+PRs #87-#95 would fail CI on any new PR touching that file.
+
+**Fix:** Removed the blank line. One line deleted, no logic change.
+
+**Verified:** `bun run biome check` 0 errors, `bun test` 99/99 pass.
+
+---
+
+### PR #97 -- `GlobalQuota` missing conditional `storage.put` guard (C5 incomplete)
+
+**Finding:** PR #93 applied the conditional `storage.put` guard to `InstallationQuota` but not
+to `GlobalQuota`. The `GlobalQuota.fetch()` exceeded path (introduced by PR #88) called
+`storage.put` unconditionally on every request, even when no timestamps were pruned and the
+stored state was unchanged -- the identical C5 pattern in `InstallationQuota` before PR #93.
+
+**Fix:** Wrapped the exceeded-path `storage.put` in `GlobalQuota` with the same conditional
+guard used in `InstallationQuota`: skip the write when `recent.length` equals the stored
+timestamps length. Added two tests covering the skip and write scenarios.
+
+**Verified:** `bun test` 101/101 pass (2 new tests), `bun run biome check` 0 errors on changed
+files.
+
+---
+
+## Deferred Items Reference
+
+The following findings were accepted as deferred during the original audit. They are tracked
+here as the canonical record; no separate issues were opened.
+
+| Finding | Decision | Condition for revisit |
+| --- | --- | --- |
+| CI-F8 -- `ai_key_secret` regex only | Moot while `ALLOWED_OWNERS` blocks all external installs | Revisit when per-caller credential model is designed |
+| S9 -- Long-lived Cloudflare API token | No OIDC alternative available for `wrangler-action` | Revisit when Cloudflare adds OIDC support |
+| S12 -- No Cloudflare-side rate limiting | Dashboard config, not in-repo | Configure post-release in Cloudflare dashboard |
+| CI-F12 -- No required human review | Accepted for current team size | Revisit if team grows or external contributors are added |
+| CI-F11 -- No `vulnerabilityAlerts` in Renovate | `bun audit --audit-level high` in CI provides equivalent blocking coverage | Revisit if Renovate advisory PR cadence becomes important |
+| C8 -- JWT rate-limit pool isolation | Not confirmed; requires research against live GitHub docs | Verify and cache tokens if pool is shared |
+| C10 -- DO concurrency safety | Not load-tested; Cloudflare input-gate semantics assumed correct | Run load test before scaling to high install counts |
