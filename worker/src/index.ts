@@ -3,7 +3,10 @@
 
 import { createAppAuth } from '@octokit/auth-app';
 
+// Re-exported for Cloudflare Worker binding: wrangler requires Durable Object
+// classes to be exported from the entry point (this file) to register them.
 export { GlobalQuota, InstallationQuota } from './quota';
+
 
 import { captureException, withSentry } from '@sentry/cloudflare';
 import {
