@@ -28,7 +28,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Review PR
-        uses: clouatre-labs/aptu@d96165461f64762466b35dcde236c8f5057c0f99 # v0.10.8
+        uses: clouatre-labs/aptu@83226816caaec41ee93af5e1ca7c974b76de35ba # v0.10.9
         continue-on-error: true
         with:
           github-token: ${{ github.event.client_payload.installation_token }}
