@@ -259,4 +259,59 @@ describe('GlobalQuota Durable Object', () => {
     expect(body.count).toBe(500);
     expect(body.exceeded).toBe(false);
   });
+
+  it('skips storage.put on exceeded path when no timestamps were pruned', async () => {
+    const { GlobalQuota } = await import('./quota.js');
+    const ctx = makeMockCtx();
+    const now = Date.now();
+    const existingTimestamps = Array.from(
+      { length: 500 },
+      (_, i) => now - i * 60000
+    );
+    ctx.storage.get.mockResolvedValue({ timestamps: existingTimestamps });
+    const quota = new GlobalQuota(ctx as unknown as DurableObjectState);
+
+    const response = await quota.fetch(
+      new Request('https://quota/quota', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 500 }),
+      })
+    );
+    const body = (await response.json()) as {
+      count: number;
+      exceeded: boolean;
+    };
+    expect(body.exceeded).toBe(true);
+    expect(ctx.storage.put).not.toHaveBeenCalled();
+  });
+
+  it('calls storage.put on exceeded path when timestamps were pruned', async () => {
+    const { GlobalQuota } = await import('./quota.js');
+    const ctx = makeMockCtx();
+    const now = Date.now();
+    const windowMs = 24 * 60 * 60 * 1000;
+    const existingTimestamps = Array.from(
+      { length: 500 },
+      (_, i) => now - i * 60000
+    );
+    ctx.storage.get.mockResolvedValue({
+      timestamps: [...existingTimestamps, now - windowMs - 3600000],
+    });
+    const quota = new GlobalQuota(ctx as unknown as DurableObjectState);
+
+    const response = await quota.fetch(
+      new Request('https://quota/quota', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 500 }),
+      })
+    );
+    const body = (await response.json()) as {
+      count: number;
+      exceeded: boolean;
+    };
+    expect(body.exceeded).toBe(true);
+    expect(ctx.storage.put).toHaveBeenCalledTimes(1);
+  });
 });
