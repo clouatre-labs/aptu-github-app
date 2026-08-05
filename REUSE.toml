@@ -85,6 +85,12 @@ SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
+path = "bun.lock"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
 path = ".gitignore"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
