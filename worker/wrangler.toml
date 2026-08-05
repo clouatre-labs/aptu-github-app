@@ -11,9 +11,17 @@ zone_name = "aptu.dev"
 name = "QUOTA"
 class_name = "InstallationQuota"
 
+[[durable_objects.bindings]]
+name = "GLOBAL_QUOTA"
+class_name = "GlobalQuota"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["InstallationQuota"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["GlobalQuota"]
 
 [vars]
 # SENTRY_DSN = ""  # Set via: bunx wrangler secret put SENTRY_DSN
@@ -24,6 +32,7 @@ TARGET_REPO = "clouatre-labs/aptu-github-app"
 # aptu-dev[bot] user ID -- verified via: gh api /users/aptu-dev%5Bbot%5D
 APTU_BOT_ID = "296574906"
 ALLOWED_OWNERS = "clouatre-labs,clouatre"
+GLOBAL_QUOTA_LIMIT = "500"
 # Secrets (set post-deploy via CLI):
 #   bunx wrangler secret put WEBHOOK_SECRET
 #   bunx wrangler secret put APP_PRIVATE_KEY

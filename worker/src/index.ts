@@ -3,7 +3,7 @@
 
 import { createAppAuth } from '@octokit/auth-app';
 
-export { InstallationQuota } from './quota';
+export { GlobalQuota, InstallationQuota } from './quota';
 
 import { captureException, withSentry } from '@sentry/cloudflare';
 import {
@@ -23,6 +23,8 @@ export interface Env {
   ALLOWED_OWNERS: string;
   SENTRY_DSN: string;
   QUOTA: DurableObjectNamespace;
+  GLOBAL_QUOTA: DurableObjectNamespace;
+  GLOBAL_QUOTA_LIMIT: string;
 }
 
 export function hexToBytes(hex: string): Uint8Array {
@@ -203,11 +205,56 @@ async function checkQuota(
   return null;
 }
 
+async function checkGlobalQuota(env: Env): Promise<Response | null> {
+  const quotaId = env.GLOBAL_QUOTA.idFromName('global');
+  const stub = env.GLOBAL_QUOTA.get(quotaId);
+  let quotaResponse: Response;
+  try {
+    quotaResponse = await stub.fetch('https://quota/quota', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eventType: 'global',
+        installationId: 'global',
+        limit: Number(env.GLOBAL_QUOTA_LIMIT) || 500,
+      }),
+    });
+  } catch (error) {
+    captureException(error, { tags: { eventType: 'global' } });
+    console.error('Global quota check failed:', error);
+    return new Response('Internal Server Error', { status: 500 });
+  }
+  if (!quotaResponse.ok) {
+    const text = await quotaResponse.text();
+    captureException(new Error(`Global quota check non-2xx: ${text}`), {
+      tags: { eventType: 'global' },
+    });
+    console.error(`Global quota check error: ${text}`);
+    return new Response('Internal Server Error', { status: 500 });
+  }
+  const quota = (await quotaResponse.json()) as {
+    count: number;
+    exceeded: boolean;
+    retryAfter: number | null;
+  };
+  if (quota.exceeded) {
+    return new Response(null, {
+      status: 429,
+      headers: { 'Retry-After': String(quota.retryAfter ?? 3600) },
+    });
+  }
+  return null;
+}
+
 async function enforceQuota(
   env: Env,
   installationId: number,
   eventType: string
 ): Promise<Response | null> {
+  // Org-wide check first; a failing (500) global check short-circuits before
+  // the per-installation check.
+  const globalResponse = await checkGlobalQuota(env);
+  if (globalResponse) return globalResponse;
   const quotaResponse = await checkQuota(env, installationId, eventType);
   if (quotaResponse) return quotaResponse;
   return null;

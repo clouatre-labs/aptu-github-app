@@ -85,3 +85,73 @@ export class InstallationQuota {
     });
   }
 }
+
+// GlobalQuota Durable Object
+// Persists org-wide event counters using Durable Object SQLite-backed storage.
+// A single well-known instance (idFromName('global')) enforces a configurable ceiling.
+// The limit travels in the Request body because the DO has no env access; it is
+// Number()-coerced with a 500 fallback in checkGlobalQuota (index.ts).
+
+export class GlobalQuota {
+  private ctx: DurableObjectState;
+
+  constructor(ctx: DurableObjectState) {
+    this.ctx = ctx;
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    let limit: number;
+
+    try {
+      const body = (await request.json()) as { limit: number };
+      limit = body.limit;
+    } catch {
+      return new Response('Bad Request', { status: 400 });
+    }
+
+    if (!limit || limit <= 0) {
+      return new Response('Bad Request', { status: 400 });
+    }
+
+    const key = 'quota:global';
+    const stored = await this.ctx.storage.get<QuotaState>(key);
+    const timestamps = stored?.timestamps ?? [];
+
+    const now = Date.now();
+    const windowMs = QUOTA_WINDOW_MS;
+    const cutoff = now - windowMs;
+
+    // Prune timestamps older than the rolling 24h window
+    const recent: number[] = [];
+    for (const ts of timestamps) {
+      if (ts > cutoff) {
+        recent.push(ts);
+      }
+    }
+
+    if (recent.length >= limit) {
+      // Exceeded: calculate retry-after from the oldest timestamp's window expiry
+      const oldest = recent[0] as number;
+      const retryAfter = Math.ceil((oldest + windowMs - now) / 1000);
+
+      // Persist pruned list even when exceeded to ensure cleanup on subsequent requests
+      await this.ctx.storage.put(key, { timestamps: recent });
+
+      return Response.json({
+        count: recent.length,
+        exceeded: true,
+        retryAfter,
+      });
+    }
+
+    // Count within limit: record this event
+    recent.push(now);
+    await this.ctx.storage.put(key, { timestamps: recent });
+
+    return Response.json({
+      count: recent.length,
+      exceeded: false,
+      retryAfter: null,
+    });
+  }
+}

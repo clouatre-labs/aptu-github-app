@@ -56,6 +56,13 @@ storage. Each counter is keyed by `quota:{installationId}:{eventType}`. On every
 timestamps older than 24 hours are pruned. At 50 events within the rolling window the Durable
 Object returns `exceeded: true` and a `retryAfter` value in seconds.
 
+### `GlobalQuota` Durable Object (`worker/src/quota.ts`)
+
+Persists an org-wide aggregate event counter using a single well-known Durable Object
+instance (`idFromName('global')`). The limit is passed in the Request body (the DO has no
+`env` access) and is coerced from `GLOBAL_QUOTA_LIMIT` with a default of 500/day. The
+counter uses the same rolling 24-hour window and pruning logic as `InstallationQuota`.
+
 ### Config Parser (`worker/src/config.ts`)
 
 `fetchRepoConfig` fetches `.github/aptu.yml` from the originating repository via the GitHub
@@ -136,6 +143,8 @@ stores either token.
 | `WEBHOOK_SECRET` | secret | HMAC key matching the GitHub App webhook secret |
 | `APP_PRIVATE_KEY` | secret | PKCS#8 PEM private key for the GitHub App |
 | `QUOTA` | Durable Object binding | `InstallationQuota` namespace |
+| `GLOBAL_QUOTA` | Durable Object binding | `GlobalQuota` namespace |
+| `GLOBAL_QUOTA_LIMIT` | var | Org-wide dispatch ceiling per rolling 24h (default `500`) |
 
 ### Repository opt-in (`.github/aptu.yml`)
 
@@ -196,9 +205,12 @@ every request before any payload is parsed.
 
 ### `enforceQuota` / `checkQuota`
 
-Delegates to the `InstallationQuota` Durable Object via an internal `POST /quota` fetch.
-Returns a `Response` to short-circuit the handler if the quota is exceeded, or `null` to
-continue.
+Enforces a two-level quota model. `enforceQuota` first calls `checkGlobalQuota`, which
+delegates to the `GlobalQuota` Durable Object via an internal `POST /quota` fetch. A failing
+(500) global check short-circuits before the per-installation check. If the org-wide quota is
+within its ceiling, `checkQuota` then delegates to the `InstallationQuota` Durable Object.
+Returns a `Response` to short-circuit the handler if either quota is exceeded or fails, or
+`null` to continue.
 
 ### `shouldSkipPrDispatch`
 
