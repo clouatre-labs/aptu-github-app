@@ -130,6 +130,7 @@ const mockEnv = {
   APP_ID: '4134521',
   TARGET_REPO: 'clouatre-labs/aptu-github-app',
   APTU_BOT_ID: '0',
+  ALLOWED_OWNERS: 'clouatre-labs,clouatre,owner,myorg,unconfigured',
   SENTRY_DSN: '',
   QUOTA: makeMockQuotaNamespace(),
 };
@@ -192,6 +193,95 @@ describe('HMAC validation', () => {
   });
 });
 
+describe('isOwnerAllowed', () => {
+  it('returns false when ALLOWED_OWNERS is empty string', async () => {
+    const { isOwnerAllowed } = await import('./index.js');
+    expect(isOwnerAllowed('clouatre-labs', '')).toBe(false);
+  });
+
+  it('matches owner case-insensitively (Clouatre-Labs == clouatre-labs)', async () => {
+    const { isOwnerAllowed } = await import('./index.js');
+    expect(isOwnerAllowed('Clouatre-Labs', 'clouatre-labs,clouatre')).toBe(
+      true
+    );
+    expect(isOwnerAllowed('CLOUATRE', 'clouatre-labs,clouatre')).toBe(true);
+  });
+
+  it('handles trailing comma and whitespace in comma-separated list', async () => {
+    const { isOwnerAllowed } = await import('./index.js');
+    expect(isOwnerAllowed('clouatre', 'clouatre-labs, clouatre, ')).toBe(true);
+  });
+});
+
+describe('ALLOWED_OWNERS gate', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockImplementation(mockEnabledFetch());
+  });
+
+  it('returns 403 for issues.opened when owner not in allowlist with no dispatch or token fetch', async () => {
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: { full_name: 'evil-org/repo', owner: { login: 'evil-org' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(403);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 for pull_request when owner not in allowlist', async () => {
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: { number: 7, title: 'Test PR' },
+      repository: { full_name: 'evil-org/repo', owner: { login: 'evil-org' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it('returns 403 for mention-triggered issue_comment when owner not in allowlist', async () => {
+    const body = JSON.stringify({
+      action: 'created',
+      installation: { id: 1 },
+      comment: { body: '@aptu triage', user: { id: 2, login: 'someone' } },
+      issue: {},
+      repository: { full_name: 'evil-org/repo', owner: { login: 'evil-org' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issue_comment',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it('returns 403 when repository.owner.login and organization.login both absent', async () => {
+    const body = JSON.stringify({ action: 'opened' });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(403);
+  });
+});
+
 describe('event routing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -246,11 +336,21 @@ describe('event routing', () => {
   it.each([
     [
       'issue_comment',
-      JSON.stringify({ action: 'created', comment: {}, issue: {} }),
+      JSON.stringify({
+        action: 'created',
+        comment: {},
+        issue: {},
+        repository: { owner: { login: 'clouatre-labs' } },
+      }),
     ],
     [
       'pull_request_review_comment',
-      JSON.stringify({ action: 'created', comment: {}, pull_request: {} }),
+      JSON.stringify({
+        action: 'created',
+        comment: {},
+        pull_request: {},
+        repository: { owner: { login: 'clouatre-labs' } },
+      }),
     ],
   ])('returns 200 without calling dispatch for %s.created', async (event, body) => {
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
@@ -264,7 +364,10 @@ describe('event routing', () => {
   });
 
   it('returns 400 for unrecognized X-GitHub-Event value', async () => {
-    const body = JSON.stringify({ action: 'created' });
+    const body = JSON.stringify({
+      action: 'created',
+      repository: { owner: { login: 'clouatre-labs' } },
+    });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
       'X-GitHub-Event': 'push',
