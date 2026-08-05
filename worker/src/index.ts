@@ -271,6 +271,10 @@ export async function handleMentionCommand(
   if (!installationId) return new Response('Bad Request', { status: 400 });
   if (comment.user?.id === Number(env.APTU_BOT_ID)) return null;
 
+  const eventType = event === 'issue_comment' ? 'triage' : 'review';
+  const quotaResponse = await enforceQuota(env, installationId, eventType);
+  if (quotaResponse) return quotaResponse;
+
   let token: string;
   try {
     token = await getInstallationToken(env, installationId);
@@ -287,10 +291,6 @@ export async function handleMentionCommand(
     comment.user?.login ?? ''
   );
   if (!hasAccess) return new Response('Forbidden', { status: 403 });
-
-  const eventType = event === 'issue_comment' ? 'triage' : 'review';
-  const quotaResponse = await enforceQuota(env, installationId, eventType);
-  if (quotaResponse) return quotaResponse;
 
   const dispatchType =
     event === 'issue_comment' ? 'aptu-triage' : 'aptu-review';
