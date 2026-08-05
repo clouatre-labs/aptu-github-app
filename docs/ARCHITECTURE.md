@@ -23,7 +23,7 @@ installation. Responsibilities:
 - Obtain a scoped installation token via `@octokit/auth-app` for the originating repository
 - Fetch and validate `.github/aptu.yml` from the originating repository (5-second timeout;
   no dispatch if absent or invalid)
-- Check the `ALLOWED_OWNERS` allowlist; external installations must supply an `ai` block
+- Check the `ALLOWED_OWNERS` allowlist -- hard 403 gate on repository.owner.login
 - Evaluate `path_filters` globs (picomatch) against PR file lists; suppress dispatch if no
   file qualifies
 - Obtain a scoped dispatch token for `TARGET_REPO`
@@ -131,7 +131,7 @@ stores either token.
 |---|---|---|
 | `APP_ID` | var | GitHub App numeric ID |
 | `TARGET_REPO` | var | `owner/repo` that receives `repository_dispatch` events |
-| `ALLOWED_OWNERS` | var | Comma-separated GitHub account names that may omit the `ai` block |
+| `ALLOWED_OWNERS` | var | Comma-separated GitHub account/org names permitted to use the app; any other owner is rejected with 403 before any dispatch |
 | `APTU_BOT_ID` | var | GitHub numeric user ID of the `aptu[bot]` account; gates the self-mention loop guard |
 | `WEBHOOK_SECRET` | secret | HMAC key matching the GitHub App webhook secret |
 | `APP_PRIVATE_KEY` | secret | PKCS#8 PEM private key for the GitHub App |

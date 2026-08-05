@@ -2,7 +2,9 @@
 // SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
 
 import { createAppAuth } from '@octokit/auth-app';
+
 export { InstallationQuota } from './quota';
+
 import { captureException, withSentry } from '@sentry/cloudflare';
 import {
   type AptuConfig,
@@ -18,6 +20,7 @@ export interface Env {
   APP_ID: string;
   TARGET_REPO: string;
   APTU_BOT_ID: string;
+  ALLOWED_OWNERS: string;
   SENTRY_DSN: string;
   QUOTA: DurableObjectNamespace;
 }
@@ -216,6 +219,14 @@ export function hasMentionCommand(body: string): boolean {
   );
 }
 
+export function isOwnerAllowed(repoOwner: string, allowedOwners = ''): boolean {
+  return allowedOwners
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .some((allowed) => allowed.toLowerCase() === repoOwner.toLowerCase());
+}
+
 export async function checkCollaboratorPermission(
   token: string,
   owner: string,
@@ -319,6 +330,11 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
     const event = request.headers.get('X-GitHub-Event') ?? '';
     // biome-ignore lint/suspicious/noExplicitAny: webhook payload is untyped
     const payload = JSON.parse(body) as Record<string, any>;
+    const owner =
+      payload.repository?.owner?.login ?? payload.organization?.login;
+    if (!isOwnerAllowed(owner ?? '', env.ALLOWED_OWNERS)) {
+      return new Response('Forbidden', { status: 403 });
+    }
     const action = (payload.action as string) ?? '';
     const installationId = (payload.installation as { id: number } | undefined)
       ?.id;
@@ -337,11 +353,6 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       const repo = (payload.repository as { full_name: string }).full_name;
       if (!repo.includes('/'))
         return new Response('Bad Request', { status: 400 });
-
-      const repoOwner = (
-        payload.repository as { owner?: { login: string } } | undefined
-      )?.owner?.login;
-      if (!repoOwner) return new Response('Forbidden', { status: 403 });
 
       const quotaResponse = await enforceQuota(env, installationId, 'triage');
       if (quotaResponse) return quotaResponse;
@@ -419,11 +430,6 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       const repo = (payload.repository as { full_name: string }).full_name;
       if (!repo.includes('/'))
         return new Response('Bad Request', { status: 400 });
-
-      const repoOwner = (
-        payload.repository as { owner?: { login: string } } | undefined
-      )?.owner?.login;
-      if (!repoOwner) return new Response('Forbidden', { status: 403 });
 
       const quotaResponse = await enforceQuota(env, installationId, 'review');
       if (quotaResponse) return quotaResponse;

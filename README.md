@@ -13,7 +13,7 @@ GitHub event (issues.opened / pull_request.opened|synchronize|reopened)
        1. Verify X-Hub-Signature-256
        2. Get installation token (scoped to originating repo)
        3. Fetch .github/aptu.yml from originating repo
-       4. Check ALLOWED_OWNERS allowlist (or ai block present) -- 403 if neither
+       4. Check ALLOWED_OWNERS allowlist -- 403 if not allowed
        5. Get dispatch token (scoped to TARGET_REPO)
        6. POST repository_dispatch to TARGET_REPO
   -> GitHub Actions workflow (actions/create-github-app-token, run aptu CLI)
@@ -83,10 +83,10 @@ review:
 
 ### External installation example
 
-Repositories whose owner is not in the `ALLOWED_OWNERS` allowlist must include an `ai` block.
-The `api-key-secret` value is the **name** of a GitHub Actions secret in the caller's own
-repository. The Worker never has access to repository secrets; the workflow resolves the key
-dynamically via `${{ secrets[github.event.client_payload.ai_key_secret] }}`.
+Repositories using the aptu GitHub App must include an `ai` block with a valid
+`api-key-secret` pointing to a secret in the caller's own repository. The Worker
+never has access to repository secrets; the workflow resolves the key dynamically
+via `${{ secrets[github.event.client_payload.ai_key_secret] }}`.
 
 ```yaml
 version: 1
@@ -115,7 +115,7 @@ Required Wrangler variables (set in `wrangler.toml` or via `bunx wrangler secret
 
 - `APP_ID` -- GitHub App ID
 - `TARGET_REPO` -- `owner/repo` that receives `repository_dispatch` events (i.e., this repo)
-- `ALLOWED_OWNERS` -- comma-separated list of GitHub account/org names permitted to use the app without supplying caller AI keys (e.g., `clouatre-labs,clouatre`)
+- `ALLOWED_OWNERS` -- comma-separated list of GitHub account/org names (e.g., `clouatre-labs,clouatre`). Requests whose `repository.owner.login` (or `organization.login`) does not appear in this list are rejected with `403 Forbidden` before any event processing. This is a hard early gate; it is not a bypass for the `ai` block requirement.
 
 ### DNS prerequisite
 
