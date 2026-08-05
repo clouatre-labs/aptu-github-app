@@ -7,7 +7,6 @@ import { createAppAuth } from '@octokit/auth-app';
 // classes to be exported from the entry point (this file) to register them.
 export { GlobalQuota, InstallationQuota } from './quota';
 
-
 import { captureException, withSentry } from '@sentry/cloudflare';
 import {
   type AptuConfig,
