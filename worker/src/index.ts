@@ -208,6 +208,8 @@ async function checkQuota(
 async function checkGlobalQuota(env: Env): Promise<Response | null> {
   const quotaId = env.GLOBAL_QUOTA.idFromName('global');
   const stub = env.GLOBAL_QUOTA.get(quotaId);
+  const limit = parseInt(env.GLOBAL_QUOTA_LIMIT, 10);
+  const finalLimit = Number.isNaN(limit) || limit <= 0 ? 500 : limit;
   let quotaResponse: Response;
   try {
     quotaResponse = await stub.fetch('https://quota/quota', {
@@ -216,7 +218,7 @@ async function checkGlobalQuota(env: Env): Promise<Response | null> {
       body: JSON.stringify({
         eventType: 'global',
         installationId: 'global',
-        limit: Number(env.GLOBAL_QUOTA_LIMIT) || 500,
+        limit: finalLimit,
       }),
     });
   } catch (error) {
