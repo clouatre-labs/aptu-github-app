@@ -56,7 +56,6 @@ jobs:
         run: bunx biome check .
       - name: Dependency audit
         run: bun audit --audit-level high
-        continue-on-error: false
 
   typecheck:
     name: Type Check
