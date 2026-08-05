@@ -23,11 +23,32 @@ const quotaControl = {
   status: 200,
 };
 
+const globalQuotaControl = {
+  body: JSON.stringify({ count: 1, exceeded: false, retryAfter: null }),
+  status: 200,
+};
+
 function makeMockQuotaNamespace(): DurableObjectNamespace {
   const stub = {
     fetch: vi.fn(() =>
       Promise.resolve(
         new Response(quotaControl.body, { status: quotaControl.status })
+      )
+    ),
+  };
+  return {
+    idFromName: vi.fn(() => 'mock-id' as unknown as DurableObjectId),
+    get: vi.fn(() => stub as unknown as DurableObjectStub),
+  } as unknown as DurableObjectNamespace;
+}
+
+function makeGlobalQuotaMockNamespace(): DurableObjectNamespace {
+  const stub = {
+    fetch: vi.fn(() =>
+      Promise.resolve(
+        new Response(globalQuotaControl.body, {
+          status: globalQuotaControl.status,
+        })
       )
     ),
   };
@@ -133,6 +154,8 @@ const mockEnv = {
   ALLOWED_OWNERS: 'clouatre-labs,clouatre,owner,myorg,unconfigured',
   SENTRY_DSN: '',
   QUOTA: makeMockQuotaNamespace(),
+  GLOBAL_QUOTA: makeGlobalQuotaMockNamespace(),
+  GLOBAL_QUOTA_LIMIT: '500',
 };
 
 async function callHandler(
@@ -1219,6 +1242,12 @@ describe('Quota check integration', () => {
       retryAfter: null,
     });
     quotaControl.status = 200;
+    globalQuotaControl.body = JSON.stringify({
+      count: 1,
+      exceeded: false,
+      retryAfter: null,
+    });
+    globalQuotaControl.status = 200;
   });
 
   it.each([
@@ -1319,6 +1348,112 @@ describe('Quota check integration', () => {
     });
     expect(response.status).toBe(500);
   });
+
+  it('returns 429 with global Retry-After when org-wide quota exceeded but per-installation is not', async () => {
+    globalQuotaControl.body = JSON.stringify({
+      count: 500,
+      exceeded: true,
+      retryAfter: 3600,
+    });
+    globalQuotaControl.status = 200;
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: {
+        full_name: 'owner/repo',
+        owner: { login: 'owner' },
+      },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Retry-After')).toBe('3600');
+
+    // No dispatch call should be made when global quota is exceeded
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(0);
+  });
+
+  it('returns 500 when global quota check fails (does not proceed to installation check)', async () => {
+    globalQuotaControl.status = 500;
+    globalQuotaControl.body = 'Internal Server Error';
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: {
+        full_name: 'owner/repo',
+        owner: { login: 'owner' },
+      },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(500);
+  });
+
+  it('falls back to default limit 500 when GLOBAL_QUOTA_LIMIT is missing or non-numeric', async () => {
+    const stub = {
+      fetch: vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              count: 1,
+              exceeded: false,
+              retryAfter: null,
+            }),
+            { status: 200 }
+          )
+        )
+      ),
+    };
+    const namespace = {
+      idFromName: vi.fn(() => 'mock-id' as unknown as DurableObjectId),
+      get: vi.fn(() => stub as unknown as DurableObjectStub),
+    } as unknown as DurableObjectNamespace;
+    const env = {
+      ...mockEnv,
+      GLOBAL_QUOTA_LIMIT: '',
+      GLOBAL_QUOTA: namespace,
+    };
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: {
+        full_name: 'owner/repo',
+        owner: { login: 'owner' },
+      },
+    });
+    const sig = sign(env.WEBHOOK_SECRET, body);
+    const response = await callHandler(
+      body,
+      {
+        'X-GitHub-Event': 'issues',
+        'X-Hub-Signature-256': sig,
+        'Content-Type': 'application/json',
+      },
+      env
+    );
+    expect(response.status).toBe(204);
+    const fetchCalls = stub.fetch.mock.calls as unknown as Array<
+      [Request, RequestInit]
+    >;
+    const sentBody = JSON.parse(fetchCalls[0]?.[1].body as string);
+    expect(sentBody.limit).toBe(500);
+  });
 });
 
 describe('mention commands', () => {
@@ -1350,6 +1485,12 @@ describe('mention commands', () => {
       retryAfter: null,
     });
     quotaControl.status = 200;
+    globalQuotaControl.body = JSON.stringify({
+      count: 1,
+      exceeded: false,
+      retryAfter: null,
+    });
+    globalQuotaControl.status = 200;
   });
 
   it('returns 200 OK without action when comment body does not contain @aptu', async () => {
