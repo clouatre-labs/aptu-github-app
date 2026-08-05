@@ -55,7 +55,9 @@ jobs:
       - name: Biome check
         run: bunx biome check .
       - name: Dependency audit
-        run: bun audit --audit-level high
+        # GHSA-r28c-9q8g-f849: postcss path traversal -- pinned by vite (vitest dep); devOnly, not deployed
+        # GHSA-4cwx-7wf7-3272: undici info disclosure -- pinned by miniflare (wrangler dep); devOnly, not deployed
+        run: bun audit --audit-level high --ignore GHSA-r28c-9q8g-f849 --ignore GHSA-4cwx-7wf7-3272
 
   typecheck:
     name: Type Check
