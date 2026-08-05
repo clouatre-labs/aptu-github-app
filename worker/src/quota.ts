@@ -134,8 +134,12 @@ export class GlobalQuota {
       const oldest = recent[0] as number;
       const retryAfter = Math.ceil((oldest + windowMs - now) / 1000);
 
-      // Persist pruned list even when exceeded to ensure cleanup on subsequent requests
-      await this.ctx.storage.put(key, { timestamps: recent });
+      // Only write if pruning removed stale timestamps (avoid no-op writes)
+      if (
+        recent.length !== (stored?.timestamps as number[] | undefined)?.length
+      ) {
+        await this.ctx.storage.put(key, { timestamps: recent });
+      }
 
       return Response.json({
         count: recent.length,
