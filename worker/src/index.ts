@@ -215,11 +215,7 @@ async function checkGlobalQuota(env: Env): Promise<Response | null> {
     quotaResponse = await stub.fetch('https://quota/quota', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        eventType: 'global',
-        installationId: 'global',
-        limit: finalLimit,
-      }),
+      body: JSON.stringify({ limit: finalLimit }),
     });
   } catch (error) {
     captureException(error, { tags: { eventType: 'global' } });
