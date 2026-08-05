@@ -35,7 +35,7 @@ jobs:
               - 'worker/**'
               - 'biome.json'
               - 'package.json'
-              - 'bun.lockb'
+              - 'bun.lock'
               - '.github/workflows/**'
 
   lint:
@@ -54,6 +54,9 @@ jobs:
         run: bun install
       - name: Biome check
         run: bunx biome check .
+      - name: Dependency audit
+        run: bun audit --audit-level high
+        continue-on-error: false
 
   typecheck:
     name: Type Check
