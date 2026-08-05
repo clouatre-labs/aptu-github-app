@@ -76,6 +76,34 @@ describe('InstallationQuota Durable Object', () => {
     expect(body.retryAfter).toBeGreaterThan(0);
   });
 
+  it('skips storage.put when exceeded and no timestamps were pruned', async () => {
+    const { InstallationQuota } = await import('./quota.js');
+    const ctx = makeMockCtx();
+    const now = Date.now();
+    const existingTimestamps = Array.from(
+      { length: 50 },
+      (_, i) => now - i * 60000
+    );
+    ctx.storage.get.mockResolvedValue({ timestamps: existingTimestamps });
+    const quota = new InstallationQuota(ctx as unknown as DurableObjectState);
+
+    const response = await quota.fetch(
+      new Request('https://quota/quota', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventType: 'triage', installationId: 1 }),
+      })
+    );
+    const body = (await response.json()) as {
+      count: number;
+      exceeded: boolean;
+      retryAfter: number | null;
+    };
+    expect(body.count).toBe(50);
+    expect(body.exceeded).toBe(true);
+    expect(ctx.storage.put).not.toHaveBeenCalled();
+  });
+
   it('requests older than 24h are not counted toward current window', async () => {
     const { InstallationQuota } = await import('./quota.js');
     const ctx = makeMockCtx();
