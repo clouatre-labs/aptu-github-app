@@ -33,7 +33,7 @@ jobs:
 
       - name: Run Aptu security scan
         id: scan
-        uses: clouatre-labs/aptu@53dfb497347709a8ca02a4bb593190d02a90128f # PR #1472 (scan fail-on + sarif-upload opt-out)
+        uses: clouatre-labs/aptu@022517fae7928dc418890fddc037a560c60b1101 # PR #1472 (scan fail-on + sarif-upload opt-out)
         with:
           github-token: ${{ github.event.client_payload.installation_token }}
           scan-path: ${{ github.event.client_payload.scan_path || '.' }}
