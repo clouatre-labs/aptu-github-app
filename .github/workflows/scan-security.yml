@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
+
+name: Scan Security
+
+on:
+  repository_dispatch:
+    types: [aptu-scan-security]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.client_payload.originating_repo }}-${{ github.event.client_payload.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    name: Scan Security
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Mask installation token
+        run: echo "::add-mask::${{ github.event.client_payload.installation_token }}"
+
+      - name: Checkout caller repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event.client_payload.originating_repo }}
+          ref: ${{ github.event.client_payload.head_sha }}
+          token: ${{ github.event.client_payload.installation_token }}
+
+      - name: Run Aptu security scan
+        id: scan
+        uses: clouatre-labs/aptu@022517fae7928dc418890fddc037a560c60b1101 # PR #1472 (scan fail-on + sarif-upload opt-out)
+        with:
+          github-token: ${{ github.event.client_payload.installation_token }}
+          scan-path: ${{ github.event.client_payload.scan_path || '.' }}
+          fail-on: ${{ github.event.client_payload.fail_on }}
+          sarif-upload: 'false'
+
+      - name: Upload SARIF to caller
+        if: always() && hashFiles('findings.sarif') != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.event.client_payload.installation_token }}
+        run: |
+          SARIF_B64="$(gzip -c findings.sarif | base64 -w0)"
+          gh api "repos/${{ github.event.client_payload.originating_repo }}/code-scanning/sarifs" \
+            --method POST \
+            -f "commit_sha=${{ github.event.client_payload.head_sha }}" \
+            -f "ref=refs/pull/${{ github.event.client_payload.pull_number }}/head" \
+            -f "sarif=$SARIF_B64"
+
+      - name: Report status to caller
+        if: always()
+        run: |
+          if [[ "${{ steps.scan.conclusion }}" == "success" ]]; then
+            STATE="success"
+            DESC="aptu security scan passed"
+          else
+            STATE="failure"
+            DESC="aptu security scan found issues"
+          fi
+          gh api "repos/${{ github.event.client_payload.originating_repo }}/statuses/${{ github.event.client_payload.head_sha }}" \
+            --method POST \
+            -f state="$STATE" \
+            -f context="aptu-scan-security" \
+            -f description="$DESC" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        env:
+          GH_TOKEN: ${{ github.event.client_payload.installation_token }}

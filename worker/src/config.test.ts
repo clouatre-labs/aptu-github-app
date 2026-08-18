@@ -130,6 +130,16 @@ describe('shouldDispatch', () => {
     const config = { version: 1, triage: { enabled: true } };
     expect(shouldDispatch(config, 'triage')).toBe(true);
   });
+
+  it('returns false for scan when scan block is missing', () => {
+    const config = { version: 1, triage: { enabled: true } };
+    expect(shouldDispatch(config, 'scan')).toBe(false);
+  });
+
+  it('returns true for scan when scan.enabled is true', () => {
+    const config = { version: 1, scan: { enabled: true } };
+    expect(shouldDispatch(config, 'scan')).toBe(true);
+  });
 });
 
 describe('parseConfig path_filters', () => {
@@ -162,6 +172,49 @@ describe('parseConfig path_filters', () => {
     const raw = btoa(
       'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\npath_filters:\n  - 42\n  - src/**'
     );
+    expect(parseConfig(raw)).toBeNull();
+  });
+});
+
+describe('parseConfig scan', () => {
+  it('parses scan block with only enabled', () => {
+    const raw = btoa(
+      'version: 1\ntriage:\n  enabled: true\nscan:\n  enabled: true'
+    );
+    const config = parseConfig(raw);
+    expect(config).not.toBeNull();
+    expect(config?.scan).toEqual({ enabled: true });
+  });
+
+  it('parses scan block with optional fail-on and path', () => {
+    const raw = btoa(
+      'version: 1\ntriage:\n  enabled: true\nscan:\n  enabled: true\n  fail-on: critical,high\n  path: src/'
+    );
+    const config = parseConfig(raw);
+    expect(config).not.toBeNull();
+    expect(config?.scan).toEqual({
+      enabled: true,
+      'fail-on': 'critical,high',
+      path: 'src/',
+    });
+  });
+
+  it('returns null when scan.enabled is a non-boolean string', () => {
+    const raw = btoa(
+      'version: 1\ntriage:\n  enabled: true\nscan:\n  enabled: "yes"'
+    );
+    expect(parseConfig(raw)).toBeNull();
+  });
+
+  it('returns null when scan.enabled is missing from scan block', () => {
+    const raw = btoa(
+      'version: 1\ntriage:\n  enabled: true\nscan:\n  path: src/'
+    );
+    expect(parseConfig(raw)).toBeNull();
+  });
+
+  it('returns null when scan block is not an object', () => {
+    const raw = btoa('version: 1\ntriage:\n  enabled: true\nscan: "yes"');
     expect(parseConfig(raw)).toBeNull();
   });
 });
