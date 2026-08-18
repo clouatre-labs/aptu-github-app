@@ -1873,3 +1873,124 @@ describe('Sentry integration', () => {
     expect(typeof handler.fetch).toBe('function');
   });
 });
+
+describe('scan dispatch', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const { createAppAuth } = await import('@octokit/auth-app');
+    // biome-ignore lint/suspicious/noExplicitAny: restoring the mocked auth factory
+    (createAppAuth as any).mockImplementation(() =>
+      vi.fn().mockResolvedValue({ token: 'mock-installation-token' })
+    );
+  });
+
+  function mockConfig(yaml: string) {
+    fetchSpy.mockImplementation((url: unknown) => {
+      const urlStr =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.href
+            : (url as Request).url;
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(makeConfigResponse(yaml));
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+  }
+
+  it('dispatches aptu-scan-security alongside aptu-review when scan.enabled is true', async () => {
+    mockConfig(
+      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nscan:\n  enabled: true\n  fail-on: critical,high\n  path: src/'
+    );
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: { number: 10, title: 'Scan test', head: { sha: 'abc123' } },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(2);
+    const scanCall = dispatchCalls[1] as [string, RequestInit];
+    const parsed = JSON.parse(scanCall[1].body as string);
+    expect(parsed.event_type).toBe('aptu-scan-security');
+    expect(parsed.client_payload).toMatchObject({
+      installation_token: 'mock-installation-token',
+      originating_repo: 'owner/repo',
+      head_sha: 'abc123',
+      pull_number: 10,
+      scan_path: 'src/',
+      fail_on: 'critical,high',
+    });
+  });
+
+  it('does not dispatch aptu-scan-security when scan.enabled is false', async () => {
+    mockConfig(
+      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nscan:\n  enabled: false'
+    );
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: { number: 11, title: 'No scan', head: { sha: 'def456' } },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
+    const parsed = JSON.parse(
+      (dispatchCalls[0] as [string, RequestInit])[1].body as string
+    );
+    expect(parsed.event_type).toBe('aptu-review');
+  });
+
+  it('dispatches only aptu-scan-security when review.enabled is false but scan.enabled is true', async () => {
+    mockConfig(
+      'version: 1\ntriage:\n  enabled: false\nreview:\n  enabled: false\nscan:\n  enabled: true'
+    );
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: { number: 12, title: 'Scan only', head: { sha: 'ghi789' } },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
+    const parsed = JSON.parse(
+      (dispatchCalls[0] as [string, RequestInit])[1].body as string
+    );
+    expect(parsed.event_type).toBe('aptu-scan-security');
+  });
+});

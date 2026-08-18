@@ -490,7 +490,11 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         return new Response('Internal Server Error', { status: 500 });
       }
 
-      const pr = payload.pull_request as { number: number; title: string };
+      const pr = payload.pull_request as {
+        number: number;
+        title: string;
+        head: { sha: string };
+      };
 
       const owner = repo.split('/')[0] ?? '';
       const repoName = repo.split('/')[1] ?? '';
@@ -504,16 +508,19 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         config = null;
       }
 
-      const shouldSkip = await shouldSkipPrDispatch(
+      const reviewWouldSkip = await shouldSkipPrDispatch(
         repo,
         pr.number,
         token,
         config
       );
-      if (shouldSkip) return new Response(null, { status: 204 });
+      const shouldReview = shouldDispatch(config, 'review') && !reviewWouldSkip;
+      const shouldScan = shouldDispatch(config, 'scan');
 
-      if (!shouldDispatch(config, 'review'))
-        return new Response('OK', { status: 200 });
+      if (!shouldReview && !shouldScan)
+        return new Response(reviewWouldSkip ? null : 'OK', {
+          status: reviewWouldSkip ? 204 : 200,
+        });
 
       const targetRepoName = env.TARGET_REPO.split('/')[1] ?? '';
       let dispatchToken: string;
@@ -529,29 +536,59 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         return new Response('Internal Server Error', { status: 500 });
       }
 
-      try {
-        await dispatchEvent(dispatchToken, env.TARGET_REPO, 'aptu-review', {
-          installation_token: token,
-          originating_repo: repo,
-          pull_number: pr.number,
-          pull_title: pr.title,
-          instructions_file: config?.review?.['instructions-file'] ?? null,
-          skip_labeled: config?.review?.['skip-labeled'] ?? false,
-          ...(config?.ai
-            ? {
-                ai_provider: config.ai.provider,
-                ai_model: config.ai.model,
-                ai_key_secret: config.ai['api-key-secret'],
-              }
-            : {}),
-        });
-      } catch (error) {
-        captureException(error, { tags: { eventType: 'pull_request', repo } });
-        console.error(
-          `Failed to dispatch aptu-review event for ${repo}:`,
-          error
-        );
-        return new Response('Internal Server Error', { status: 500 });
+      if (shouldReview) {
+        try {
+          await dispatchEvent(dispatchToken, env.TARGET_REPO, 'aptu-review', {
+            installation_token: token,
+            originating_repo: repo,
+            pull_number: pr.number,
+            pull_title: pr.title,
+            instructions_file: config?.review?.['instructions-file'] ?? null,
+            skip_labeled: config?.review?.['skip-labeled'] ?? false,
+            ...(config?.ai
+              ? {
+                  ai_provider: config.ai.provider,
+                  ai_model: config.ai.model,
+                  ai_key_secret: config.ai['api-key-secret'],
+                }
+              : {}),
+          });
+        } catch (error) {
+          captureException(error, {
+            tags: { eventType: 'pull_request', repo },
+          });
+          console.error(
+            `Failed to dispatch aptu-review event for ${repo}:`,
+            error
+          );
+          return new Response('Internal Server Error', { status: 500 });
+        }
+      }
+
+      if (shouldScan) {
+        try {
+          await dispatchEvent(
+            dispatchToken,
+            env.TARGET_REPO,
+            'aptu-scan-security',
+            {
+              installation_token: token,
+              originating_repo: repo,
+              head_sha: pr.head.sha,
+              pull_number: pr.number,
+              scan_path: config?.scan?.path ?? '.',
+              fail_on: config?.scan?.['fail-on'] ?? null,
+            }
+          );
+        } catch (error) {
+          captureException(error, {
+            tags: { eventType: 'pull_request', repo },
+          });
+          console.error(
+            `Failed to dispatch aptu-scan-security event for ${repo}:`,
+            error
+          );
+        }
       }
 
       return new Response(null, { status: 204 });

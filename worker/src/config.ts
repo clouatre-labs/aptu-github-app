@@ -12,6 +12,12 @@ export interface AiConfig {
   'api-key-secret': string;
 }
 
+export interface ScanConfig {
+  enabled: boolean;
+  'fail-on'?: string;
+  path?: string;
+}
+
 export interface AptuConfig {
   version: number;
   triage?: { enabled: boolean };
@@ -20,6 +26,7 @@ export interface AptuConfig {
     'skip-labeled'?: boolean;
     'instructions-file'?: string;
   };
+  scan?: ScanConfig;
   ai?: AiConfig;
   path_filters?: string[];
 }
@@ -101,6 +108,23 @@ export function parseConfig(raw: string): AptuConfig | null {
       }
     }
 
+    if (parsed.scan !== undefined) {
+      if (typeof parsed.scan !== 'object' || parsed.scan === null) {
+        return null;
+      }
+      const scanObj = parsed.scan as Record<string, unknown>;
+      if (typeof scanObj.enabled !== 'boolean') {
+        return null;
+      }
+      config.scan = { enabled: scanObj.enabled };
+      if (typeof scanObj['fail-on'] === 'string') {
+        config.scan['fail-on'] = scanObj['fail-on'];
+      }
+      if (typeof scanObj.path === 'string') {
+        config.scan.path = scanObj.path;
+      }
+    }
+
     if (parsed.ai !== undefined) {
       if (typeof parsed.ai !== 'object' || parsed.ai === null) {
         return null;
@@ -142,7 +166,7 @@ export function parseConfig(raw: string): AptuConfig | null {
 
 export function shouldDispatch(
   config: AptuConfig | null,
-  feature: 'triage' | 'review'
+  feature: 'triage' | 'review' | 'scan'
 ): boolean {
   if (config === null) {
     return false;
