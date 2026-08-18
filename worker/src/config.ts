@@ -25,10 +25,10 @@ export interface AptuConfig {
     enabled: boolean;
     'skip-labeled'?: boolean;
     'instructions-file'?: string;
+    paths?: string[];
   };
   scan?: ScanConfig;
   ai?: AiConfig;
-  path_filters?: string[];
 }
 
 export const AI_KEY_SECRET_PATTERN = /^[A-Z0-9_]+$/;
@@ -106,6 +106,16 @@ export function parseConfig(raw: string): AptuConfig | null {
       if (typeof reviewObj['instructions-file'] === 'string') {
         config.review['instructions-file'] = reviewObj['instructions-file'];
       }
+      if (reviewObj.paths !== undefined) {
+        if (!Array.isArray(reviewObj.paths)) {
+          return null;
+        }
+        const paths = reviewObj.paths as unknown[];
+        if (!paths.every((p): p is string => typeof p === 'string')) {
+          return null;
+        }
+        config.review.paths = paths as string[];
+      }
     }
 
     if (parsed.scan !== undefined) {
@@ -145,17 +155,6 @@ export function parseConfig(raw: string): AptuConfig | null {
         model: aiObj.model,
         'api-key-secret': aiObj['api-key-secret'],
       };
-    }
-
-    if (parsed.path_filters !== undefined) {
-      if (!Array.isArray(parsed.path_filters)) {
-        return null;
-      }
-      const paths = parsed.path_filters as unknown[];
-      if (!paths.every((p): p is string => typeof p === 'string')) {
-        return null;
-      }
-      config.path_filters = paths as string[];
     }
 
     return config;

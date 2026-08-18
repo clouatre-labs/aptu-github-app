@@ -500,14 +500,14 @@ describe('path filter config', () => {
     fetchSpy = vi.spyOn(globalThis, 'fetch');
   });
 
-  it('returns 204 without dispatch when all PR files match path_filters patterns (skip)', async () => {
-    // Mock config fetch - aptu.yml with path_filters
+  it('returns 204 without dispatch when all PR files match review.paths patterns (skip)', async () => {
+    // Mock config fetch - aptu.yml with review.paths
     fetchSpy.mockResolvedValueOnce(
       makeConfigResponse(
-        'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\npath_filters:\n  - "src/data/**"'
+        'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\n  paths:\n    - "src/data/**"'
       )
     );
-    // Mock PR files fetch - all files match path_filters
+    // Mock PR files fetch - all files match review.paths
     fetchSpy.mockResolvedValueOnce(
       new Response(
         JSON.stringify([
@@ -547,11 +547,11 @@ describe('path filter config', () => {
     expect(dispatchCalls.length).toBe(0);
   });
 
-  it('returns 204 and dispatches when one file does not match path_filters patterns (partial match)', async () => {
-    // Mock config fetch - includes path_filters in aptu.yml
+  it('returns 204 and dispatches when one file does not match review.paths patterns (partial match)', async () => {
+    // Mock config fetch - includes review.paths in aptu.yml
     fetchSpy.mockResolvedValueOnce(
       makeConfigResponse(
-        'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\npath_filters:\n  - "src/data/**"'
+        'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\n  paths:\n    - "src/data/**"'
       )
     );
     // Mock PR files fetch - one file doesn't match
@@ -590,8 +590,8 @@ describe('path filter config', () => {
     expect(dispatchCalls.length).toBe(1);
   });
 
-  it('returns 204 and dispatches when aptuConfig has no path_filters field', async () => {
-    // Mock config fetch - no path_filters
+  it('returns 204 and dispatches when aptuConfig has no review.paths field', async () => {
+    // Mock config fetch - no review.paths
     fetchSpy.mockResolvedValueOnce(
       makeConfigResponse(
         'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true'
@@ -627,11 +627,11 @@ describe('path filter config', () => {
     expect(dispatchCalls.length).toBe(1);
   });
 
-  it('returns 204 and dispatches on GitHub PR-files API failure when path_filters are configured (error-resilient contract)', async () => {
-    // Mock config fetch - has path_filters
+  it('returns 204 and dispatches on GitHub PR-files API failure when review.paths are configured (error-resilient contract)', async () => {
+    // Mock config fetch - has review.paths
     fetchSpy.mockResolvedValueOnce(
       makeConfigResponse(
-        'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\npath_filters:\n  - "docs/**"'
+        'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\n  paths:\n    - "docs/**"'
       )
     );
     // Mock PR files fetch failure
@@ -1195,7 +1195,7 @@ describe('shouldSkipPrDispatch direct unit tests', () => {
     fetchSpy = vi.spyOn(globalThis, 'fetch');
   });
 
-  it('returns true (skip) when all PR files match path_filters exclude patterns', async () => {
+  it('returns true (skip) when all PR files match review.paths exclude patterns', async () => {
     fetchSpy.mockResolvedValueOnce(
       new Response(
         JSON.stringify([
@@ -1210,12 +1210,12 @@ describe('shouldSkipPrDispatch direct unit tests', () => {
       'clouatre-labs/clouatre.ca',
       42,
       'mock-token',
-      { version: 1, path_filters: ['!docs/**'] }
+      { version: 1, review: { enabled: true, paths: ['!docs/**'] } }
     );
     expect(result).toBe(true);
   });
 
-  it('returns false (dispatch) when aptuConfig has no path_filters, without triggering a PR files fetch', async () => {
+  it('returns false (dispatch) when aptuConfig has no review.paths, without triggering a PR files fetch', async () => {
     const { shouldSkipPrDispatch } = await import('./index.js');
     const result = await shouldSkipPrDispatch(
       'clouatre-labs/clouatre.ca',

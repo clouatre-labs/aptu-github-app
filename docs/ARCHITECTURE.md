@@ -24,7 +24,7 @@ installation. Responsibilities:
 - Fetch and validate `.github/aptu.yml` from the originating repository (5-second timeout;
   no dispatch if absent or invalid)
 - Check the `ALLOWED_OWNERS` allowlist -- hard 403 gate on repository.owner.login
-- Evaluate `path_filters` globs (picomatch) against PR file lists; suppress dispatch if no
+- Evaluate `review.paths` globs (picomatch) against PR file lists; suppress dispatch if no
   file qualifies
 - Obtain a scoped dispatch token for `TARGET_REPO`
 - POST a `repository_dispatch` event to `TARGET_REPO`, carrying all context in
@@ -86,7 +86,7 @@ graph TD
     G --> H["Fetch .github/aptu.yml<br/>GitHub Contents API"]
     H --> I{"Config valid<br/>and feature enabled?"}
     I -->|No| J["200 OK / no dispatch"]
-    I -->|Yes| K{"path_filters<br/>match all PR files?"}
+    I -->|Yes| K{"review.paths<br/>match all PR files?"}
     K -->|Yes| J
     K -->|No| L["Get dispatch token<br/>scoped to TARGET_REPO"]
     L --> M["POST repository_dispatch<br/>to clouatre-labs/aptu-github-app"]
@@ -161,15 +161,11 @@ review:
   enabled: true
   instructions-file: .github/instructions/pr-review.md  # optional
   skip-labeled: false                                     # optional
+  paths:                                          # optional; suppress PR review when no file qualifies
+    - "src/**"                                    # bare patterns are includes
+    - "!src/data/**"                              # '!'-prefixed patterns are excludes
 
 ai:                          # required
-  provider: gemini
-  model: gemini-3.1-flash-lite
-  api-key-secret: GEMINI_API_KEY  # name of a secret in the originating repo
-
-path_filters:               # optional; suppress review when no file qualifies
-  - "src/**"                # bare patterns are includes
-  - "!src/data/**"          # '!'-prefixed patterns are excludes
 ```
 
 `ai.api-key-secret` is the name of a GitHub Actions secret in the originating repository.
@@ -194,7 +190,7 @@ logged.
 | Caller AI keys | Secret name only crosses the boundary; value resolved inside GitHub Actions |
 | Config validation | Strict field-level validation; unknown keys ignored; partial blocks rejected |
 | Self-mention loop | `APTU_BOT_ID` check prevents the bot from triggering itself via `@aptu` |
-| Path filtering | `path_filters` evaluated against full PR file list before dispatch |
+| Path filtering | `review.paths` evaluated against full PR file list before dispatch |
 
 ## Key Abstractions
 
@@ -214,10 +210,10 @@ Returns a `Response` to short-circuit the handler if either quota is exceeded or
 
 ### `shouldSkipPrDispatch`
 
-Fetches the PR file list from the GitHub API and applies `path_filters` patterns using
+Fetches the PR file list from the GitHub API and applies `review.paths` patterns using
 `shouldSkipByPathFilters` (picomatch `isMatch`). Returns `true` (skip) only when no file
 in the PR qualifies for review: a file qualifies when it matches an include pattern (if any
-includes are configured) and does not match any exclude pattern. With no `path_filters`, it
+includes are configured) and does not match any exclude pattern. With no `review.paths`, it
 returns `false` immediately without an HTTP call.
 
 ### `handleMentionCommand`

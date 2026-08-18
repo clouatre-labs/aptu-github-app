@@ -40,15 +40,14 @@ triage:
 review:
   enabled: true                                   # required if review block present
   instructions-file: .github/instructions/pr-review.md  # optional; path in the target repo
+  paths:                                          # optional; suppress PR review when no file qualifies
+    - "src/**"                                    # bare patterns are includes
+    - "!src/data/**"                              # '!'-prefixed patterns are excludes
 
 ai:
   provider: gemini                                # required if ai block present
   model: gemini-3.1-flash-lite                    # required if ai block present
   api-key-secret: GEMINI_API_KEY                  # required; name of GitHub Actions secret
-
-path_filters:                                    # optional; suppress PR review when no file qualifies
-  - "src/**"                                     # bare patterns are includes
-  - "!src/data/**"                               # '!'-prefixed patterns are excludes
 ```
 
 All fields under `triage`, `review`, and `ai` are validated strictly: unknown keys are ignored,
@@ -65,10 +64,10 @@ rejected.
 | `review.enabled` | boolean | -- | Dispatch `aptu-review` on `pull_request` opened/synchronize/reopened events. |
 | `review.instructions-file` | string | `.github/instructions/pr-review.md` | Path to PR review instructions file, relative to the target repo root. Passed to aptu as `--instructions-file`. |
 | `review.skip-labeled` | boolean | `false` | Skip dispatch when the PR already carries a label. Passed to aptu as `--skip-labeled`. |
+| `review.paths` | string[] | -- | Glob patterns (picomatch) evaluated against the full PR file list. Bare patterns are includes; `!`-prefixed patterns are excludes. A PR is dispatched if at least one file qualifies (matches an include when includes are present, and matches no exclude). If no file qualifies, the review dispatch is suppressed. |
 | `ai.provider` | string | -- | AI provider name passed to aptu as `--provider`. Required if `ai` block present. |
 | `ai.model` | string | -- | AI model name passed to aptu as `--model`. Required if `ai` block present. |
 | `ai.api-key-secret` | string | -- | Name of a GitHub Actions secret in the caller's repository containing the API key. Required if `ai` block present. Must match `^[A-Z0-9_]+$`. |
-| `path_filters` | string[] | -- | Glob patterns (picomatch) evaluated against the full PR file list. Bare patterns are includes; `!`-prefixed patterns are excludes. A PR is dispatched if at least one file qualifies (matches an include when includes are present, and matches no exclude). If no file qualifies, the review dispatch is suppressed. |
 
 ### Minimal opt-in example
 
