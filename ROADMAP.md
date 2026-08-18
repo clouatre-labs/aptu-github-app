@@ -47,6 +47,8 @@ Milestone: [Phase 3: Public Release](https://github.com/clouatre-labs/aptu-githu
 - [x] Caller-supplied AI keys: add `ai` block to `.github/aptu.yml` schema; thread through dispatch payload (#34)
 - [x] Move `review.paths` into `.github/aptu.yml` (include and `!`-exclude globs); remove
   `config/repos.json` path filter data entirely (#33)
+- [x] Security scanning: `scan` block in `.github/aptu.yml` with `scan-security` workflow; local
+  pattern-based secret detection with SARIF upload and commit status reporting
 - [ ] Per-installation quota and rate limiting via Cloudflare Durable Objects (not KV -- see #29 comments) (#29)
 - [ ] Landing page at aptu.dev (Astro + Tailwind, Cloudflare Pages) (#2)
 - [ ] Remove or graduate `ALLOWED_OWNERS` allowlist once quota controls and caller-supplied keys are in place

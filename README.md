@@ -7,7 +7,7 @@ webhook signatures, reads each repository's `.github/aptu.yml` opt-in config, an
 
 ## Architecture
 
-```
+```text
 GitHub event (issues.opened / pull_request.opened|synchronize|reopened)
   -> Cloudflare Worker
        1. Verify X-Hub-Signature-256
@@ -50,7 +50,24 @@ ai:
   api-key-secret: GEMINI_API_KEY                  # required; name of GitHub Actions secret
 ```
 
-All fields under `triage`, `review`, and `ai` are validated strictly: unknown keys are ignored,
+### Scan configuration
+
+The `scan` block enables aptu's local pattern-based security scanning. Scan runs
+without an AI provider -- no `ai` block is required. When enabled, pull requests
+are scanned for hardcoded secrets and other security anti-patterns, and results
+are uploaded as SARIF code scanning alerts.
+
+```yaml
+scan:
+  enabled: true                                   # required if scan block present
+  fail-on: warning                                # optional: "none" (default), "warning", or "error"
+  path: "**/*.{py,ts,js,rs}"                      # optional: glob pattern limiting scan to matching files
+```
+
+If `fail-on` is `warning`, the scan posts a failing commit status on any finding
+(including `warning`-severity matches). If `error`, only `error`-severity matches fail the build.
+
+All fields under `triage`, `review`, `scan`, and `ai` are validated strictly: unknown keys are ignored,
 but a missing `enabled` boolean causes the entire config to be rejected (no dispatch). All three
 `ai` fields are required if the `ai` block is present; a partial or empty-string block is
 rejected.
@@ -58,7 +75,7 @@ rejected.
 ### Field reference
 
 | Field | Type | Default | Description |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `version` | integer | -- | Config schema version. Must be `1`. |
 | `triage.enabled` | boolean | -- | Dispatch `aptu-triage` on `issues.opened` events. |
 | `review.enabled` | boolean | -- | Dispatch `aptu-review` on `pull_request` opened/synchronize/reopened events. |
@@ -68,6 +85,9 @@ rejected.
 | `ai.provider` | string | -- | AI provider name passed to aptu as `--provider`. Required if `ai` block present. |
 | `ai.model` | string | -- | AI model name passed to aptu as `--model`. Required if `ai` block present. |
 | `ai.api-key-secret` | string | -- | Name of a GitHub Actions secret in the caller's repository containing the API key. Required if `ai` block present. Must match `^[A-Z0-9_]+$`. |
+| `scan.enabled` | boolean | `false` | Enable aptu scan-security on pull requests. When enabled, runs local pattern-based secret scanning and uploads SARIF results to GitHub Code Scanning. No `ai` block required. |
+| `scan.fail-on` | string | `none` | When the scan should fail the check. `none`: report only; `warning`: fail on any finding; `error`: fail only on error-severity matches. |
+| `scan.path` | string | `**/*` | Glob pattern limiting scan to matching files (e.g., `**/*.{py,ts,js,rs}`). |
 
 ### Minimal opt-in example
 
@@ -127,7 +147,7 @@ Add the following record in the Cloudflare dashboard under the `aptu.dev` zone b
 after the first deploy:
 
 | Type | Name | Content | Proxied |
-|------|------|---------|---------|
+| ------ | ------ | --------- | ------- |
 | AAAA | aptu.dev | `100::` | Yes |
 
 `100::` is the [Cloudflare-documented placeholder](https://developers.cloudflare.com/workers/configuration/routing/routes/)
