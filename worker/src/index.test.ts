@@ -58,6 +58,26 @@ function makeGlobalQuotaMockNamespace(): DurableObjectNamespace {
   } as unknown as DurableObjectNamespace;
 }
 
+function makeReplayGuardMockNamespace(): DurableObjectNamespace {
+  const stored = new Set<string>();
+  const stub = {
+    fetch: vi.fn((_input: string, init?: RequestInit) => {
+      const { deliveryId } = JSON.parse((init?.body as string) ?? '{}') as {
+        deliveryId: string;
+      };
+      if (stored.has(deliveryId)) {
+        return Promise.resolve(new Response(null, { status: 409 }));
+      }
+      stored.add(deliveryId);
+      return Promise.resolve(new Response(null, { status: 200 }));
+    }),
+  };
+  return {
+    idFromName: vi.fn(() => 'mock-id' as unknown as DurableObjectId),
+    get: vi.fn(() => stub as unknown as DurableObjectStub),
+  } as unknown as DurableObjectNamespace;
+}
+
 function sign(secret: string, body: string): string {
   return `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
 }
@@ -156,6 +176,7 @@ const mockEnv = {
   QUOTA: makeMockQuotaNamespace(),
   GLOBAL_QUOTA: makeGlobalQuotaMockNamespace(),
   GLOBAL_QUOTA_LIMIT: '500',
+  REPLAY_GUARD: makeReplayGuardMockNamespace(),
 };
 
 async function callHandler(
@@ -408,7 +429,7 @@ describe('token generation', () => {
     fetchSpy.mockImplementation(mockEnabledFetch());
   });
 
-  it('createAppAuth receives APP_ID and APP_PRIVATE_KEY from env and requests installation token', async () => {
+  it('createAppAuth receives APP_ID and APP_PRIVATE_KEY from env and requests scoped installation token', async () => {
     const { createAppAuth } = await import('@octokit/auth-app');
     const body = JSON.stringify({
       action: 'opened',
@@ -430,10 +451,14 @@ describe('token generation', () => {
     const authFn = mockedCreateAppAuth.mock.results[0]?.value as ReturnType<
       typeof vi.fn
     >;
-    expect(authFn).toHaveBeenCalledWith({
-      type: 'installation',
-      installationId: 55,
-    });
+    expect(authFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'installation',
+        installationId: 55,
+        repositoryNames: ['owner/repo'],
+        permissions: { contents: 'read', pull_requests: 'read' },
+      })
+    );
   });
 });
 
@@ -1992,5 +2017,356 @@ describe('scan dispatch', () => {
       (dispatchCalls[0] as [string, RequestInit])[1].body as string
     );
     expect(parsed.event_type).toBe('aptu-scan-security');
+  });
+});
+
+describe('scoped token helpers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('getConfigToken passes repositoryNames and { contents:read, pull_requests:read } to auth', async () => {
+    const { createAppAuth } = await import('@octokit/auth-app');
+    const { getConfigToken } = await import('./index.js');
+
+    await getConfigToken(mockEnv, 1, 'owner/repo');
+
+    const mockedCreateAppAuth = createAppAuth as ReturnType<typeof vi.fn>;
+    const authFn = mockedCreateAppAuth.mock.results[0]?.value as ReturnType<
+      typeof vi.fn
+    >;
+    expect(authFn).toHaveBeenCalledWith({
+      type: 'installation',
+      installationId: 1,
+      repositoryNames: ['owner/repo'],
+      permissions: { contents: 'read', pull_requests: 'read' },
+    });
+  });
+
+  it('getTriageToken passes repositoryNames and { contents:read, issues:read, issues:write } to auth', async () => {
+    const { createAppAuth } = await import('@octokit/auth-app');
+    const { getTriageToken } = await import('./index.js');
+
+    await getTriageToken(mockEnv, 2, 'owner/repo');
+
+    const mockedCreateAppAuth = createAppAuth as ReturnType<typeof vi.fn>;
+    const authFn = mockedCreateAppAuth.mock.results[0]?.value as ReturnType<
+      typeof vi.fn
+    >;
+    expect(authFn).toHaveBeenCalledWith({
+      type: 'installation',
+      installationId: 2,
+      repositoryNames: ['owner/repo'],
+      permissions: Object.fromEntries([
+        ['contents', 'read'],
+        ['issues', 'read'],
+        ['issues', 'write'],
+      ]),
+    });
+  });
+
+  it('getReviewToken passes repositoryNames and { contents:read, pull_requests:read, pull_requests:write } to auth', async () => {
+    const { createAppAuth } = await import('@octokit/auth-app');
+    const { getReviewToken } = await import('./index.js');
+
+    await getReviewToken(mockEnv, 3, 'owner/repo');
+
+    const mockedCreateAppAuth = createAppAuth as ReturnType<typeof vi.fn>;
+    const authFn = mockedCreateAppAuth.mock.results[0]?.value as ReturnType<
+      typeof vi.fn
+    >;
+    expect(authFn).toHaveBeenCalledWith({
+      type: 'installation',
+      installationId: 3,
+      repositoryNames: ['owner/repo'],
+      permissions: Object.fromEntries([
+        ['contents', 'read'],
+        ['pull_requests', 'read'],
+        ['pull_requests', 'write'],
+      ]),
+    });
+  });
+
+  it('getScanToken passes repositoryNames and { contents:read, security_events:write, statuses:write } to auth', async () => {
+    const { createAppAuth } = await import('@octokit/auth-app');
+    const { getScanToken } = await import('./index.js');
+
+    await getScanToken(mockEnv, 4, 'owner/repo');
+
+    const mockedCreateAppAuth = createAppAuth as ReturnType<typeof vi.fn>;
+    const authFn = mockedCreateAppAuth.mock.results[0]?.value as ReturnType<
+      typeof vi.fn
+    >;
+    expect(authFn).toHaveBeenCalledWith({
+      type: 'installation',
+      installationId: 4,
+      repositoryNames: ['owner/repo'],
+      permissions: {
+        contents: 'read',
+        security_events: 'write',
+        statuses: 'write',
+      },
+    });
+  });
+
+  it('getDispatchToken passes repositoryNames and { contents:write } to auth', async () => {
+    const { createAppAuth } = await import('@octokit/auth-app');
+    const { getDispatchToken } = await import('./index.js');
+
+    await getDispatchToken(mockEnv, 5, 'target-repo');
+
+    const mockedCreateAppAuth = createAppAuth as ReturnType<typeof vi.fn>;
+    const authFn = mockedCreateAppAuth.mock.results[0]?.value as ReturnType<
+      typeof vi.fn
+    >;
+    expect(authFn).toHaveBeenCalledWith({
+      type: 'installation',
+      installationId: 5,
+      repositoryNames: ['target-repo'],
+      permissions: { contents: 'write' },
+    });
+  });
+
+  it('getInstallationToken passes repositoryNames and object-shaped permissions map to auth', async () => {
+    const { createAppAuth } = await import('@octokit/auth-app');
+    const { getInstallationToken } = await import('./index.js');
+
+    await getInstallationToken(mockEnv, 6, {
+      repositoryNames: ['a', 'b'],
+      permissions: { contents: 'read', issues: 'write' },
+    });
+
+    const mockedCreateAppAuth = createAppAuth as ReturnType<typeof vi.fn>;
+    const authFn = mockedCreateAppAuth.mock.results[0]?.value as ReturnType<
+      typeof vi.fn
+    >;
+    expect(authFn).toHaveBeenCalledWith({
+      type: 'installation',
+      installationId: 6,
+      repositoryNames: ['a', 'b'],
+      permissions: { contents: 'read', issues: 'write' },
+    });
+  });
+});
+
+describe('replay guard', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockImplementation(mockEnabledFetch());
+  });
+
+  it('rejects a repeated X-GitHub-Delivery ID with 202 and does not dispatch', async () => {
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const headers = {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'X-GitHub-Delivery': 'dup-123',
+      'Content-Type': 'application/json',
+    };
+
+    // First request: should succeed
+    const r1 = await callHandler(body, headers);
+    expect(r1.status).toBe(204);
+
+    // Second request with same delivery ID: should be rejected
+    const r2 = await callHandler(body, headers);
+    expect(r2.status).toBe(202);
+
+    // Only one dispatch should have occurred
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
+  });
+
+  it('handles absent delivery ID by proceeding without dedup', async () => {
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(204);
+  });
+
+  it('handles empty delivery ID by proceeding without dedup', async () => {
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'X-GitHub-Delivery': '   ',
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(204);
+  });
+
+  it('handles malformed delivery ID by logging a warning and proceeding without dedup', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'X-GitHub-Delivery': 'malformed!@#',
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(204);
+    expect(warnSpy).toHaveBeenCalledWith(
+      'X-GitHub-Delivery header contains malformed delivery ID, proceeding without replay dedup'
+    );
+    warnSpy.mockRestore();
+  });
+});
+
+describe('IP validation', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const { __resetIpCache } = await import('./index.js');
+    __resetIpCache();
+  });
+
+  it('accepts a request from a known GitHub hook IP', async () => {
+    // Mock /meta to return a known hook CIDR
+    fetchSpy.mockImplementation((url: unknown) => {
+      const urlStr =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.href
+            : (url as Request).url;
+      if (urlStr.includes('api.github.com/meta')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ hooks: ['192.30.252.0/22', '140.82.112.0/20'] }),
+            { status: 200 }
+          )
+        );
+      }
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(
+          makeConfigResponse(
+            'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true'
+          )
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'X-GitHub-Delivery': 'ip-test-1',
+      'CF-Connecting-IP': '192.30.252.5',
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(204);
+  });
+
+  it('rejects a request from an IP outside the GitHub hooks list', async () => {
+    fetchSpy.mockImplementation((url: unknown) => {
+      const urlStr =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.href
+            : (url as Request).url;
+      if (urlStr.includes('api.github.com/meta')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ hooks: ['192.30.252.0/22'] }), {
+            status: 200,
+          })
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'X-GitHub-Delivery': 'ip-test-2',
+      'CF-Connecting-IP': '10.0.0.1',
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it('proceeds normally (fail-open) when /meta is unavailable', async () => {
+    fetchSpy.mockImplementation((url: unknown) => {
+      const urlStr =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.href
+            : (url as Request).url;
+      if (urlStr.includes('api.github.com/meta')) {
+        return Promise.resolve(
+          new Response('Service Unavailable', { status: 503 })
+        );
+      }
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(
+          makeConfigResponse(
+            'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true'
+          )
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'X-GitHub-Delivery': 'ip-test-3',
+      'CF-Connecting-IP': '10.0.0.1',
+      'Content-Type': 'application/json',
+    });
+    // Fail-open: should proceed despite unknown IP when /meta is down
+    expect(response.status).toBe(204);
   });
 });

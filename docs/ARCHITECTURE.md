@@ -18,9 +18,14 @@ Deployed to `aptu.dev/webhook`. Receives every GitHub webhook event delivered by
 installation. Responsibilities:
 
 - Validate the `X-Hub-Signature-256` HMAC signature using the Web Crypto API
+- Deduplicate replay deliveries via the `ReplayGuard` Durable Object (atomic check-and-record
+  of `X-GitHub-Delivery`; returns 202 on duplicate)
+- Validate the source IP against GitHub's published webhook IP ranges (fail-open; cached for
+  3600 seconds)
 - Enforce per-installation quota via the `InstallationQuota` Durable Object (50 events per
   event type per 24-hour rolling window; responds 429 with `Retry-After` on excess)
-- Obtain a scoped installation token via `@octokit/auth-app` for the originating repository
+- Obtain per-operation scoped installation tokens via `@octokit/auth-app` with minimum
+  required permissions for each operation (config read, triage, review, scan, dispatch)
 - Fetch and validate `.github/aptu.yml` from the originating repository (5-second timeout;
   no dispatch if absent or invalid)
 - Check the `ALLOWED_OWNERS` allowlist -- hard 403 gate on repository.owner.login
@@ -118,17 +123,36 @@ graph TD
 
 ## Token Model
 
-Two distinct tokens are used per webhook event. Both are short-lived installation tokens
-issued by the GitHub App via `@octokit/auth-app`.
+Every webhook event uses per-operation scoped installation tokens issued by the GitHub App
+via `@octokit/auth-app`. Each token is scoped to the originating repository with the minimum
+permissions required for its operation.
 
-| Token | Scope | Purpose |
+| Token | Permissions | Purpose |
 |---|---|---|
-| Installation token | Originating repository | Read repo contents, fetch `.github/aptu.yml`, fetch PR file list, post review comments and labels back |
-| Dispatch token | `TARGET_REPO` only | Call `POST /repos/clouatre-labs/aptu-github-app/dispatches` |
+| Config token | `contents:read`, `pull_requests:read` | Fetch `.github/aptu.yml`, fetch PR file list, check collaborator permission |
+| Triage token | `contents:read`, `issues:write` | Passed to the aptu-triage workflow as `installation_token` for issue operations |
+| Review token | `contents:read`, `pull_requests:write` | Passed to the aptu-review workflow as `installation_token` for PR review operations |
+| Scan token | `contents:read`, `security_events:write`, `statuses:write` | Passed to the aptu-scan-security workflow as `installation_token` for code scanning |
+| Dispatch token | `contents:write` | Scoped to `TARGET_REPO` only; calls `POST /repos/{TARGET_REPO}/dispatches` |
 
-The installation token is passed to the workflow via `client_payload.installation_token` and
-used by the aptu CLI to authenticate against the originating repository. The Worker never
-stores either token.
+All tokens are short-lived (1 hour, GitHub default). The Worker never stores tokens; each is
+created fresh per request via `createAppAuth` and passed to the downstream workflow in
+`client_payload.installation_token`.
+
+### Replay Deduplication
+
+A `ReplayGuard` Durable Object provides atomic check-and-record deduplication of
+`X-GitHub-Delivery` IDs. After HMAC validation and before JSON parsing, the Worker checks
+the delivery ID against the DO. Duplicate deliveries receive a `202 Accepted` response
+without dispatching a workflow. Delivery IDs expire after 300 seconds of inactivity.
+
+### IP Validation
+
+The Worker validates the `CF-Connecting-IP` header against GitHub's published webhook IP
+ranges (fetched from `https://api.github.com/meta` and cached for 3600 seconds). Requests
+from IPs outside the published hooks list receive a `403 Forbidden`. The check fails open:
+if `/meta` is unavailable or `CF-Connecting-IP` is missing, the request proceeds with a
+warning.
 
 ## Configuration
 
