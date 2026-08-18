@@ -20,7 +20,6 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      security-events: write
     steps:
       - name: Mask installation token
         run: echo "::add-mask::${{ github.event.client_payload.installation_token }}"
@@ -34,11 +33,25 @@ jobs:
 
       - name: Run Aptu security scan
         id: scan
-        uses: clouatre-labs/aptu@eb57ff57728cc2c660a45af21310898e55bce0ee # PR #1472 (scan fail-on + sarif)
+        uses: clouatre-labs/aptu@53dfb497347709a8ca02a4bb593190d02a90128f # PR #1472 (scan fail-on + sarif-upload opt-out)
         with:
           github-token: ${{ github.event.client_payload.installation_token }}
           scan-path: ${{ github.event.client_payload.scan_path || '.' }}
           fail-on: ${{ github.event.client_payload.fail_on }}
+          sarif-upload: 'false'
+
+      - name: Upload SARIF to caller
+        if: always() && hashFiles('findings.sarif') != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.event.client_payload.installation_token }}
+        run: |
+          SARIF_B64="$(gzip -c findings.sarif | base64 -w0)"
+          gh api "repos/${{ github.event.client_payload.originating_repo }}/code-scanning/sarifs" \
+            --method POST \
+            -f "commit_sha=${{ github.event.client_payload.head_sha }}" \
+            -f "ref=refs/pull/${{ github.event.client_payload.pull_number }}/head" \
+            -f "sarif=$SARIF_B64"
 
       - name: Report status to caller
         if: always()
