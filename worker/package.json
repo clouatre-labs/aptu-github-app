@@ -21,6 +21,6 @@
     "vitest": "4.1.10",
     "@types/node": "26.2.0",
     "@types/picomatch": "4.0.3",
-    "wrangler": "4.118.0"
+    "wrangler": "4.123.0"
   }
 }
