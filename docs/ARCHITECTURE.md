@@ -255,7 +255,7 @@ parse or validation failure.
 
 ## Deployment
 
-Merging to `main` triggers `deploy.yml`, which runs `cloudflare/wrangler-action` to deploy
+Merging to `main` triggers `deploy.yml`, which runs `bunx wrangler deploy` via the `deploy` script in `worker/package.json` to deploy
 the Worker. Required secrets and variables:
 
 - `CLOUDFLARE_API_TOKEN` (GitHub Actions secret)
