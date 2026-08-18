@@ -2020,100 +2020,60 @@ describe('scan dispatch', () => {
   });
 });
 
-describe('scoped token helpers', () => {
+describe('scoped token helper', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('getConfigToken passes repositoryNames and { contents:read, pull_requests:read } to auth', async () => {
-    const { createAppAuth } = await import('@octokit/auth-app');
-    const { getConfigToken } = await import('./index.js');
-
-    await getConfigToken(mockEnv, 1, 'owner/repo');
-
-    const mockedCreateAppAuth = createAppAuth as ReturnType<typeof vi.fn>;
-    const authFn = mockedCreateAppAuth.mock.results[0]?.value as ReturnType<
-      typeof vi.fn
-    >;
-    expect(authFn).toHaveBeenCalledWith({
-      type: 'installation',
-      installationId: 1,
-      repositoryNames: ['owner/repo'],
-      permissions: { contents: 'read', pull_requests: 'read' },
-    });
-  });
-
-  it('getTriageToken passes repositoryNames and { contents:read, issues:read, issues:write } to auth', async () => {
-    const { createAppAuth } = await import('@octokit/auth-app');
-    const { getTriageToken } = await import('./index.js');
-
-    await getTriageToken(mockEnv, 2, 'owner/repo');
-
-    const mockedCreateAppAuth = createAppAuth as ReturnType<typeof vi.fn>;
-    const authFn = mockedCreateAppAuth.mock.results[0]?.value as ReturnType<
-      typeof vi.fn
-    >;
-    expect(authFn).toHaveBeenCalledWith({
-      type: 'installation',
-      installationId: 2,
-      repositoryNames: ['owner/repo'],
-      permissions: Object.fromEntries([
-        ['contents', 'read'],
-        ['issues', 'read'],
-        ['issues', 'write'],
-      ]),
-    });
-  });
-
-  it('getReviewToken passes repositoryNames and { contents:read, pull_requests:read, pull_requests:write } to auth', async () => {
-    const { createAppAuth } = await import('@octokit/auth-app');
-    const { getReviewToken } = await import('./index.js');
-
-    await getReviewToken(mockEnv, 3, 'owner/repo');
-
-    const mockedCreateAppAuth = createAppAuth as ReturnType<typeof vi.fn>;
-    const authFn = mockedCreateAppAuth.mock.results[0]?.value as ReturnType<
-      typeof vi.fn
-    >;
-    expect(authFn).toHaveBeenCalledWith({
-      type: 'installation',
-      installationId: 3,
-      repositoryNames: ['owner/repo'],
-      permissions: Object.fromEntries([
-        ['contents', 'read'],
-        ['pull_requests', 'read'],
-        ['pull_requests', 'write'],
-      ]),
-    });
-  });
-
-  it('getScanToken passes repositoryNames and { contents:read, security_events:write, statuses:write } to auth', async () => {
-    const { createAppAuth } = await import('@octokit/auth-app');
-    const { getScanToken } = await import('./index.js');
-
-    await getScanToken(mockEnv, 4, 'owner/repo');
-
-    const mockedCreateAppAuth = createAppAuth as ReturnType<typeof vi.fn>;
-    const authFn = mockedCreateAppAuth.mock.results[0]?.value as ReturnType<
-      typeof vi.fn
-    >;
-    expect(authFn).toHaveBeenCalledWith({
-      type: 'installation',
-      installationId: 4,
-      repositoryNames: ['owner/repo'],
-      permissions: {
+  const cases = [
+    {
+      key: 'config',
+      installId: 1,
+      repo: 'owner/repo',
+      expected: { contents: 'read', pull_requests: 'read' },
+    },
+    {
+      key: 'triage',
+      installId: 2,
+      repo: 'owner/repo',
+      expected: { contents: 'read', issues: 'write' },
+    },
+    {
+      key: 'review',
+      installId: 3,
+      repo: 'owner/repo',
+      expected: { contents: 'read', pull_requests: 'write' },
+    },
+    {
+      key: 'scan',
+      installId: 4,
+      repo: 'owner/repo',
+      expected: {
         contents: 'read',
         security_events: 'write',
         statuses: 'write',
       },
-    });
-  });
+    },
+    {
+      key: 'dispatch',
+      installId: 5,
+      repo: 'target-repo',
+      expected: { contents: 'write' },
+    },
+  ] as const;
 
-  it('getDispatchToken passes repositoryNames and { contents:write } to auth', async () => {
+  it.each(
+    cases
+  )('getScopedToken with PERMS.$key passes correct permissions to auth', async ({
+    key,
+    installId,
+    repo,
+    expected,
+  }) => {
     const { createAppAuth } = await import('@octokit/auth-app');
-    const { getDispatchToken } = await import('./index.js');
+    const { getScopedToken, PERMS } = await import('./index.js');
 
-    await getDispatchToken(mockEnv, 5, 'target-repo');
+    await getScopedToken(mockEnv, installId, repo, PERMS[key]);
 
     const mockedCreateAppAuth = createAppAuth as ReturnType<typeof vi.fn>;
     const authFn = mockedCreateAppAuth.mock.results[0]?.value as ReturnType<
@@ -2121,13 +2081,13 @@ describe('scoped token helpers', () => {
     >;
     expect(authFn).toHaveBeenCalledWith({
       type: 'installation',
-      installationId: 5,
-      repositoryNames: ['target-repo'],
-      permissions: { contents: 'write' },
+      installationId: installId,
+      repositoryNames: [repo],
+      permissions: expected,
     });
   });
 
-  it('getInstallationToken passes repositoryNames and object-shaped permissions map to auth', async () => {
+  it('getInstallationToken passes repositoryNames and explicit permissions map to auth', async () => {
     const { createAppAuth } = await import('@octokit/auth-app');
     const { getInstallationToken } = await import('./index.js');
 

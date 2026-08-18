@@ -407,22 +407,22 @@ confirms missing-header (401), mismatched-signature (401), and valid-signature c
 
 ### S5 -- Token scoping
 
-Per-operation scoped tokens replace the previous broad installation token. Five token
-helpers are used, each with minimum required permissions:
+Per-operation scoped tokens replace the previous broad installation token. A `PERMS`
+lookup table defines five permission sets, and a single `getScopedToken` helper issues
+tokens with minimum required permissions:
 
-- `getConfigToken`: `contents:read`, `pull_requests:read` -- for config fetch, PR file
+- `PERMS.config`: `contents:read`, `pull_requests:read` -- for config fetch, PR file
   listing, and collaborator permission checks
-- `getTriageToken`: `contents:read`, `issues:write` -- passed to aptu-triage workflow
-- `getReviewToken`: `contents:read`, `pull_requests:write` -- passed to aptu-review workflow
-- `getScanToken`: `contents:read`, `security_events:write`, `statuses:write` -- passed to
+- `PERMS.triage`: `contents:read`, `issues:write` -- passed to aptu-triage workflow
+- `PERMS.review`: `contents:read`, `pull_requests:write` -- passed to aptu-review workflow
+- `PERMS.scan`: `contents:read`, `security_events:write`, `statuses:write` -- passed to
   aptu-scan-security workflow (requires App installation to have Security events permission)
-- `getDispatchToken`: `contents:write` -- scoped to `TARGET_REPO` only for
+- `PERMS.dispatch`: `contents:write` -- scoped to `TARGET_REPO` only for
   `repository_dispatch`
 
 All tokens are created fresh per request via `createAppAuth` with `repositoryNames` and
-`permissions` passed to `auth({ type: 'installation', ... })`. No module-level token storage
-exists. The previous broad `getInstallationToken` (which granted all permissions the App
-had) has been removed.
+`permissions` passed to `auth({ type: 'installation', ... })`. A `getTokenOr500` helper
+DRYs up the try/catch pattern in the fetch handler. No module-level token storage exists.
 
 ---
 

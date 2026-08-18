@@ -89,84 +89,48 @@ export async function getInstallationToken(
   return result.token;
 }
 
-/** Token for reading repo config and PR file lists. */
-export async function getConfigToken(
-  env: Env,
-  installationId: number,
-  repoFullName: string
-): Promise<string> {
-  return getInstallationToken(env, installationId, {
-    repositoryNames: [repoFullName],
-    permissions: { contents: 'read', pull_requests: 'read' },
-  });
-}
-
-/** Token for issue triage operations. */
-export async function getTriageToken(
-  env: Env,
-  installationId: number,
-  repoFullName: string
-): Promise<string> {
-  return getInstallationToken(env, installationId, {
-    repositoryNames: [repoFullName],
-    permissions: Object.fromEntries([
-      ['contents', 'read'],
-      ['issues', 'read'],
-      ['issues', 'write'],
-    ]),
-  });
-}
-
-/** Token for PR review operations. */
-export async function getReviewToken(
-  env: Env,
-  installationId: number,
-  repoFullName: string
-): Promise<string> {
-  return getInstallationToken(env, installationId, {
-    repositoryNames: [repoFullName],
-    permissions: Object.fromEntries([
-      ['contents', 'read'],
-      ['pull_requests', 'read'],
-      ['pull_requests', 'write'],
-    ]),
-  });
-}
+export const PERMS = {
+  config: { contents: 'read', pull_requests: 'read' },
+  triage: { contents: 'read', issues: 'write' },
+  review: { contents: 'read', pull_requests: 'write' },
+  scan: { contents: 'read', security_events: 'write', statuses: 'write' },
+  dispatch: { contents: 'write' },
+} as const;
 
 /**
- * Token for security scan operations.
+ * Returns a scoped installation token for the given operation and permissions.
  *
- * NOTE: The `security_events` permission key requires the GitHub App
- * installation to have the "Security events" permission enabled. If the
- * installation lacks this permission the token request will be rejected by
- * GitHub. Verify the App manifest and re-authorize installations before
- * deploying.
+ * NOTE: scan permissions require the GitHub App installation to have the
+ * "Security events" permission enabled. If the installation lacks this
+ * permission the token request will be rejected by GitHub. Verify the App
+ * manifest and re-authorize installations before deploying.
  */
-export async function getScanToken(
+export async function getScopedToken(
   env: Env,
   installationId: number,
-  repoFullName: string
+  repoFullName: string,
+  permissions: Record<string, string>
 ): Promise<string> {
   return getInstallationToken(env, installationId, {
     repositoryNames: [repoFullName],
-    permissions: {
-      contents: 'read',
-      security_events: 'write',
-      statuses: 'write',
-    },
+    permissions,
   });
 }
 
-/** Token for repository_dispatch to the target repo. */
-export async function getDispatchToken(
+async function getTokenOr500(
   env: Env,
   installationId: number,
-  targetRepoName: string
-): Promise<string> {
-  return getInstallationToken(env, installationId, {
-    repositoryNames: [targetRepoName],
-    permissions: { contents: 'write' },
-  });
+  repo: string,
+  permissions: Record<string, string>,
+  eventType: string
+): Promise<string | Response> {
+  try {
+    return await getScopedToken(env, installationId, repo, permissions);
+  } catch (error) {
+    captureException(error, { tags: { eventType, repo } });
+    console.error(`Failed to get token for ${repo}:`, error);
+    return new Response('Internal Server Error', { status: 500 });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -429,7 +393,7 @@ export async function handleMentionCommand(
 
   let token: string;
   try {
-    token = await getConfigToken(env, installationId, repo);
+    token = await getScopedToken(env, installationId, repo, PERMS.config);
   } catch {
     return new Response('Internal Server Error', { status: 500 });
   }
@@ -667,14 +631,14 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       const quotaResponse = await enforceQuota(env, installationId, 'triage');
       if (quotaResponse) return quotaResponse;
 
-      let configToken: string;
-      try {
-        configToken = await getConfigToken(env, installationId, repo);
-      } catch (error) {
-        captureException(error, { tags: { eventType: 'issues.opened', repo } });
-        console.error(`Failed to get config token for ${repo}:`, error);
-        return new Response('Internal Server Error', { status: 500 });
-      }
+      const configToken = await getTokenOr500(
+        env,
+        installationId,
+        repo,
+        PERMS.config,
+        'issues.opened'
+      );
+      if (configToken instanceof Response) return configToken;
 
       const issue = payload.issue as { number: number; title: string };
       const owner = repo.split('/')[0] ?? '';
@@ -692,28 +656,24 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       if (!shouldDispatch(config, 'triage'))
         return new Response('OK', { status: 200 });
 
-      let triageToken: string;
-      try {
-        triageToken = await getTriageToken(env, installationId, repo);
-      } catch (error) {
-        captureException(error, { tags: { eventType: 'issues.opened', repo } });
-        console.error(`Failed to get triage token for ${repo}:`, error);
-        return new Response('Internal Server Error', { status: 500 });
-      }
+      const triageToken = await getTokenOr500(
+        env,
+        installationId,
+        repo,
+        PERMS.triage,
+        'issues.opened'
+      );
+      if (triageToken instanceof Response) return triageToken;
 
       const targetRepoName = env.TARGET_REPO.split('/')[1] ?? '';
-      let dispatchToken: string;
-      try {
-        dispatchToken = await getDispatchToken(
-          env,
-          installationId,
-          targetRepoName
-        );
-      } catch (error) {
-        captureException(error, { tags: { eventType: 'issues.opened', repo } });
-        console.error(`Failed to get dispatch token for ${repo}:`, error);
-        return new Response('Internal Server Error', { status: 500 });
-      }
+      const dispatchToken = await getTokenOr500(
+        env,
+        installationId,
+        targetRepoName,
+        PERMS.dispatch,
+        'issues.opened'
+      );
+      if (dispatchToken instanceof Response) return dispatchToken;
 
       try {
         await dispatchEvent(dispatchToken, env.TARGET_REPO, 'aptu-triage', {
@@ -753,14 +713,14 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       const quotaResponse = await enforceQuota(env, installationId, 'review');
       if (quotaResponse) return quotaResponse;
 
-      let configToken: string;
-      try {
-        configToken = await getConfigToken(env, installationId, repo);
-      } catch (error) {
-        captureException(error, { tags: { eventType: 'pull_request', repo } });
-        console.error(`Failed to get config token for ${repo}:`, error);
-        return new Response('Internal Server Error', { status: 500 });
-      }
+      const configToken = await getTokenOr500(
+        env,
+        installationId,
+        repo,
+        PERMS.config,
+        'pull_request'
+      );
+      if (configToken instanceof Response) return configToken;
 
       const pr = payload.pull_request as {
         number: number;
@@ -795,30 +755,24 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         });
 
       const targetRepoName = env.TARGET_REPO.split('/')[1] ?? '';
-      let dispatchToken: string;
-      try {
-        dispatchToken = await getDispatchToken(
-          env,
-          installationId,
-          targetRepoName
-        );
-      } catch (error) {
-        captureException(error, { tags: { eventType: 'pull_request', repo } });
-        console.error(`Failed to get dispatch token for ${repo}:`, error);
-        return new Response('Internal Server Error', { status: 500 });
-      }
+      const dispatchToken = await getTokenOr500(
+        env,
+        installationId,
+        targetRepoName,
+        PERMS.dispatch,
+        'pull_request'
+      );
+      if (dispatchToken instanceof Response) return dispatchToken;
 
       if (shouldReview) {
-        let reviewToken: string;
-        try {
-          reviewToken = await getReviewToken(env, installationId, repo);
-        } catch (error) {
-          captureException(error, {
-            tags: { eventType: 'pull_request', repo },
-          });
-          console.error(`Failed to get review token for ${repo}:`, error);
-          return new Response('Internal Server Error', { status: 500 });
-        }
+        const reviewToken = await getTokenOr500(
+          env,
+          installationId,
+          repo,
+          PERMS.review,
+          'pull_request'
+        );
+        if (reviewToken instanceof Response) return reviewToken;
 
         try {
           await dispatchEvent(dispatchToken, env.TARGET_REPO, 'aptu-review', {
@@ -849,16 +803,14 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       }
 
       if (shouldScan) {
-        let scanToken: string;
-        try {
-          scanToken = await getScanToken(env, installationId, repo);
-        } catch (error) {
-          captureException(error, {
-            tags: { eventType: 'pull_request', repo },
-          });
-          console.error(`Failed to get scan token for ${repo}:`, error);
-          return new Response('Internal Server Error', { status: 500 });
-        }
+        const scanToken = await getTokenOr500(
+          env,
+          installationId,
+          repo,
+          PERMS.scan,
+          'pull_request'
+        );
+        if (scanToken instanceof Response) return scanToken;
 
         try {
           await dispatchEvent(
