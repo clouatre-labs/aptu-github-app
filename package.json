@@ -3,5 +3,8 @@
   "private": true,
   "workspaces": [
     "worker"
-  ]
+  ],
+  "overrides": {
+    "nanoid": "3.3.18"
+  }
 }
