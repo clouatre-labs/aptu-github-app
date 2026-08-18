@@ -576,7 +576,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
               originating_repo: repo,
               head_sha: pr.head.sha,
               pull_number: pr.number,
-              scan_path: config?.scan?.path ?? '.',
+              scan_path: '.',
               fail_on: config?.scan?.['fail-on'] ?? null,
             }
           );

@@ -186,16 +186,15 @@ describe('parseConfig scan', () => {
     expect(config?.scan).toEqual({ enabled: true });
   });
 
-  it('parses scan block with optional fail-on and path', () => {
+  it('parses scan block with optional fail-on', () => {
     const raw = btoa(
-      'version: 1\ntriage:\n  enabled: true\nscan:\n  enabled: true\n  fail-on: critical,high\n  path: src/'
+      'version: 1\ntriage:\n  enabled: true\nscan:\n  enabled: true\n  fail-on: critical,high'
     );
     const config = parseConfig(raw);
     expect(config).not.toBeNull();
     expect(config?.scan).toEqual({
       enabled: true,
       'fail-on': 'critical,high',
-      path: 'src/',
     });
   });
 

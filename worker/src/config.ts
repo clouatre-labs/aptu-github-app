@@ -15,7 +15,6 @@ export interface AiConfig {
 export interface ScanConfig {
   enabled: boolean;
   'fail-on'?: string;
-  path?: string;
 }
 
 export interface AptuConfig {
@@ -119,9 +118,6 @@ export function parseConfig(raw: string): AptuConfig | null {
       config.scan = { enabled: scanObj.enabled };
       if (typeof scanObj['fail-on'] === 'string') {
         config.scan['fail-on'] = scanObj['fail-on'];
-      }
-      if (typeof scanObj.path === 'string') {
-        config.scan.path = scanObj.path;
       }
     }
 

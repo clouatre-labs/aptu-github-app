@@ -1931,7 +1931,7 @@ describe('scan dispatch', () => {
       originating_repo: 'owner/repo',
       head_sha: 'abc123',
       pull_number: 10,
-      scan_path: 'src/',
+      scan_path: '.',
       fail_on: 'critical,high',
     });
   });
