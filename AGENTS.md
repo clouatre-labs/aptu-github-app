@@ -48,7 +48,7 @@ All commits must be GPG-signed with DCO sign-off (`git commit -S --signoff`).
 ## Continuous Delivery Model
 
 - **Deploy**: Merging to `main` triggers `deploy.yml`, which deploys the Worker to
-  Cloudflare via `cloudflare/wrangler-action`.
+  Cloudflare via `bunx wrangler deploy`.
 - **Release**: Merging to `main` triggers `release.yml`, which runs
   `googleapis/release-please-action` to create GitHub Releases from conventional commits.
   Release Please opens a Release PR on main; merging it auto-bumps the version and creates

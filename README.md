@@ -104,7 +104,7 @@ ai:
 ### Worker deployment
 
 Merging to `main` triggers `deploy.yml`, which deploys the Worker to Cloudflare via
-`cloudflare/wrangler-action`. Required GitHub secrets and variables:
+`bunx wrangler deploy`. Required GitHub secrets and variables:
 
 - `CLOUDFLARE_API_TOKEN` -- Cloudflare API token with Workers edit permission
 - `CLOUDFLARE_ACCOUNT_ID` -- Cloudflare account ID (repository variable)
