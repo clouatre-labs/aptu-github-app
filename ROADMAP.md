@@ -27,7 +27,7 @@ required. See #34.
 - [x] Wrangler deployment pipeline with secret management
 - [x] Documentation: deployment guide, `.github/aptu.yml` schema
 - [x] Config-driven opt-in via `.github/aptu.yml` per repo
-- [x] `path_filters` support in `.github/aptu.yml` (include and `!`-exclude globs) replacing
+- [x] `review.paths` support in `.github/aptu.yml` (include and `!`-exclude globs) replacing
   `config/repos.json`
 
 ## Phase 2: Multi-Account Support (complete)
@@ -45,7 +45,7 @@ Open the app to any GitHub account. Requires Phase 2 complete.
 Milestone: [Phase 3: Public Release](https://github.com/clouatre-labs/aptu-github-app/milestone/2).
 
 - [x] Caller-supplied AI keys: add `ai` block to `.github/aptu.yml` schema; thread through dispatch payload (#34)
-- [x] Move `path_filters` into `.github/aptu.yml` (include and `!`-exclude globs); remove
+- [x] Move `review.paths` into `.github/aptu.yml` (include and `!`-exclude globs); remove
   `config/repos.json` path filter data entirely (#33)
 - [ ] Per-installation quota and rate limiting via Cloudflare Durable Objects (not KV -- see #29 comments) (#29)
 - [ ] Landing page at aptu.dev (Astro + Tailwind, Cloudflare Pages) (#2)

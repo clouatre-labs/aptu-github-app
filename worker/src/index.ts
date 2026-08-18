@@ -123,7 +123,7 @@ export async function shouldSkipPrDispatch(
   token: string,
   aptuConfig: AptuConfig | null = null
 ): Promise<boolean> {
-  const pathFilters = aptuConfig?.path_filters;
+  const pathFilters = aptuConfig?.review?.paths;
   if (!pathFilters || pathFilters.length === 0) return false;
 
   try {
