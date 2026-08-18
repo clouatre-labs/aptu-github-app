@@ -407,10 +407,22 @@ confirms missing-header (401), mismatched-signature (401), and valid-signature c
 
 ### S5 -- Token scoping
 
-Two token flows are used and correctly minimal: `getInstallationToken` (`index.ts:54-64`)
-issues a broad installation token; `getDispatchToken` (`index.ts:96-111`) narrows to
-`TARGET_REPO` only before calling `/dispatches`. Neither function caches tokens beyond the
-request lifecycle. No module-level token storage found.
+Per-operation scoped tokens replace the previous broad installation token. A `PERMS`
+lookup table defines five permission sets, and a single `getScopedToken` helper issues
+tokens with minimum required permissions:
+
+- `PERMS.config`: `contents:read`, `pull_requests:read` -- for config fetch, PR file
+  listing, and collaborator permission checks
+- `PERMS.triage`: `contents:read`, `issues:write` -- passed to aptu-triage workflow
+- `PERMS.review`: `contents:read`, `pull_requests:write` -- passed to aptu-review workflow
+- `PERMS.scan`: `contents:read`, `security_events:write`, `statuses:write` -- passed to
+  aptu-scan-security workflow (requires App installation to have Security events permission)
+- `PERMS.dispatch`: `contents:write` -- scoped to `TARGET_REPO` only for
+  `repository_dispatch`
+
+All tokens are created fresh per request via `createAppAuth` with `repositoryNames` and
+`permissions` passed to `auth({ type: 'installation', ... })`. A `getTokenOr500` helper
+DRYs up the try/catch pattern in the fetch handler. No module-level token storage exists.
 
 ---
 

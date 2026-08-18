@@ -27,6 +27,7 @@ export interface Env {
   QUOTA: DurableObjectNamespace;
   GLOBAL_QUOTA: DurableObjectNamespace;
   GLOBAL_QUOTA_LIMIT: string;
+  REPLAY_GUARD: DurableObjectNamespace;
 }
 
 export function hexToBytes(hex: string): Uint8Array {
@@ -58,17 +59,83 @@ export async function validateSignature(
   return crypto.subtle.verify('HMAC', key, sigBytes, encodedPayload);
 }
 
+// ---------------------------------------------------------------------------
+// Scoped installation token helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Base helper: obtains an installation token scoped to specific repositories
+ * and permissions. Each call creates a fresh createAppAuth instance; the
+ * underlying @octokit/auth-app caches JWTs internally.
+ */
 export async function getInstallationToken(
   env: Env,
-  installationId: number
+  installationId: number,
+  options: {
+    repositoryNames: string[];
+    permissions: Record<string, string>;
+  }
 ): Promise<string> {
   const auth = createAppAuth({
     appId: env.APP_ID,
     privateKey: env.APP_PRIVATE_KEY,
   });
-  const result = await auth({ type: 'installation', installationId });
+  const result = await auth({
+    type: 'installation',
+    installationId,
+    repositoryNames: options.repositoryNames,
+    permissions: options.permissions,
+  });
   return result.token;
 }
+
+export const PERMS = {
+  config: { contents: 'read', pull_requests: 'read' },
+  triage: { contents: 'read', issues: 'write' },
+  review: { contents: 'read', pull_requests: 'write' },
+  scan: { contents: 'read', security_events: 'write', statuses: 'write' },
+  dispatch: { contents: 'write' },
+} as const;
+
+/**
+ * Returns a scoped installation token for the given operation and permissions.
+ *
+ * NOTE: scan permissions require the GitHub App installation to have the
+ * "Security events" permission enabled. If the installation lacks this
+ * permission the token request will be rejected by GitHub. Verify the App
+ * manifest and re-authorize installations before deploying.
+ */
+export async function getScopedToken(
+  env: Env,
+  installationId: number,
+  repoFullName: string,
+  permissions: Record<string, string>
+): Promise<string> {
+  return getInstallationToken(env, installationId, {
+    repositoryNames: [repoFullName],
+    permissions,
+  });
+}
+
+async function getTokenOr500(
+  env: Env,
+  installationId: number,
+  repo: string,
+  permissions: Record<string, string>,
+  eventType: string
+): Promise<string | Response> {
+  try {
+    return await getScopedToken(env, installationId, repo, permissions);
+  } catch (error) {
+    captureException(error, { tags: { eventType, repo } });
+    console.error(`Failed to get token for ${repo}:`, error);
+    return new Response('Internal Server Error', { status: 500 });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Dispatch
+// ---------------------------------------------------------------------------
 
 export async function dispatchEvent(
   token: string,
@@ -100,22 +167,9 @@ export async function dispatchEvent(
   }
 }
 
-export async function getDispatchToken(
-  env: Env,
-  installationId: number,
-  targetRepoName: string
-): Promise<string> {
-  const auth = createAppAuth({
-    appId: env.APP_ID,
-    privateKey: env.APP_PRIVATE_KEY,
-  });
-  const result = await auth({
-    type: 'installation',
-    installationId,
-    repositoryNames: [targetRepoName],
-  });
-  return result.token;
-}
+// ---------------------------------------------------------------------------
+// PR path filter
+// ---------------------------------------------------------------------------
 
 export async function shouldSkipPrDispatch(
   repoFullName: string,
@@ -158,6 +212,10 @@ export async function shouldSkipPrDispatch(
     return false;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Quota
+// ---------------------------------------------------------------------------
 
 async function checkQuota(
   env: Env,
@@ -260,6 +318,10 @@ async function enforceQuota(
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Mention detection & access control
+// ---------------------------------------------------------------------------
+
 export function hasMentionCommand(body: string): boolean {
   return /@aptu(?![a-zA-Z0-9_-])/.test(
     body.replace(/```[\s\S]*?```|`[^`]*`/g, '')
@@ -304,6 +366,10 @@ export async function checkCollaboratorPermission(
   );
 }
 
+// ---------------------------------------------------------------------------
+// Mention command handler
+// ---------------------------------------------------------------------------
+
 export async function handleMentionCommand(
   env: Env,
   event: string,
@@ -322,15 +388,16 @@ export async function handleMentionCommand(
   const quotaResponse = await enforceQuota(env, installationId, eventType);
   if (quotaResponse) return quotaResponse;
 
+  const repo = (payload.repository as { full_name: string }).full_name;
+  const [owner, name] = repo.split('/');
+
   let token: string;
   try {
-    token = await getInstallationToken(env, installationId);
+    token = await getScopedToken(env, installationId, repo, PERMS.config);
   } catch {
     return new Response('Internal Server Error', { status: 500 });
   }
 
-  const repo = (payload.repository as { full_name: string }).full_name;
-  const [owner, name] = repo.split('/');
   const hasAccess = await checkCollaboratorPermission(
     token,
     owner ?? '',
@@ -362,6 +429,135 @@ export async function handleMentionCommand(
   return new Response(null, { status: 204 });
 }
 
+// ---------------------------------------------------------------------------
+// IP validation (fail-open)
+// ---------------------------------------------------------------------------
+
+/**
+ * Matches an IPv4 address against a CIDR range.
+ * Only IPv4 is supported; GitHub webhooks originate from IPv4 addresses.
+ */
+function ipMatchesCidr(ip: string, cidr: string): boolean {
+  const parts = cidr.split('/');
+  const range = parts[0] ?? '';
+  const bitsStr = parts[1];
+  const bits = parseInt(bitsStr ?? '32', 10);
+  if (bits === 0) return true;
+
+  const ipOctets = ip.split('.').map(Number);
+  const rangeOctets = range.split('.').map(Number);
+
+  // Compare full octets
+  const fullOctets = Math.floor(bits / 8);
+  for (let i = 0; i < fullOctets; i++) {
+    if (ipOctets[i] !== rangeOctets[i]) return false;
+  }
+
+  // Compare partial octet
+  const remainingBits = bits % 8;
+  if (remainingBits > 0) {
+    const mask = 256 - (1 << (8 - remainingBits));
+    const ipPartial = ipOctets[fullOctets] ?? 0;
+    const rangePartial = rangeOctets[fullOctets] ?? 0;
+    if ((ipPartial & mask) !== (rangePartial & mask)) return false;
+  }
+
+  return true;
+}
+
+let cachedHooks: { cidrs: string[]; fetchedAt: number } | null = null;
+
+/** Resets the IP validation cache. Exported for testing only. */
+export function __resetIpCache(): void {
+  cachedHooks = null;
+}
+
+async function validateIp(request: Request): Promise<Response | null> {
+  const ip = request.headers.get('CF-Connecting-IP');
+  if (!ip) {
+    console.warn(
+      'CF-Connecting-IP header missing, skipping IP validation (fail-open)'
+    );
+    return null;
+  }
+
+  // Refresh cache every 3600s
+  if (!cachedHooks || Date.now() - cachedHooks.fetchedAt > 3_600_000) {
+    try {
+      const metaResponse = await fetch('https://api.github.com/meta', {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'aptu-webhook/1.0',
+        },
+      });
+      if (!metaResponse.ok) {
+        console.warn(
+          `GitHub /meta returned ${metaResponse.status}, skipping IP validation (fail-open)`
+        );
+        return null;
+      }
+      const meta = (await metaResponse.json()) as { hooks?: string[] };
+      cachedHooks = {
+        cidrs: meta.hooks ?? [],
+        fetchedAt: Date.now(),
+      };
+    } catch (err) {
+      console.warn(
+        'Failed to fetch GitHub /meta, skipping IP validation (fail-open):',
+        err
+      );
+      return null;
+    }
+  }
+
+  const matched = cachedHooks.cidrs.some((cidr) => ipMatchesCidr(ip, cidr));
+  if (!matched) {
+    return new Response('Forbidden', { status: 403 });
+  }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// ReplayGuard Durable Object
+// ---------------------------------------------------------------------------
+
+/**
+ * Atomic replay deduplication for X-GitHub-Delivery IDs.
+ *
+ * On each check the DO atomically tests-and-sets the delivery ID. If the ID
+ * was already seen a 409 Conflict is returned; otherwise the ID is recorded
+ * and a 200 OK is returned. Stored IDs are cleaned up by an alarm that fires
+ * 300 s after the last write.
+ */
+export class ReplayGuard {
+  private state: DurableObjectState;
+
+  constructor(state: DurableObjectState) {
+    this.state = state;
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const { deliveryId } = (await request.json()) as { deliveryId: string };
+    const exists = await this.state.storage.get(deliveryId);
+    if (exists) {
+      return new Response(null, { status: 409 });
+    }
+    await this.state.storage.put(deliveryId, true);
+    await this.state.storage.setAlarm(Date.now() + 300_000);
+    return new Response(null, { status: 200 });
+  }
+
+  async alarm(): Promise<void> {
+    await this.state.storage.deleteAll();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main fetch handler
+// ---------------------------------------------------------------------------
+
 export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method !== 'POST')
@@ -373,6 +569,37 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
 
     const valid = await validateSignature(env.WEBHOOK_SECRET, body, sigHeader);
     if (!valid) return new Response('Unauthorized', { status: 401 });
+
+    // --- Replay dedup (after HMAC, before JSON parse) ---
+    const deliveryId = request.headers.get('X-GitHub-Delivery');
+    if (deliveryId && deliveryId.trim().length > 0) {
+      const trimmedId = deliveryId.trim();
+      // Validate delivery ID format (alphanumeric + hyphens only, matching UUID shape)
+      if (!/^[0-9a-zA-Z-]+$/.test(trimmedId)) {
+        console.warn(
+          'X-GitHub-Delivery header contains malformed delivery ID, proceeding without replay dedup'
+        );
+      } else {
+        const replayId = env.REPLAY_GUARD.idFromName('global');
+        const replayStub = env.REPLAY_GUARD.get(replayId);
+        const replayResponse = await replayStub.fetch('https://replay/check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deliveryId: trimmedId }),
+        });
+        if (replayResponse.status === 409) {
+          return new Response(null, { status: 202 });
+        }
+      }
+    } else {
+      console.warn(
+        'X-GitHub-Delivery header missing or empty, proceeding without replay dedup'
+      );
+    }
+
+    // --- IP validation (fail-open) ---
+    const ipResponse = await validateIp(request);
+    if (ipResponse) return ipResponse;
 
     const event = request.headers.get('X-GitHub-Event') ?? '';
     // biome-ignore lint/suspicious/noExplicitAny: webhook payload is untyped
@@ -404,14 +631,14 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       const quotaResponse = await enforceQuota(env, installationId, 'triage');
       if (quotaResponse) return quotaResponse;
 
-      let token: string;
-      try {
-        token = await getInstallationToken(env, installationId);
-      } catch (error) {
-        captureException(error, { tags: { eventType: 'issues.opened', repo } });
-        console.error(`Failed to get installation token for ${repo}:`, error);
-        return new Response('Internal Server Error', { status: 500 });
-      }
+      const configToken = await getTokenOr500(
+        env,
+        installationId,
+        repo,
+        PERMS.config,
+        'issues.opened'
+      );
+      if (configToken instanceof Response) return configToken;
 
       const issue = payload.issue as { number: number; title: string };
       const owner = repo.split('/')[0] ?? '';
@@ -419,7 +646,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
 
       let config: AptuConfig | null = null;
       try {
-        config = await fetchRepoConfig(token, owner, repoName);
+        config = await fetchRepoConfig(configToken, owner, repoName);
       } catch (error) {
         captureException(error, { tags: { eventType: 'issues.opened', repo } });
         console.error(`Failed to fetch config for ${repo}:`, error);
@@ -429,23 +656,28 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       if (!shouldDispatch(config, 'triage'))
         return new Response('OK', { status: 200 });
 
+      const triageToken = await getTokenOr500(
+        env,
+        installationId,
+        repo,
+        PERMS.triage,
+        'issues.opened'
+      );
+      if (triageToken instanceof Response) return triageToken;
+
       const targetRepoName = env.TARGET_REPO.split('/')[1] ?? '';
-      let dispatchToken: string;
-      try {
-        dispatchToken = await getDispatchToken(
-          env,
-          installationId,
-          targetRepoName
-        );
-      } catch (error) {
-        captureException(error, { tags: { eventType: 'issues.opened', repo } });
-        console.error(`Failed to get dispatch token for ${repo}:`, error);
-        return new Response('Internal Server Error', { status: 500 });
-      }
+      const dispatchToken = await getTokenOr500(
+        env,
+        installationId,
+        targetRepoName,
+        PERMS.dispatch,
+        'issues.opened'
+      );
+      if (dispatchToken instanceof Response) return dispatchToken;
 
       try {
         await dispatchEvent(dispatchToken, env.TARGET_REPO, 'aptu-triage', {
-          installation_token: token,
+          installation_token: triageToken,
           originating_repo: repo,
           issue_number: issue.number,
           issue_title: issue.title,
@@ -481,14 +713,14 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       const quotaResponse = await enforceQuota(env, installationId, 'review');
       if (quotaResponse) return quotaResponse;
 
-      let token: string;
-      try {
-        token = await getInstallationToken(env, installationId);
-      } catch (error) {
-        captureException(error, { tags: { eventType: 'pull_request', repo } });
-        console.error(`Failed to get installation token for ${repo}:`, error);
-        return new Response('Internal Server Error', { status: 500 });
-      }
+      const configToken = await getTokenOr500(
+        env,
+        installationId,
+        repo,
+        PERMS.config,
+        'pull_request'
+      );
+      if (configToken instanceof Response) return configToken;
 
       const pr = payload.pull_request as {
         number: number;
@@ -501,7 +733,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
 
       let config: AptuConfig | null = null;
       try {
-        config = await fetchRepoConfig(token, owner, repoName);
+        config = await fetchRepoConfig(configToken, owner, repoName);
       } catch (error) {
         captureException(error, { tags: { eventType: 'pull_request', repo } });
         console.error(`Failed to fetch config for ${repo}:`, error);
@@ -511,7 +743,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       const reviewWouldSkip = await shouldSkipPrDispatch(
         repo,
         pr.number,
-        token,
+        configToken,
         config
       );
       const shouldReview = shouldDispatch(config, 'review') && !reviewWouldSkip;
@@ -523,23 +755,28 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         });
 
       const targetRepoName = env.TARGET_REPO.split('/')[1] ?? '';
-      let dispatchToken: string;
-      try {
-        dispatchToken = await getDispatchToken(
-          env,
-          installationId,
-          targetRepoName
-        );
-      } catch (error) {
-        captureException(error, { tags: { eventType: 'pull_request', repo } });
-        console.error(`Failed to get dispatch token for ${repo}:`, error);
-        return new Response('Internal Server Error', { status: 500 });
-      }
+      const dispatchToken = await getTokenOr500(
+        env,
+        installationId,
+        targetRepoName,
+        PERMS.dispatch,
+        'pull_request'
+      );
+      if (dispatchToken instanceof Response) return dispatchToken;
 
       if (shouldReview) {
+        const reviewToken = await getTokenOr500(
+          env,
+          installationId,
+          repo,
+          PERMS.review,
+          'pull_request'
+        );
+        if (reviewToken instanceof Response) return reviewToken;
+
         try {
           await dispatchEvent(dispatchToken, env.TARGET_REPO, 'aptu-review', {
-            installation_token: token,
+            installation_token: reviewToken,
             originating_repo: repo,
             pull_number: pr.number,
             pull_title: pr.title,
@@ -566,13 +803,22 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       }
 
       if (shouldScan) {
+        const scanToken = await getTokenOr500(
+          env,
+          installationId,
+          repo,
+          PERMS.scan,
+          'pull_request'
+        );
+        if (scanToken instanceof Response) return scanToken;
+
         try {
           await dispatchEvent(
             dispatchToken,
             env.TARGET_REPO,
             'aptu-scan-security',
             {
-              installation_token: token,
+              installation_token: scanToken,
               originating_repo: repo,
               head_sha: pr.head.sha,
               pull_number: pr.number,
