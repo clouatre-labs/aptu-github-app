@@ -23,32 +23,11 @@ const quotaControl = {
   status: 200,
 };
 
-const globalQuotaControl = {
-  body: JSON.stringify({ count: 1, exceeded: false, retryAfter: null }),
-  status: 200,
-};
-
 function makeMockQuotaNamespace(): DurableObjectNamespace {
   const stub = {
     fetch: vi.fn(() =>
       Promise.resolve(
         new Response(quotaControl.body, { status: quotaControl.status })
-      )
-    ),
-  };
-  return {
-    idFromName: vi.fn(() => 'mock-id' as unknown as DurableObjectId),
-    get: vi.fn(() => stub as unknown as DurableObjectStub),
-  } as unknown as DurableObjectNamespace;
-}
-
-function makeGlobalQuotaMockNamespace(): DurableObjectNamespace {
-  const stub = {
-    fetch: vi.fn(() =>
-      Promise.resolve(
-        new Response(globalQuotaControl.body, {
-          status: globalQuotaControl.status,
-        })
       )
     ),
   };
@@ -174,8 +153,6 @@ const mockEnv = {
   ALLOWED_OWNERS: 'clouatre-labs,clouatre,owner,myorg,unconfigured',
   SENTRY_DSN: '',
   QUOTA: makeMockQuotaNamespace(),
-  GLOBAL_QUOTA: makeGlobalQuotaMockNamespace(),
-  GLOBAL_QUOTA_LIMIT: '500',
   REPLAY_GUARD: makeReplayGuardMockNamespace(),
 };
 
@@ -1353,12 +1330,6 @@ describe('Quota check integration', () => {
       retryAfter: null,
     });
     quotaControl.status = 200;
-    globalQuotaControl.body = JSON.stringify({
-      count: 1,
-      exceeded: false,
-      retryAfter: null,
-    });
-    globalQuotaControl.status = 200;
   });
 
   it.each([
@@ -1459,15 +1430,22 @@ describe('Quota check integration', () => {
     });
     expect(response.status).toBe(500);
   });
+});
 
-  it('returns 429 with global Retry-After when org-wide quota exceeded but per-installation is not', async () => {
-    globalQuotaControl.body = JSON.stringify({
-      count: 500,
+describe('AI-key quota exemption', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockImplementation(mockEnabledWithAiFetch());
+    quotaControl.body = JSON.stringify({
+      count: 50,
       exceeded: true,
       retryAfter: 3600,
     });
-    globalQuotaControl.status = 200;
+    quotaControl.status = 200;
+  });
 
+  it('returns 204 (not 429) for issues.opened when config.ai is present and quota is exceeded', async () => {
     const body = JSON.stringify({
       action: 'opened',
       installation: { id: 1 },
@@ -1483,19 +1461,108 @@ describe('Quota check integration', () => {
       'X-Hub-Signature-256': sig,
       'Content-Type': 'application/json',
     });
-    expect(response.status).toBe(429);
-    expect(response.headers.get('Retry-After')).toBe('3600');
-
-    // No dispatch call should be made when global quota is exceeded
+    expect(response.status).toBe(204);
     const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
       String(call[0]).includes('/dispatches')
     );
-    expect(dispatchCalls.length).toBe(0);
+    expect(dispatchCalls.length).toBe(1);
   });
 
-  it('returns 500 when global quota check fails (does not proceed to installation check)', async () => {
-    globalQuotaControl.status = 500;
-    globalQuotaControl.body = 'Internal Server Error';
+  it('returns 204 (not 429) for pull_request when config.ai is present and quota is exceeded', async () => {
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: { number: 1, title: 'Test PR' },
+      repository: {
+        full_name: 'owner/repo',
+        owner: { login: 'owner' },
+      },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
+  });
+});
+
+describe('quota record after dispatch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockImplementation(mockEnabledFetch());
+    quotaControl.body = JSON.stringify({
+      count: 0,
+      exceeded: false,
+      retryAfter: null,
+    });
+    quotaControl.status = 200;
+  });
+
+  it('records quota timestamp after successful dispatch on issues.opened', async () => {
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Test' },
+      repository: {
+        full_name: 'owner/repo',
+        owner: { login: 'owner' },
+      },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    // Verify QUOTA namespace received a 'record' action call
+    const quotaStub = mockEnv.QUOTA.get(
+      'mock-id' as unknown as DurableObjectId
+    );
+    const quotaFetchCalls = (
+      quotaStub as unknown as { fetch: ReturnType<typeof vi.fn> }
+    ).fetch.mock.calls as unknown as Array<[string, RequestInit]>;
+    const recordCalls = quotaFetchCalls.filter((call) => {
+      const parsed = JSON.parse(call[1].body as string) as {
+        action?: string;
+      };
+      return parsed.action === 'record';
+    });
+    expect(recordCalls.length).toBe(1);
+  });
+
+  it('does not record quota when dispatch fails on issues.opened', async () => {
+    const { createAppAuth } = await import('@octokit/auth-app');
+    // biome-ignore lint/suspicious/noExplicitAny: mocking requires casting to any
+    (createAppAuth as any).mockImplementation(() =>
+      vi.fn().mockResolvedValue({ token: 'mock-token' })
+    );
+
+    fetchSpy.mockImplementation((url: unknown) => {
+      const urlStr =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.href
+            : (url as Request).url;
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(
+          makeConfigResponse(
+            'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\n'
+          )
+        );
+      }
+      if (urlStr.includes('/dispatches')) {
+        return Promise.resolve(new Response('Forbidden', { status: 403 }));
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
 
     const body = JSON.stringify({
       action: 'opened',
@@ -1507,63 +1574,105 @@ describe('Quota check integration', () => {
       },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
-    const response = await callHandler(body, {
+    await callHandler(body, {
       'X-GitHub-Event': 'issues',
       'X-Hub-Signature-256': sig,
       'Content-Type': 'application/json',
     });
-    expect(response.status).toBe(500);
+    // Verify QUOTA namespace did NOT receive a 'record' action call
+    const quotaStub = mockEnv.QUOTA.get(
+      'mock-id' as unknown as DurableObjectId
+    );
+    const quotaFetchCalls = (
+      quotaStub as unknown as { fetch: ReturnType<typeof vi.fn> }
+    ).fetch.mock.calls as unknown as Array<[string, RequestInit]>;
+    const recordCalls = quotaFetchCalls.filter((call) => {
+      const parsed = JSON.parse(call[1].body as string) as {
+        action?: string;
+      };
+      return parsed.action === 'record';
+    });
+    expect(recordCalls.length).toBe(0);
+  });
+});
+
+describe('InstallationQuota check/record split', () => {
+  function makeMockStorage() {
+    const storage = new Map<string, unknown>();
+    return {
+      storage: {
+        get: async <T>(key: string): Promise<T | undefined> =>
+          storage.get(key) as T | undefined,
+        put: async (key: string, value: unknown): Promise<void> => {
+          storage.set(key, value);
+        },
+      },
+      _map: storage,
+    };
+  }
+
+  it('check action does not append timestamp', async () => {
+    const mock = makeMockStorage();
+    const state = mock as unknown as DurableObjectState;
+    const { InstallationQuota } = await import('./quota.js');
+    const instance = new InstallationQuota(state);
+
+    const response = await instance.fetch(
+      new Request('https://quota/quota', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventType: 'triage',
+          installationId: 1,
+          action: 'check',
+        }),
+      })
+    );
+    const result = (await response.json()) as {
+      count: number;
+      exceeded: boolean;
+    };
+    expect(result.count).toBe(0);
+    expect(result.exceeded).toBe(false);
+    // No timestamp should have been appended
+    const stored = mock._map.get('quota:1:triage') as
+      | {
+          timestamps: number[];
+        }
+      | undefined;
+    if (stored) {
+      expect(stored.timestamps.length).toBe(0);
+    }
   });
 
-  it('falls back to default limit 500 when GLOBAL_QUOTA_LIMIT is missing or non-numeric', async () => {
-    const stub = {
-      fetch: vi.fn(() =>
-        Promise.resolve(
-          new Response(
-            JSON.stringify({
-              count: 1,
-              exceeded: false,
-              retryAfter: null,
-            }),
-            { status: 200 }
-          )
-        )
-      ),
-    };
-    const namespace = {
-      idFromName: vi.fn(() => 'mock-id' as unknown as DurableObjectId),
-      get: vi.fn(() => stub as unknown as DurableObjectStub),
-    } as unknown as DurableObjectNamespace;
-    const env = {
-      ...mockEnv,
-      GLOBAL_QUOTA_LIMIT: '',
-      GLOBAL_QUOTA: namespace,
-    };
-    const body = JSON.stringify({
-      action: 'opened',
-      installation: { id: 1 },
-      issue: { number: 1, title: 'Test' },
-      repository: {
-        full_name: 'owner/repo',
-        owner: { login: 'owner' },
-      },
-    });
-    const sig = sign(env.WEBHOOK_SECRET, body);
-    const response = await callHandler(
-      body,
-      {
-        'X-GitHub-Event': 'issues',
-        'X-Hub-Signature-256': sig,
-        'Content-Type': 'application/json',
-      },
-      env
+  it('record action appends timestamp', async () => {
+    const mock = makeMockStorage();
+    const state = mock as unknown as DurableObjectState;
+    const { InstallationQuota } = await import('./quota.js');
+    const instance = new InstallationQuota(state);
+
+    const response = await instance.fetch(
+      new Request('https://quota/quota', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventType: 'triage',
+          installationId: 1,
+          action: 'record',
+        }),
+      })
     );
-    expect(response.status).toBe(204);
-    const fetchCalls = stub.fetch.mock.calls as unknown as Array<
-      [Request, RequestInit]
-    >;
-    const sentBody = JSON.parse(fetchCalls[0]?.[1].body as string);
-    expect(sentBody.limit).toBe(500);
+    const result = (await response.json()) as {
+      count: number;
+      exceeded: boolean;
+    };
+    expect(result.count).toBe(1);
+    expect(result.exceeded).toBe(false);
+    const stored = mock._map.get('quota:1:triage') as {
+      timestamps: number[];
+    };
+    expect(stored).toBeDefined();
+    expect(stored.timestamps.length).toBe(1);
   });
 });
 
@@ -1596,12 +1705,6 @@ describe('mention commands', () => {
       retryAfter: null,
     });
     quotaControl.status = 200;
-    globalQuotaControl.body = JSON.stringify({
-      count: 1,
-      exceeded: false,
-      retryAfter: null,
-    });
-    globalQuotaControl.status = 200;
   });
 
   it('returns 200 OK without action when comment body does not contain @aptu', async () => {
@@ -1882,12 +1985,125 @@ describe('mention commands', () => {
     expect(dispatchBody.client_payload.comment_body.length).toBe(4000);
     expect(dispatchBody.client_payload.comment_body_truncated).toBe(true);
   });
+
+  it('bypasses quota when config.ai is present for mention-triggered events', async () => {
+    fetchSpy.mockImplementation((url: string | URL | Request) => {
+      const urlStr =
+        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(
+          makeConfigResponse(
+            'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o\n  api-key-secret: OPENAI_API_KEY'
+          )
+        );
+      }
+      if (urlStr.includes('/collaborators/')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              user: { permissions: { pull: true } },
+              role_name: 'read',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          )
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+    // Quota is exceeded, but AI exemption should bypass it
+    quotaControl.body = JSON.stringify({
+      count: 50,
+      exceeded: true,
+      retryAfter: 3600,
+    });
+
+    const body = JSON.stringify({
+      action: 'created',
+      installation: { id: 1 },
+      comment: {
+        user: { id: 100, login: 'user1' },
+        id: 42,
+        body: '@aptu triage this',
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issue_comment',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
+  });
+
+  it('proceeds to quota enforcement when config fetch fails for mention', async () => {
+    fetchSpy.mockImplementation((url: string | URL | Request) => {
+      const urlStr =
+        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(
+          new Response('Internal Server Error', { status: 500 })
+        );
+      }
+      if (urlStr.includes('/collaborators/')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              user: { permissions: { pull: true } },
+              role_name: 'read',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          )
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+    // Quota is exceeded; config fetch fails so no AI exemption
+    quotaControl.body = JSON.stringify({
+      count: 50,
+      exceeded: true,
+      retryAfter: 3600,
+    });
+
+    const body = JSON.stringify({
+      action: 'created',
+      installation: { id: 1 },
+      comment: {
+        user: { id: 100, login: 'user1' },
+        id: 42,
+        body: '@aptu triage this',
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issue_comment',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(429);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(0);
+  });
 });
 
 describe('Sentry integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockImplementation(mockEnabledFetch());
+    quotaControl.body = JSON.stringify({
+      count: 0,
+      exceeded: false,
+      retryAfter: null,
+    });
+    quotaControl.status = 200;
   });
 
   it('calls captureException with installationId tag when Durable Object fetch throws', async () => {
@@ -1897,7 +2113,7 @@ describe('Sentry integration', () => {
     const { createAppAuth } = await import('@octokit/auth-app');
     // biome-ignore lint/suspicious/noExplicitAny: mocking requires casting to any
     (createAppAuth as any).mockImplementation(() =>
-      vi.fn().mockRejectedValue(new Error('DO error'))
+      vi.fn().mockResolvedValue({ token: 'mock-installation-token' })
     );
 
     // Mock the QUOTA stub to throw
@@ -1940,7 +2156,7 @@ describe('Sentry integration', () => {
     const { createAppAuth } = await import('@octokit/auth-app');
     // biome-ignore lint/suspicious/noExplicitAny: mocking requires casting to any
     (createAppAuth as any).mockImplementation(() =>
-      vi.fn().mockRejectedValue(new Error('DO non-2xx'))
+      vi.fn().mockResolvedValue({ token: 'mock-installation-token' })
     );
 
     const quotaStub = {
@@ -1994,6 +2210,12 @@ describe('scan dispatch', () => {
     (createAppAuth as any).mockImplementation(() =>
       vi.fn().mockResolvedValue({ token: 'mock-installation-token' })
     );
+    quotaControl.body = JSON.stringify({
+      count: 0,
+      exceeded: false,
+      retryAfter: null,
+    });
+    quotaControl.status = 200;
   });
 
   function mockConfig(yaml: string) {
@@ -2217,6 +2439,12 @@ describe('replay guard', () => {
     vi.clearAllMocks();
     fetchSpy = vi.spyOn(globalThis, 'fetch');
     fetchSpy.mockImplementation(mockEnabledFetch());
+    quotaControl.body = JSON.stringify({
+      count: 0,
+      exceeded: false,
+      retryAfter: null,
+    });
+    quotaControl.status = 200;
   });
 
   it('rejects a repeated X-GitHub-Delivery ID with 202 and does not dispatch', async () => {
@@ -2311,6 +2539,12 @@ describe('IP validation', () => {
     fetchSpy = vi.spyOn(globalThis, 'fetch');
     const { __resetIpCache } = await import('./index.js');
     __resetIpCache();
+    quotaControl.body = JSON.stringify({
+      count: 0,
+      exceeded: false,
+      retryAfter: null,
+    });
+    quotaControl.status = 200;
   });
 
   it('accepts a request from a known GitHub hook IP', async () => {

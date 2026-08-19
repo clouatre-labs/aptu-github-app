@@ -26,7 +26,7 @@ describe('InstallationQuota Durable Object', () => {
     vi.clearAllMocks();
   });
 
-  it('increments counter per installation id and event type', async () => {
+  it('increments counter per installation id and event type with record action', async () => {
     const { InstallationQuota } = await import('./quota.js');
     const ctx = makeMockCtx();
     ctx.storage.get.mockResolvedValue(null);
@@ -36,7 +36,11 @@ describe('InstallationQuota Durable Object', () => {
       new Request('https://quota/quota', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventType: 'triage', installationId: 1 }),
+        body: JSON.stringify({
+          eventType: 'triage',
+          installationId: 1,
+          action: 'record',
+        }),
       })
     );
     expect(response.status).toBe(200);
@@ -63,7 +67,11 @@ describe('InstallationQuota Durable Object', () => {
       new Request('https://quota/quota', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventType: 'triage', installationId: 1 }),
+        body: JSON.stringify({
+          eventType: 'triage',
+          installationId: 1,
+          action: 'check',
+        }),
       })
     );
     const body = (await response.json()) as {
@@ -91,7 +99,11 @@ describe('InstallationQuota Durable Object', () => {
       new Request('https://quota/quota', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventType: 'triage', installationId: 1 }),
+        body: JSON.stringify({
+          eventType: 'triage',
+          installationId: 1,
+          action: 'check',
+        }),
       })
     );
     const body = (await response.json()) as {
@@ -119,7 +131,11 @@ describe('InstallationQuota Durable Object', () => {
       new Request('https://quota/quota', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventType: 'triage', installationId: 1 }),
+        body: JSON.stringify({
+          eventType: 'triage',
+          installationId: 1,
+          action: 'record',
+        }),
       })
     );
     const body = (await response.json()) as {
@@ -153,7 +169,11 @@ describe('InstallationQuota Durable Object', () => {
       new Request('https://quota/quota', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventType: 'triage', installationId: 1 }),
+        body: JSON.stringify({
+          eventType: 'triage',
+          installationId: 1,
+          action: 'check',
+        }),
       })
     );
     const triageBody = (await triageResp.json()) as {
@@ -167,7 +187,11 @@ describe('InstallationQuota Durable Object', () => {
       new Request('https://quota/quota', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventType: 'review', installationId: 1 }),
+        body: JSON.stringify({
+          eventType: 'review',
+          installationId: 1,
+          action: 'record',
+        }),
       })
     );
     const reviewBody = (await reviewResp.json()) as {
@@ -176,142 +200,5 @@ describe('InstallationQuota Durable Object', () => {
     };
     expect(reviewBody.count).toBe(1);
     expect(reviewBody.exceeded).toBe(false);
-  });
-});
-
-describe('GlobalQuota Durable Object', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('increments global counter per dispatch, returns count and exceeded=false when under limit', async () => {
-    const { GlobalQuota } = await import('./quota.js');
-    const ctx = makeMockCtx();
-    ctx.storage.get.mockResolvedValue(null);
-    const quota = new GlobalQuota(ctx as unknown as DurableObjectState);
-
-    const response = await quota.fetch(
-      new Request('https://quota/quota', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: 500 }),
-      })
-    );
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as {
-      count: number;
-      exceeded: boolean;
-    };
-    expect(body.count).toBe(1);
-    expect(body.exceeded).toBe(false);
-  });
-
-  it('returns exceeded=true when global count reaches configured limit', async () => {
-    const { GlobalQuota } = await import('./quota.js');
-    const ctx = makeMockCtx();
-    const now = Date.now();
-    const existingTimestamps = Array.from(
-      { length: 500 },
-      (_, i) => now - i * 60000
-    );
-    ctx.storage.get.mockResolvedValue({ timestamps: existingTimestamps });
-    const quota = new GlobalQuota(ctx as unknown as DurableObjectState);
-
-    const response = await quota.fetch(
-      new Request('https://quota/quota', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: 500 }),
-      })
-    );
-    const body = (await response.json()) as {
-      count: number;
-      exceeded: boolean;
-      retryAfter: number | null;
-    };
-    expect(body.count).toBe(500);
-    expect(body.exceeded).toBe(true);
-    expect(body.retryAfter).toBeGreaterThan(0);
-  });
-
-  it('prunes timestamps older than 24h from global counter', async () => {
-    const { GlobalQuota } = await import('./quota.js');
-    const ctx = makeMockCtx();
-    const now = Date.now();
-    const windowMs = 24 * 60 * 60 * 1000;
-    const recent = Array.from({ length: 499 }, (_, i) => now - i * 60000);
-    ctx.storage.get.mockResolvedValue({
-      timestamps: [...recent, now - windowMs - 3600000],
-    });
-    const quota = new GlobalQuota(ctx as unknown as DurableObjectState);
-
-    const response = await quota.fetch(
-      new Request('https://quota/quota', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: 500 }),
-      })
-    );
-    const body = (await response.json()) as {
-      count: number;
-      exceeded: boolean;
-    };
-    expect(body.count).toBe(500);
-    expect(body.exceeded).toBe(false);
-  });
-
-  it('skips storage.put on exceeded path when no timestamps were pruned', async () => {
-    const { GlobalQuota } = await import('./quota.js');
-    const ctx = makeMockCtx();
-    const now = Date.now();
-    const existingTimestamps = Array.from(
-      { length: 500 },
-      (_, i) => now - i * 60000
-    );
-    ctx.storage.get.mockResolvedValue({ timestamps: existingTimestamps });
-    const quota = new GlobalQuota(ctx as unknown as DurableObjectState);
-
-    const response = await quota.fetch(
-      new Request('https://quota/quota', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: 500 }),
-      })
-    );
-    const body = (await response.json()) as {
-      count: number;
-      exceeded: boolean;
-    };
-    expect(body.exceeded).toBe(true);
-    expect(ctx.storage.put).not.toHaveBeenCalled();
-  });
-
-  it('calls storage.put on exceeded path when timestamps were pruned', async () => {
-    const { GlobalQuota } = await import('./quota.js');
-    const ctx = makeMockCtx();
-    const now = Date.now();
-    const windowMs = 24 * 60 * 60 * 1000;
-    const existingTimestamps = Array.from(
-      { length: 500 },
-      (_, i) => now - i * 60000
-    );
-    ctx.storage.get.mockResolvedValue({
-      timestamps: [...existingTimestamps, now - windowMs - 3600000],
-    });
-    const quota = new GlobalQuota(ctx as unknown as DurableObjectState);
-
-    const response = await quota.fetch(
-      new Request('https://quota/quota', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: 500 }),
-      })
-    );
-    const body = (await response.json()) as {
-      count: number;
-      exceeded: boolean;
-    };
-    expect(body.exceeded).toBe(true);
-    expect(ctx.storage.put).toHaveBeenCalledTimes(1);
   });
 });
