@@ -706,7 +706,10 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
 
     if (
       event === 'pull_request' &&
-      (action === 'opened' || action === 'synchronize' || action === 'reopened')
+      (action === 'opened' ||
+        action === 'synchronize' ||
+        action === 'reopened' ||
+        action === 'ready_for_review')
     ) {
       if (!installationId) return new Response('Bad Request', { status: 400 });
       const repo = (payload.repository as { full_name: string }).full_name;
@@ -729,7 +732,12 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         number: number;
         title: string;
         head: { sha: string };
+        draft?: boolean;
       };
+
+      if (action === 'opened' && pr.draft) {
+        return new Response(null, { status: 204 });
+      }
 
       const owner = repo.split('/')[0] ?? '';
       const repoName = repo.split('/')[1] ?? '';

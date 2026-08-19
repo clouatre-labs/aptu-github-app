@@ -91,9 +91,9 @@ graph TD
     G --> H["Fetch .github/aptu.yml<br/>GitHub Contents API"]
     H --> I{"Config valid<br/>and feature enabled?"}
     I -->|No| J["200 OK / no dispatch"]
-    I -->|Yes| K{"review.paths<br/>match all PR files?"}
-    K -->|Yes| J
-    K -->|No| L["Get dispatch token<br/>scoped to TARGET_REPO"]
+    I -->|Yes| K{"review.paths: any file qualifies?"}
+    K -->|No| J
+    K -->|Yes| L["Get dispatch token<br/>scoped to TARGET_REPO"]
     L --> M["POST repository_dispatch<br/>to clouatre-labs/aptu-github-app"]
     M --> N["204 No Content"]
     M --> O["GitHub Actions<br/>issue-triage.yml or pr-review.yml"]
