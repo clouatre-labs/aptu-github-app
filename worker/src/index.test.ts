@@ -455,7 +455,7 @@ describe('token generation', () => {
       expect.objectContaining({
         type: 'installation',
         installationId: 55,
-        repositoryNames: ['owner/repo'],
+        repositoryNames: ['repo'],
         permissions: { contents: 'read', pull_requests: 'read' },
       })
     );
@@ -549,7 +549,7 @@ describe('repository_dispatch client_payload', () => {
       expect.objectContaining({
         type: 'installation',
         installationId: 20,
-        repositoryNames: [mockEnv.TARGET_REPO],
+        repositoryNames: ['aptu-github-app'],
         permissions: { contents: 'write' },
       })
     );
@@ -2119,9 +2119,26 @@ describe('scoped token helper', () => {
     expect(authFn).toHaveBeenCalledWith({
       type: 'installation',
       installationId: installId,
-      repositoryNames: [repo],
+      repositoryNames: [repo.split('/')[1] ?? repo],
       permissions: expected,
     });
+  });
+
+  it('getScopedToken preserves a repository name without an owner prefix', async () => {
+    const { createAppAuth } = await import('@octokit/auth-app');
+    const { getScopedToken, PERMS } = await import('./index.js');
+
+    await getScopedToken(mockEnv, 7, 'standalone-repo', PERMS.config);
+
+    const mockedCreateAppAuth = createAppAuth as ReturnType<typeof vi.fn>;
+    const authFn = mockedCreateAppAuth.mock.results[0]?.value as ReturnType<
+      typeof vi.fn
+    >;
+    expect(authFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repositoryNames: ['standalone-repo'],
+      })
+    );
   });
 
   it('getInstallationToken passes repositoryNames and explicit permissions map to auth', async () => {

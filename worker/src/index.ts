@@ -111,8 +111,12 @@ export async function getScopedToken(
   repoFullName: string,
   permissions: Record<string, string>
 ): Promise<string> {
+  // GitHub's installation token API expects short repository names (e.g.
+  // "aptu-coder"), not full owner/repo strings.  Normalize here so every
+  // caller can safely pass the webhook's repository.full_name.
+  const shortRepoName = repoFullName.split('/')[1] ?? repoFullName;
   return getInstallationToken(env, installationId, {
-    repositoryNames: [repoFullName],
+    repositoryNames: [shortRepoName],
     permissions,
   });
 }
