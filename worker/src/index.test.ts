@@ -536,13 +536,14 @@ describe('repository_dispatch client_payload', () => {
     // createAppAuth is called once per token request; each call returns a
     // fresh inner vi.fn.  Iterate all results to find the dispatch token call
     // (the one with contents:write permission).
-    const allAuthCalls = mockedCreateAppAuth.mock.results.flatMap(
-      (r: { value: ReturnType<typeof vi.fn> }) => r.value.mock.calls
+    const allAuthCalls = mockedCreateAppAuth.mock.results.flatMap((r) =>
+      r.type === 'return' ? r.value.mock.calls : []
     ) as unknown[][];
-    const dispatchTokenCall = allAuthCalls.find(
-      (call) =>
-        (call[0] as Record<string, unknown>).permissions?.contents === 'write'
-    );
+    const dispatchTokenCall = allAuthCalls.find((call) => {
+      const opts = call[0] as Record<string, unknown> | undefined;
+      const perms = opts?.permissions as Record<string, unknown> | undefined;
+      return perms?.contents === 'write';
+    });
     expect(dispatchTokenCall).toBeDefined();
     expect(dispatchTokenCall?.[0]).toEqual(
       expect.objectContaining({
