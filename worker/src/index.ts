@@ -5,7 +5,7 @@ import { createAppAuth } from '@octokit/auth-app';
 
 // Re-exported for Cloudflare Worker binding: wrangler requires Durable Object
 // classes to be exported from the entry point (this file) to register them.
-export { GlobalQuota, InstallationQuota } from './quota';
+export { InstallationQuota } from './quota';
 
 import { captureException, withSentry } from '@sentry/cloudflare';
 import {
@@ -25,8 +25,6 @@ export interface Env {
   ALLOWED_OWNERS: string;
   SENTRY_DSN: string;
   QUOTA: DurableObjectNamespace;
-  GLOBAL_QUOTA: DurableObjectNamespace;
-  GLOBAL_QUOTA_LIMIT: string;
   REPLAY_GUARD: DurableObjectNamespace;
 }
 
@@ -233,7 +231,7 @@ async function checkQuota(
     quotaResponse = await stub.fetch('https://quota/quota', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventType, installationId }),
+      body: JSON.stringify({ eventType, installationId, action: 'check' }),
     });
   } catch (error) {
     captureException(error, {
@@ -269,57 +267,57 @@ async function checkQuota(
   return null;
 }
 
-async function checkGlobalQuota(env: Env): Promise<Response | null> {
-  const quotaId = env.GLOBAL_QUOTA.idFromName('global');
-  const stub = env.GLOBAL_QUOTA.get(quotaId);
-  const limit = parseInt(env.GLOBAL_QUOTA_LIMIT, 10);
-  const finalLimit = Number.isNaN(limit) || limit <= 0 ? 500 : limit;
-  let quotaResponse: Response;
-  try {
-    quotaResponse = await stub.fetch('https://quota/quota', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ limit: finalLimit }),
-    });
-  } catch (error) {
-    captureException(error, { tags: { eventType: 'global' } });
-    console.error('Global quota check failed:', error);
-    return new Response('Internal Server Error', { status: 500 });
-  }
-  if (!quotaResponse.ok) {
-    const text = await quotaResponse.text();
-    captureException(new Error(`Global quota check non-2xx: ${text}`), {
-      tags: { eventType: 'global' },
-    });
-    console.error(`Global quota check error: ${text}`);
-    return new Response('Internal Server Error', { status: 500 });
-  }
-  const quota = (await quotaResponse.json()) as {
-    count: number;
-    exceeded: boolean;
-    retryAfter: number | null;
-  };
-  if (quota.exceeded) {
-    return new Response(null, {
-      status: 429,
-      headers: { 'Retry-After': String(quota.retryAfter ?? 3600) },
-    });
-  }
-  return null;
+/**
+ * Checks per-installation quota with an optional AI-key exemption.
+ *
+ * If `config?.ai?.['api-key-secret']` is present, quota is bypassed entirely
+ * (installations providing their own AI key are not rate-limited).
+ *
+ * Known limitation (TOCTOU race): concurrent webhooks from the same
+ * installation can all pass this check before any recordQuota write lands,
+ * allowing a burst over the limit. Acceptable for rate limiting.
+ */
+async function checkQuotaOnly(
+  env: Env,
+  installationId: number,
+  eventType: string,
+  config?: AptuConfig | null
+): Promise<Response | null> {
+  if (config?.ai?.['api-key-secret']) return null;
+  return checkQuota(env, installationId, eventType);
 }
 
-async function enforceQuota(
+/**
+ * Records a quota event after a successful repository_dispatch.
+ *
+ * Calls InstallationQuota with action 'record' to append a timestamp.
+ * Returns void; logs errors but does not block webhook processing.
+ */
+async function recordQuota(
   env: Env,
   installationId: number,
   eventType: string
-): Promise<Response | null> {
-  // Org-wide check first; a failing (500) global check short-circuits before
-  // the per-installation check.
-  const globalResponse = await checkGlobalQuota(env);
-  if (globalResponse) return globalResponse;
-  const quotaResponse = await checkQuota(env, installationId, eventType);
-  if (quotaResponse) return quotaResponse;
-  return null;
+): Promise<void> {
+  const quotaId = env.QUOTA.idFromName(String(installationId));
+  const stub = env.QUOTA.get(quotaId);
+  try {
+    const quotaResponse = await stub.fetch('https://quota/quota', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventType, installationId, action: 'record' }),
+    });
+    if (!quotaResponse.ok) {
+      const text = await quotaResponse.text();
+      console.error(
+        `Quota record non-2xx for installation ${installationId}: ${text}`
+      );
+    }
+  } catch (error) {
+    console.error(
+      `Quota record failed for installation ${installationId}:`,
+      error
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -389,8 +387,6 @@ export async function handleMentionCommand(
   if (comment.user?.id === Number(env.APTU_BOT_ID)) return null;
 
   const eventType = event === 'issue_comment' ? 'triage' : 'review';
-  const quotaResponse = await enforceQuota(env, installationId, eventType);
-  if (quotaResponse) return quotaResponse;
 
   const repo = (payload.repository as { full_name: string }).full_name;
   const [owner, name] = repo.split('/');
@@ -401,6 +397,25 @@ export async function handleMentionCommand(
   } catch {
     return new Response('Internal Server Error', { status: 500 });
   }
+
+  // Fetch config before quota check to enable AI-key exemption.
+  // If config fetch fails, proceed to quota enforcement as today.
+  let config: AptuConfig | null = null;
+  try {
+    config = await fetchRepoConfig(token, owner ?? '', name ?? '');
+  } catch (error) {
+    captureException(error, { tags: { eventType: event, repo } });
+    console.error(`Failed to fetch config for ${repo}:`, error);
+    config = null;
+  }
+
+  const quotaResponse = await checkQuotaOnly(
+    env,
+    installationId,
+    eventType,
+    config
+  );
+  if (quotaResponse) return quotaResponse;
 
   const hasAccess = await checkCollaboratorPermission(
     token,
@@ -429,6 +444,8 @@ export async function handleMentionCommand(
   } catch {
     return new Response('Internal Server Error', { status: 500 });
   }
+
+  await recordQuota(env, installationId, eventType);
 
   return new Response(null, { status: 204 });
 }
@@ -632,9 +649,6 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       if (!repo.includes('/'))
         return new Response('Bad Request', { status: 400 });
 
-      const quotaResponse = await enforceQuota(env, installationId, 'triage');
-      if (quotaResponse) return quotaResponse;
-
       const configToken = await getTokenOr500(
         env,
         installationId,
@@ -656,6 +670,14 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         console.error(`Failed to fetch config for ${repo}:`, error);
         config = null;
       }
+
+      const quotaResponse = await checkQuotaOnly(
+        env,
+        installationId,
+        'triage',
+        config
+      );
+      if (quotaResponse) return quotaResponse;
 
       if (!shouldDispatch(config, 'triage'))
         return new Response('OK', { status: 200 });
@@ -701,6 +723,8 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         return new Response('Internal Server Error', { status: 500 });
       }
 
+      await recordQuota(env, installationId, 'triage');
+
       return new Response(null, { status: 204 });
     }
 
@@ -715,9 +739,6 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       const repo = (payload.repository as { full_name: string }).full_name;
       if (!repo.includes('/'))
         return new Response('Bad Request', { status: 400 });
-
-      const quotaResponse = await enforceQuota(env, installationId, 'review');
-      if (quotaResponse) return quotaResponse;
 
       const configToken = await getTokenOr500(
         env,
@@ -750,6 +771,14 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         console.error(`Failed to fetch config for ${repo}:`, error);
         config = null;
       }
+
+      const quotaResponse = await checkQuotaOnly(
+        env,
+        installationId,
+        'review',
+        config
+      );
+      if (quotaResponse) return quotaResponse;
 
       const reviewWouldSkip = await shouldSkipPrDispatch(
         repo,
@@ -810,6 +839,8 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
           );
           return new Response('Internal Server Error', { status: 500 });
         }
+
+        await recordQuota(env, installationId, 'review');
       }
 
       if (shouldScan) {
@@ -836,6 +867,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
               fail_on: config?.scan?.['fail-on'] ?? null,
             }
           );
+          await recordQuota(env, installationId, 'review');
         } catch (error) {
           captureException(error, {
             tags: { eventType: 'pull_request', repo },
