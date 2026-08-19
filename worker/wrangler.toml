@@ -25,7 +25,7 @@ new_sqlite_classes = ["ReplayGuard"]
 
 [[migrations]]
 tag = "v4"
-delete_classes = ["GlobalQuota"]
+deleted_classes = ["GlobalQuota"]
 
 [vars]
 # SENTRY_DSN = ""  # Set via: bunx wrangler secret put SENTRY_DSN
