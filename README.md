@@ -3,31 +3,41 @@
 A Cloudflare Worker and GitHub Actions that automate issue triage and PR review for repositories
 in the clouatre-labs org, powered by [aptu](https://aptu.dev). The Worker validates GitHub
 webhook signatures, reads each repository's `.github/aptu.yml` opt-in config, and dispatches
-`repository_dispatch` events to trigger aptu-powered triage and review workflows.
+`repository_dispatch` events to trigger aptu-powered triage, review, and security scan workflows.
 
 ## Architecture
 
 ```text
-GitHub event (issues.opened / pull_request.opened|synchronize|reopened)
+GitHub event (issues.opened / pull_request.opened|synchronize|reopened|ready_for_review
+              / issue_comment.created / pull_request_review_comment.created)
   -> Cloudflare Worker
-       1. Verify X-Hub-Signature-256
-       2. Get installation token (scoped to originating repo)
-       3. Fetch .github/aptu.yml from originating repo
+       1. Verify X-Hub-Signature-256 (HMAC)
+       2. Deduplicate by X-GitHub-Delivery (ReplayGuard Durable Object)
+       3. Validate source IP against GitHub /meta hook CIDRs (fail-open)
        4. Check ALLOWED_OWNERS allowlist -- 403 if not allowed
-       5. Get dispatch token (scoped to TARGET_REPO)
-       6. POST repository_dispatch to TARGET_REPO
+       5. Get installation token (scoped to originating repo)
+       6. Fetch .github/aptu.yml from originating repo
+       7. Check per-installation quota (skipped if ai block present)
+       8. For PRs: skip draft PRs; evaluate review.paths filters
+       9. Get dispatch token (scoped to TARGET_REPO)
+      10. POST repository_dispatch to TARGET_REPO
   -> GitHub Actions workflow (actions/create-github-app-token, run aptu CLI)
   -> GitHub Reviews API (inline comments as aptu[bot])
 ```
 
-The Worker is stateless: validate HMAC signature, fetch the target repo's `aptu.yml`, check
-the allowlist, call `POST /repos/{owner}/{repo}/dispatches` if opted in, return 200. The
-workflow handles all App authentication and aptu invocation. No persistent server required.
+The Worker uses two Durable Objects: `InstallationQuota` for per-installation rate limiting
+(bypassed when a repo provides its own AI key), and `ReplayGuard` for webhook deduplication.
+No external database is required.
+
+### Mention commands
+
+Commenting `@aptu` on an issue or PR review comment triggers triage or review respectively.
+The commenter must be a collaborator with at least read permission on the repository.
 
 ## Repository configuration
 
-Each repository opts in to triage and review by adding a `.github/aptu.yml` file. The Worker
-fetches this file on every webhook event; if the file is absent or invalid, no dispatch occurs.
+Each repository opts in by adding a `.github/aptu.yml` file. The Worker fetches this file on
+every webhook event; if the file is absent or invalid, no dispatch occurs.
 
 ### Schema
 
@@ -40,37 +50,28 @@ triage:
 review:
   enabled: true                                   # required if review block present
   instructions-file: .github/instructions/pr-review.md  # optional; path in the target repo
+  skip-labeled: false                             # optional; aptu skips review if PR has a label
   paths:                                          # optional; suppress PR review when no file qualifies
     - "src/**"                                    # bare patterns are includes
     - "!src/data/**"                              # '!'-prefixed patterns are excludes
 
-ai:
-  provider: gemini                                # required if ai block present
-  model: gemini-3.1-flash-lite                    # required if ai block present
-  api-key-secret: GEMINI_API_KEY                  # required; name of GitHub Actions secret
-```
-
-### Scan configuration
-
-The `scan` block enables aptu's local pattern-based security scanning. Scan runs
-without an AI provider -- no `ai` block is required. When enabled, pull requests
-are scanned for hardcoded secrets and other security anti-patterns, and results
-are uploaded as SARIF code scanning alerts.
-
-```yaml
 scan:
   enabled: true                                   # required if scan block present
   fail-on: warning                                # optional: "none" (default), "warning", or "error"
   path: "**/*.{py,ts,js,rs}"                      # optional: glob pattern limiting scan to matching files
+
+ai:
+  provider: openrouter                            # required if ai block present
+  model: google/gemma-4-26b-a4b-it                # required if ai block present
+  api-key-secret: OPENROUTER_API_KEY              # required; name of GitHub Actions secret
 ```
 
-If `fail-on` is `warning`, the scan posts a failing commit status on any finding
-(including `warning`-severity matches). If `error`, only `error`-severity matches fail the build.
+### Scan configuration
 
-All fields under `triage`, `review`, `scan`, and `ai` are validated strictly: unknown keys are ignored,
-but a missing `enabled` boolean causes the entire config to be rejected (no dispatch). All three
-`ai` fields are required if the `ai` block is present; a partial or empty-string block is
-rejected.
+The `scan` block enables aptu's local pattern-based security scanning. Scan runs without an AI
+provider -- no `ai` block is required. Results are uploaded as SARIF code scanning alerts to the
+originating repository. If `fail-on` is `warning`, any finding fails the check; if `error`, only
+error-severity matches fail.
 
 ### Field reference
 
@@ -80,14 +81,19 @@ rejected.
 | `triage.enabled` | boolean | -- | Dispatch `aptu-triage` on `issues.opened` events. |
 | `review.enabled` | boolean | -- | Dispatch `aptu-review` on `pull_request` opened/synchronize/reopened/ready_for_review events. |
 | `review.instructions-file` | string | `.github/instructions/pr-review.md` | Path to PR review instructions file, relative to the target repo root. Passed to aptu as `--instructions-file`. |
-| `review.skip-labeled` | boolean | `false` | Skip dispatch when the PR already carries a label. Passed to aptu as `--skip-labeled`. |
-| `review.paths` | string[] | -- | Glob patterns (picomatch) evaluated against the full PR file list. Bare patterns are includes; `!`-prefixed patterns are excludes. A PR is dispatched if at least one file qualifies (matches an include when includes are present, and matches no exclude). If no file qualifies, the review dispatch is suppressed. |
-| `ai.provider` | string | -- | AI provider name passed to aptu as `--provider`. Required if `ai` block present. |
+| `review.skip-labeled` | boolean | `false` | Passed to aptu as `--skip-labeled`. When true, aptu skips review if the PR already carries a label. |
+| `review.paths` | string[] | -- | Glob patterns (picomatch) evaluated against the full PR file list. Bare patterns are includes; `!`-prefixed patterns are excludes. A PR is dispatched if at least one file qualifies. If no file qualifies, the review dispatch is suppressed. |
+| `ai.provider` | string | -- | AI provider name passed to aptu as `--provider`. Supported: `gemini`, `anthropic`, `openrouter`. Required if `ai` block present. |
 | `ai.model` | string | -- | AI model name passed to aptu as `--model`. Required if `ai` block present. |
 | `ai.api-key-secret` | string | -- | Name of a GitHub Actions secret in the caller's repository containing the API key. Required if `ai` block present. Must match `^[A-Z0-9_]+$`. |
-| `scan.enabled` | boolean | `false` | Enable aptu scan-security on pull requests. When enabled, runs local pattern-based secret scanning and uploads SARIF results to GitHub Code Scanning. No `ai` block required. |
+| `scan.enabled` | boolean | `false` | Enable aptu scan-security on pull requests. Runs local pattern-based secret scanning and uploads SARIF results to GitHub Code Scanning. No `ai` block required. |
 | `scan.fail-on` | string | `none` | When the scan should fail the check. `none`: report only; `warning`: fail on any finding; `error`: fail only on error-severity matches. |
 | `scan.path` | string | `**/*` | Glob pattern limiting scan to matching files (e.g., `**/*.{py,ts,js,rs}`). |
+
+All fields under `triage`, `review`, `scan`, and `ai` are validated strictly: unknown keys are
+ignored, but a missing `enabled` boolean causes the entire config to be rejected (no dispatch).
+All three `ai` fields are required if the `ai` block is present; a partial or empty-string block
+is rejected.
 
 ### Minimal opt-in example
 
@@ -97,15 +103,13 @@ triage:
   enabled: true
 review:
   enabled: true
-  instructions-file: .github/instructions/pr-review.md
 ```
 
 ### External installation example
 
-Repositories using the aptu GitHub App must include an `ai` block with a valid
-`api-key-secret` pointing to a secret in the caller's own repository. The Worker
-never has access to repository secrets; the workflow resolves the key dynamically
-via `${{ secrets[github.event.client_payload.ai_key_secret] }}`.
+Repositories using the aptu GitHub App must include an `ai` block with a valid `api-key-secret`
+pointing to a secret in the caller's own repository. The Worker never has access to repository
+secrets; the workflow resolves the key dynamically via `${{ secrets[github.event.client_payload.ai_key_secret] }}`.
 
 ```yaml
 version: 1
@@ -114,9 +118,9 @@ triage:
 review:
   enabled: true
 ai:
-  provider: openai
-  model: gpt-4o
-  api-key-secret: OPENAI_API_KEY
+  provider: openrouter
+  model: google/gemma-4-26b-a4b-it
+  api-key-secret: OPENROUTER_API_KEY
 ```
 
 ## Deployment
@@ -124,45 +128,43 @@ ai:
 ### Worker deployment
 
 Merging to `main` triggers `deploy.yml`, which deploys the Worker to Cloudflare via
-`bunx wrangler deploy`. Required GitHub secrets and variables:
+`bunx wrangler deploy`.
+
+GitHub secrets and variables:
 
 - `CLOUDFLARE_API_TOKEN` -- Cloudflare API token with Workers edit permission
 - `CLOUDFLARE_ACCOUNT_ID` -- Cloudflare account ID (repository variable)
-- `WEBHOOK_SECRET` -- Wrangler secret; must match the value configured in the GitHub App
 
-Required Wrangler variables (set in `wrangler.toml` or via `bunx wrangler secret put`):
+Wrangler secrets (set via `bunx wrangler secret put`):
+
+- `WEBHOOK_SECRET` -- must match the value configured in the GitHub App
+- `APP_PRIVATE_KEY` -- GitHub App private key in PKCS#8 PEM format
+
+Wrangler variables (in `wrangler.toml` `[vars]`):
 
 - `APP_ID` -- GitHub App ID
 - `TARGET_REPO` -- `owner/repo` that receives `repository_dispatch` events (i.e., this repo)
-- `ALLOWED_OWNERS` -- comma-separated list of GitHub account/org names (e.g., `clouatre-labs,clouatre`). Requests whose `repository.owner.login` (or `organization.login`) does not appear in this list are rejected with `403 Forbidden` before any event processing. This is a hard early gate; it is not a bypass for the `ai` block requirement.
+- `APTU_BOT_ID` -- aptu bot user ID (used to ignore self-mentions)
+- `ALLOWED_OWNERS` -- comma-separated GitHub account/org names (e.g., `clouatre-labs,clouatre`).
+  Requests whose `repository.owner.login` does not appear in this list are rejected with `403`.
+- `SENTRY_DSN` -- Sentry DSN for error tracking (optional; set via `bunx wrangler secret put`)
 
 ### DNS prerequisite
 
-The `wrangler.toml` configuration binds the Worker to the route `aptu.dev/webhook` using
-the `routes` pattern. Cloudflare route bindings require a proxied DNS record for the zone
-root to exist; without one the domain does not resolve and GitHub cannot deliver webhooks
-(`ERR_NAME_NOT_RESOLVED`).
-
-Add the following record in the Cloudflare dashboard under the `aptu.dev` zone before or
-after the first deploy:
+The Worker is bound to the route `aptu.dev/webhook` via `wrangler.toml`. Cloudflare route
+bindings require a proxied DNS record for the zone root:
 
 | Type | Name | Content | Proxied |
-| ------ | ------ | --------- | ------- |
+| --- | --- | --- | --- |
 | AAAA | aptu.dev | `100::` | Yes |
 
 `100::` is the [Cloudflare-documented placeholder](https://developers.cloudflare.com/workers/configuration/routing/routes/)
-for route-based Workers with no real origin. The address is never contacted; Cloudflare
-intercepts all proxied requests and the Worker route handles `/webhook` before any origin
-is reached.
-
-Note: `custom_domain = true` in `wrangler.toml` would have Cloudflare manage DNS
-automatically, but it binds the Worker to the entire domain. Because only `/webhook` is
-intercepted, the `routes` + `AAAA 100::` pattern is correct.
+for route-based Workers with no real origin.
 
 ### App credentials
 
-See [clouatre-labs/aptu#94](https://github.com/clouatre-labs/aptu/issues/94) for GitHub
-App registration and credential setup.
+See [clouatre-labs/aptu#94](https://github.com/clouatre-labs/aptu/issues/94) for GitHub App
+registration and credential setup.
 
 ### Operator procedures
 
@@ -173,9 +175,8 @@ for post-deploy steps, secret rotation, and incident response.
 
 Merging to `main` triggers [Release Please](https://github.com/googleapis/release-please-action)
 to create GitHub Releases automatically from [Conventional Commits](https://www.conventionalcommits.org/).
-No manual version bump is required. Each release generates a changelog entry and a tagged
-GitHub Release. See the [Releases & Versioning](https://github.com/clouatre-labs/aptu-github-app/blob/main/CONTRIBUTING.md#releases--versioning)
-section of CONTRIBUTING.md for details.
+See [CONTRIBUTING.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/CONTRIBUTING.md#releases--versioning)
+for details.
 
 ## Development
 
