@@ -23,6 +23,10 @@ new_sqlite_classes = ["InstallationQuota"]
 tag = "v3"
 new_sqlite_classes = ["ReplayGuard"]
 
+[[migrations]]
+tag = "v4"
+delete_classes = ["GlobalQuota"]
+
 [vars]
 # SENTRY_DSN = ""  # Set via: bunx wrangler secret put SENTRY_DSN
 # The SENTRY_DSN is used for error tracking via @sentry/cloudflare.
