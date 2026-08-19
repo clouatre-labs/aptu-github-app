@@ -517,6 +517,43 @@ describe('repository_dispatch client_payload', () => {
       pull_number: 99,
     });
   });
+
+  it('requests dispatch token with full owner/repo name, not short name', async () => {
+    const { createAppAuth } = await import('@octokit/auth-app');
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 20 },
+      pull_request: { number: 99, title: 'Token scope test' },
+      repository: { full_name: 'myorg/myrepo', owner: { login: 'myorg' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    const mockedCreateAppAuth = createAppAuth as ReturnType<typeof vi.fn>;
+    // createAppAuth is called once per token request; each call returns a
+    // fresh inner vi.fn.  Iterate all results to find the dispatch token call
+    // (the one with contents:write permission).
+    const allAuthCalls = mockedCreateAppAuth.mock.results.flatMap((r) =>
+      r.type === 'return' ? r.value.mock.calls : []
+    ) as unknown[][];
+    const dispatchTokenCall = allAuthCalls.find((call) => {
+      const opts = call[0] as Record<string, unknown> | undefined;
+      const perms = opts?.permissions as Record<string, unknown> | undefined;
+      return perms?.contents === 'write';
+    });
+    expect(dispatchTokenCall).toBeDefined();
+    expect(dispatchTokenCall?.[0]).toEqual(
+      expect.objectContaining({
+        type: 'installation',
+        installationId: 20,
+        repositoryNames: [mockEnv.TARGET_REPO],
+        permissions: { contents: 'write' },
+      })
+    );
+  });
 });
 
 describe('path filter config', () => {

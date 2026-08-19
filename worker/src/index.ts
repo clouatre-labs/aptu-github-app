@@ -665,11 +665,10 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       );
       if (triageToken instanceof Response) return triageToken;
 
-      const targetRepoName = env.TARGET_REPO.split('/')[1] ?? '';
       const dispatchToken = await getTokenOr500(
         env,
         installationId,
-        targetRepoName,
+        env.TARGET_REPO,
         PERMS.dispatch,
         'issues.opened'
       );
@@ -754,11 +753,10 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
           status: reviewWouldSkip ? 204 : 200,
         });
 
-      const targetRepoName = env.TARGET_REPO.split('/')[1] ?? '';
       const dispatchToken = await getTokenOr500(
         env,
         installationId,
-        targetRepoName,
+        env.TARGET_REPO,
         PERMS.dispatch,
         'pull_request'
       );
