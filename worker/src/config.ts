@@ -191,7 +191,7 @@ export function shouldSkipByPathFilters(
   }
 
   // A file "qualifies" when it matches at least one include and matches no exclude.
-  // Without includes, a file qualifies when it matches at least one exclude.
+  // Without includes, a file qualifies when it matches no exclude.
   // Skip (return true) when NO files qualify.
   // Dispatch (return false) when at least one file qualifies.
   for (const filename of filenames) {
@@ -204,9 +204,9 @@ export function shouldSkipByPathFilters(
         return false; // at least one file qualifies -> dispatch
       }
     } else {
-      // Exclude-only mode: file must match an exclude to be covered
+      // Exclude-only mode: file qualifies when it matches no exclude
       if (!excludes.some((p) => isMatch(filename, p))) {
-        return false; // file not covered by any exclude -> dispatch
+        return false; // file matches no exclude -> qualifies -> dispatch
       }
     }
   }
