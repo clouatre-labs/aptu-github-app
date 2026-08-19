@@ -190,24 +190,23 @@ export function shouldSkipByPathFilters(
     }
   }
 
-  // A file "passes" (is considered covered by the filter) when:
-  //   With includes: file matches at least one include AND matches no exclude
-  //   Without includes: file matches at least one exclude
-  // Skip (return true) when ALL files pass the filter.
-  // Dispatch (return false) when at least one file does NOT pass.
+  // A file "qualifies" when it matches at least one include and matches no exclude.
+  // Without includes, a file qualifies when it matches no exclude.
+  // Skip (return true) when NO files qualify.
+  // Dispatch (return false) when at least one file qualifies.
   for (const filename of filenames) {
     if (includes.length > 0) {
-      // Include-only or mixed mode: file must match an include and no exclude
-      if (!includes.some((p) => isMatch(filename, p))) {
-        return false; // file not covered by any include -> dispatch
-      }
-      if (excludes.some((p) => isMatch(filename, p))) {
-        return false; // file excluded -> dispatch
+      // Include-only or mixed mode: file qualifies if it matches an include and no exclude
+      if (
+        includes.some((p) => isMatch(filename, p)) &&
+        !excludes.some((p) => isMatch(filename, p))
+      ) {
+        return false; // at least one file qualifies -> dispatch
       }
     } else {
-      // Exclude-only mode: file must match an exclude to be covered
+      // Exclude-only mode: file qualifies when it matches no exclude
       if (!excludes.some((p) => isMatch(filename, p))) {
-        return false; // file not covered by any exclude -> dispatch
+        return false; // file matches no exclude -> qualifies -> dispatch
       }
     }
   }

@@ -224,22 +224,22 @@ describe('shouldSkipByPathFilters', () => {
     expect(shouldSkipByPathFilters([], ['src/index.ts'])).toBe(false);
   });
 
-  it('returns false (dispatch) when include patterns are present but at least one changed file does not match any include', () => {
+  it('returns true (skip) when no changed file matches any include pattern', () => {
+    const patterns = ['src/**'];
+    const filenames = ['docs/readme.md'];
+    expect(shouldSkipByPathFilters(patterns, filenames)).toBe(true);
+  });
+
+  it('returns false (dispatch) when at least one changed file matches an include pattern', () => {
     const patterns = ['src/**'];
     const filenames = ['src/index.ts', 'docs/readme.md'];
     expect(shouldSkipByPathFilters(patterns, filenames)).toBe(false);
   });
 
-  it('returns true (skip) when all changed files match at least one include pattern and no exclude', () => {
-    const patterns = ['src/**'];
-    const filenames = ['src/index.ts', 'src/config.ts'];
-    expect(shouldSkipByPathFilters(patterns, filenames)).toBe(true);
-  });
-
-  it('returns false (dispatch) when a file matches an include pattern but also matches an exclude pattern (exclude narrows include scope)', () => {
+  it('returns true (skip) when all files matching includes are excluded', () => {
     const patterns = ['src/**', '!src/data/**'];
     const filenames = ['src/data/blog/post.md'];
-    expect(shouldSkipByPathFilters(patterns, filenames)).toBe(false);
+    expect(shouldSkipByPathFilters(patterns, filenames)).toBe(true);
   });
 
   it('with only exclude patterns and no includes, returns true (skip) when every file matches an exclude', () => {

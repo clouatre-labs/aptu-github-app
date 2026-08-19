@@ -557,12 +557,63 @@ describe('repository_dispatch client_payload', () => {
 });
 
 describe('path filter config', () => {
+  it('dispatches review when ready_for_review action and files match paths', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(
+        makeConfigResponse(
+          'version: 1\nreview:\n  enabled: true\n  paths:\n    - "src/**"'
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([{ filename: 'src/index.ts' }]), {
+          status: 200,
+        })
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const body = JSON.stringify({
+      action: 'ready_for_review',
+      installation: { id: 1 },
+      pull_request: { number: 46, title: 'Ready', head: { sha: 'abc' } },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sign(mockEnv.WEBHOOK_SECRET, body),
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(204);
+    expect(
+      fetchSpy.mock.calls.filter((call) =>
+        String(call[0]).includes('/dispatches')
+      )
+    ).toHaveLength(1);
+  });
+
+  it('returns 204 without dispatch when opened action has a draft PR', async () => {
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: { number: 47, title: 'Draft', draft: true },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sign(mockEnv.WEBHOOK_SECRET, body),
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(204);
+    expect(
+      fetchSpy.mock.calls.filter((call) =>
+        String(call[0]).includes('/dispatches')
+      )
+    ).toHaveLength(0);
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     fetchSpy = vi.spyOn(globalThis, 'fetch');
   });
 
-  it('returns 204 without dispatch when all PR files match review.paths patterns (skip)', async () => {
+  it('dispatches when at least one PR file matches review.paths patterns', async () => {
     // Mock config fetch - aptu.yml with review.paths
     fetchSpy.mockResolvedValueOnce(
       makeConfigResponse(
@@ -606,28 +657,26 @@ describe('path filter config', () => {
     const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
       String(call[0]).includes('/dispatches')
     );
-    expect(dispatchCalls.length).toBe(0);
+    expect(dispatchCalls.length).toBe(1);
   });
 
-  it('returns 204 and dispatches when one file does not match review.paths patterns (partial match)', async () => {
+  it('returns 204 without dispatch when no PR file matches review.paths patterns', async () => {
     // Mock config fetch - includes review.paths in aptu.yml
     fetchSpy.mockResolvedValueOnce(
       makeConfigResponse(
         'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\n  paths:\n    - "src/data/**"'
       )
     );
-    // Mock PR files fetch - one file doesn't match
+    // Mock PR files fetch - no files match review.paths
     fetchSpy.mockResolvedValueOnce(
       new Response(
         JSON.stringify([
-          { filename: 'src/data/blog/post.md' },
           { filename: 'worker/src/index.ts' },
+          { filename: 'docs/readme.md' },
         ]),
         { status: 200 }
       )
     );
-    // Mock dispatch event
-    fetchSpy.mockResolvedValueOnce(new Response(null, { status: 204 }));
 
     const body = JSON.stringify({
       action: 'opened',
@@ -649,7 +698,7 @@ describe('path filter config', () => {
     const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
       String(call[0]).includes('/dispatches')
     );
-    expect(dispatchCalls.length).toBe(1);
+    expect(dispatchCalls.length).toBe(0);
   });
 
   it('returns 204 and dispatches when aptuConfig has no review.paths field', async () => {

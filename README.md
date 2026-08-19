@@ -78,7 +78,7 @@ rejected.
 | --- | --- | --- | --- |
 | `version` | integer | -- | Config schema version. Must be `1`. |
 | `triage.enabled` | boolean | -- | Dispatch `aptu-triage` on `issues.opened` events. |
-| `review.enabled` | boolean | -- | Dispatch `aptu-review` on `pull_request` opened/synchronize/reopened events. |
+| `review.enabled` | boolean | -- | Dispatch `aptu-review` on `pull_request` opened/synchronize/reopened/ready_for_review events. |
 | `review.instructions-file` | string | `.github/instructions/pr-review.md` | Path to PR review instructions file, relative to the target repo root. Passed to aptu as `--instructions-file`. |
 | `review.skip-labeled` | boolean | `false` | Skip dispatch when the PR already carries a label. Passed to aptu as `--skip-labeled`. |
 | `review.paths` | string[] | -- | Glob patterns (picomatch) evaluated against the full PR file list. Bare patterns are includes; `!`-prefixed patterns are excludes. A PR is dispatched if at least one file qualifies (matches an include when includes are present, and matches no exclude). If no file qualifies, the review dispatch is suppressed. |
