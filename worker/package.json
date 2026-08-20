@@ -16,7 +16,7 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260816.1",
+    "@cloudflare/workers-types": "5.20260817.1",
     "typescript": "7.0.2",
     "vitest": "4.1.10",
     "@types/node": "26.2.0",
