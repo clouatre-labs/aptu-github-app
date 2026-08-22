@@ -57,8 +57,8 @@ review:
 
 scan:
   enabled: true                                   # required if scan block present
-  fail-on: warning                                # optional: "none" (default), "warning", or "error"
-  path: "**/*.{py,ts,js,rs}"                      # optional: glob pattern limiting scan to matching files
+  fail-on: critical,high                          # optional: comma-separated severities that fail the scan
+  path: src/                                      # optional: root directory to scan (default ".")
 
 ai:
   provider: openrouter                            # required if ai block present
@@ -70,8 +70,9 @@ ai:
 
 The `scan` block enables aptu's local pattern-based security scanning. Scan runs without an AI
 provider -- no `ai` block is required. Results are uploaded as SARIF code scanning alerts to the
-originating repository. If `fail-on` is `warning`, any finding fails the check; if `error`, only
-error-severity matches fail.
+originating repository. `fail-on` takes a comma-separated list of severities (`critical`, `high`,
+`medium`, `low`); the scan fails only if a finding matches one of the listed severities. Omitting
+`fail-on` reports findings without failing the check.
 
 ### Field reference
 
@@ -87,8 +88,8 @@ error-severity matches fail.
 | `ai.model` | string | -- | AI model name passed to aptu as `--model`. Required if `ai` block present. |
 | `ai.api-key-secret` | string | -- | Name of a GitHub Actions secret in the caller's repository containing the API key. Required if `ai` block present. Must match `^[A-Z0-9_]+$`. |
 | `scan.enabled` | boolean | `false` | Enable aptu scan-security on pull requests. Runs local pattern-based secret scanning and uploads SARIF results to GitHub Code Scanning. No `ai` block required. |
-| `scan.fail-on` | string | `none` | When the scan should fail the check. `none`: report only; `warning`: fail on any finding; `error`: fail only on error-severity matches. |
-| `scan.path` | string | `**/*` | Glob pattern limiting scan to matching files (e.g., `**/*.{py,ts,js,rs}`). |
+| `scan.fail-on` | string | -- | Comma-separated severities that fail the scan (`critical`, `high`, `medium`, `low`). Omit to report findings without failing the check. |
+| `scan.path` | string | `.` | Root directory to scan. |
 
 All fields under `triage`, `review`, `scan`, and `ai` are validated strictly: unknown keys are
 ignored, but a missing `enabled` boolean causes the entire config to be rejected (no dispatch).
