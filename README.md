@@ -107,7 +107,7 @@ review:
 ### External installation example
 
 Repositories using the aptu GitHub App may configure custom AI models via the `ai` block.
-The workflow resolves the AI key from a fixed repository secret (`APTU_AI_KEY`) in the
+The workflow resolves the AI key from a fixed repository secret (`OPENROUTER_API_KEY`) in the
 `aptu-github-app` repository.
 
 ```yaml
@@ -134,7 +134,7 @@ GitHub secrets and variables:
 - `CLOUDFLARE_ACCOUNT_ID` -- Cloudflare account ID (repository variable)
 - `APP_ID` -- GitHub App ID (repository variable, required for workflows to mint scoped tokens)
 - `APP_PRIVATE_KEY` -- GitHub App private key in PKCS#8 PEM format (repository secret, required for workflows)
-- `APTU_AI_KEY` -- AI provider API key (repository secret used by triage and review workflows)
+- `OPENROUTER_API_KEY` -- AI provider API key (repository secret used by triage and review workflows)
 
 Wrangler secrets (set via `bunx wrangler secret put`):
 

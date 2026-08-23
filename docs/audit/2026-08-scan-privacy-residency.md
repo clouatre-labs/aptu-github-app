@@ -324,3 +324,4 @@ runners, Cloudflare's global edge, and third-party AI providers.
 | [#136](https://github.com/clouatre-labs/aptu-github-app/issues/136) | fix(scan): broken target_url, silent SARIF failures, binary status | V01, V02, V03, V04 |
 | [#137](https://github.com/clouatre-labs/aptu-github-app/issues/137) | fix(security): installation token in dispatch payload and masking limitations | V05, V06, V07 |
 | [#138](https://github.com/clouatre-labs/aptu-github-app/issues/138) | docs: privacy policy, data inventory, and residency documentation | V08, V09, V10, V11, V12 |
+| [#142](https://github.com/clouatre-labs/aptu-github-app/issues/142) | fix(security): replace BYOK secret-name lookup with fixed OPENROUTER_API_KEY mapping | S1/CI-F8 resolution: remove `ai_key_secret` payload field, dynamic secret lookup, and AI quota exemption |

@@ -556,3 +556,12 @@ here as the canonical record; no separate issues were opened.
 | CI-F11 -- No `vulnerabilityAlerts` in Renovate | `bun audit --audit-level high` in CI provides equivalent blocking coverage | Revisit if Renovate advisory PR cadence becomes important |
 | C8 -- JWT rate-limit pool isolation | Not confirmed; requires research against live GitHub docs | Verify and cache tokens if pool is shared |
 | C10 -- DO concurrency safety | Not load-tested; Cloudflare input-gate semantics assumed correct | Run load test before scaling to high install counts |
+
+---
+
+### Resolution Note (2026-08-23 -- Issue #142)
+
+**Resolution:** Issue #142 resolved findings S1 and CI-F8 by replacing the dynamic `secrets[ai_key_secret]`
+lookup with a fixed event-type-to-secret mapping (`secrets.OPENROUTER_API_KEY`). Removed `api-key-secret`
+from `AiConfig` schema, deleted `AI_KEY_SECRET_PATTERN`, removed `ai_key_secret` from dispatch payloads,
+and removed the AI quota exemption.

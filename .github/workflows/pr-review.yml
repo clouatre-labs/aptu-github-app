@@ -40,9 +40,9 @@ jobs:
         continue-on-error: true
         with:
           github-token: ${{ steps.app-token.outputs.token }}
-          anthropic-api-key: ${{ secrets[github.event.client_payload.ai_key_secret] }}
-          gemini-api-key: ${{ secrets[github.event.client_payload.ai_key_secret] }}
-          openrouter-api-key: ${{ secrets[github.event.client_payload.ai_key_secret] }}
+          anthropic-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+          gemini-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+          openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           provider: ${{ github.event.client_payload.ai_provider || 'openrouter' }}
           model: ${{ github.event.client_payload.ai_model || 'google/gemma-4-26b-a4b-it' }}
           skip-labeled: ${{ github.event.client_payload.skip_labeled }}

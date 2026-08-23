@@ -39,7 +39,7 @@ jobs:
         uses: clouatre-labs/aptu@df65cafeae382345ca32b40c1a0e99b1eba162ef # v0.10.12
         with:
           github-token: ${{ steps.app-token.outputs.token }}
-          gemini-api-key: ${{ secrets[github.event.client_payload.ai_key_secret] }}
+          gemini-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           provider: ${{ github.event.client_payload.ai_provider || 'openrouter' }}
           model: ${{ github.event.client_payload.ai_model || 'google/gemma-4-26b-a4b-it' }}
           no-comment: 'false'

@@ -268,10 +268,7 @@ async function checkQuota(
 }
 
 /**
- * Checks per-installation quota with an optional AI-key exemption.
- *
- * If `config?.ai?.['api-key-secret']` is present, quota is bypassed entirely
- * (installations providing their own AI key are not rate-limited).
+ * Checks per-installation quota.
  *
  * Known limitation (TOCTOU race): concurrent webhooks from the same
  * installation can all pass this check before any recordQuota write lands,
@@ -280,10 +277,8 @@ async function checkQuota(
 async function checkQuotaOnly(
   env: Env,
   installationId: number,
-  eventType: string,
-  config?: AptuConfig | null
+  eventType: string
 ): Promise<Response | null> {
-  if (config?.ai?.['api-key-secret']) return null;
   return checkQuota(env, installationId, eventType);
 }
 
@@ -412,8 +407,7 @@ export async function handleMentionCommand(
   const quotaResponse = await checkQuotaOnly(
     env,
     installationId,
-    eventType,
-    config
+    eventType
   );
   if (quotaResponse) return quotaResponse;
 
@@ -446,7 +440,6 @@ export async function handleMentionCommand(
         ? {
             ai_provider: config.ai.provider,
             ai_model: config.ai.model,
-            ai_key_secret: config.ai['api-key-secret'],
           }
         : {}),
     });
@@ -683,8 +676,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       const quotaResponse = await checkQuotaOnly(
         env,
         installationId,
-        'triage',
-        config
+        'triage'
       );
       if (quotaResponse) return quotaResponse;
 
@@ -712,7 +704,6 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
             ? {
                 ai_provider: config.ai.provider,
                 ai_model: config.ai.model,
-                ai_key_secret: config.ai['api-key-secret'],
               }
             : {}),
         });
@@ -777,8 +768,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       const quotaResponse = await checkQuotaOnly(
         env,
         installationId,
-        'review',
-        config
+        'review'
       );
       if (quotaResponse) return quotaResponse;
 
@@ -820,7 +810,6 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
               ? {
                   ai_provider: config.ai.provider,
                   ai_model: config.ai.model,
-                  ai_key_secret: config.ai['api-key-secret'],
                 }
               : {}),
           });
@@ -857,7 +846,6 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
                 ? {
                     ai_provider: config.ai.provider,
                     ai_model: config.ai.model,
-                    ai_key_secret: config.ai['api-key-secret'],
                   }
                 : {}),
             }

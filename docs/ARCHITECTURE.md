@@ -196,13 +196,13 @@ ai:                          # optional
 ```
 
 When custom AI models are configured via the `ai` block, the workflow resolves the AI key
-from the `APTU_AI_KEY` repository secret in `aptu-github-app`.
+from the `OPENROUTER_API_KEY` repository secret in `aptu-github-app`.
 
 ## Caller-Supplied AI Keys
 
 Repositories may configure custom AI providers and models using the `ai` block in
 `.github/aptu.yml`. The dispatch payload carries the requested `ai_provider` and `ai_model`.
-The workflows resolve the required API key from the fixed `APTU_AI_KEY` secret stored in the
+The workflows resolve the required API key from the fixed `OPENROUTER_API_KEY` secret stored in the
 `aptu-github-app` repository. Sensitive credentials never pass through the webhook dispatch
 payload.
 
@@ -213,7 +213,7 @@ payload.
 | Webhook authenticity | HMAC-SHA256 via Web Crypto API; `WEBHOOK_SECRET` never leaves the Worker |
 | Token isolation | Installation tokens are minted in workflows scoped per-repo; dispatch tokens are scoped to `TARGET_REPO` only |
 | Quota enforcement | Durable Object per installation; 50 events per event type per 24h rolling window |
-| Caller AI keys | Model and provider configuration in dispatch payload; fixed `APTU_AI_KEY` secret resolved inside GitHub Actions |
+| Caller AI keys | Model and provider configuration in dispatch payload; fixed `OPENROUTER_API_KEY` secret resolved inside GitHub Actions |
 | Config validation | Strict field-level validation; unknown keys ignored; partial blocks rejected |
 | Self-mention loop | `APTU_BOT_ID` check prevents the bot from triggering itself via `@aptu` |
 | Path filtering | `review.paths` evaluated against full PR file list before dispatch |

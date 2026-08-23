@@ -136,7 +136,7 @@ function mockEnabledWithAiFetch(): (
     if (urlStr.includes('/contents/.github/aptu.yml')) {
       return Promise.resolve(
         makeConfigResponse(
-          'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o\n  api-key-secret: OPENAI_API_KEY'
+          'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o'
         )
       );
     }
@@ -1203,7 +1203,7 @@ describe('AI configuration and external installations', () => {
     fetchSpy = vi.spyOn(globalThis, 'fetch');
   });
 
-  it('includes ai_provider, ai_model, ai_key_secret in client_payload for issues.opened when config.ai is present', async () => {
+  it('includes ai_provider and ai_model in client_payload for issues.opened when config.ai is present', async () => {
     fetchSpy.mockImplementation(mockEnabledWithAiFetch());
     const body = JSON.stringify({
       action: 'opened',
@@ -1223,10 +1223,7 @@ describe('AI configuration and external installations', () => {
     const parsed = JSON.parse(dispatchCall[1].body as string);
     expect(parsed.client_payload).toHaveProperty('ai_provider', 'openai');
     expect(parsed.client_payload).toHaveProperty('ai_model', 'gpt-4o');
-    expect(parsed.client_payload).toHaveProperty(
-      'ai_key_secret',
-      'OPENAI_API_KEY'
-    );
+    expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
     expect(parsed.client_payload).not.toHaveProperty('installation_token');
     expect(parsed.client_payload).toHaveProperty(
       'originating_repo',
@@ -1236,7 +1233,7 @@ describe('AI configuration and external installations', () => {
     expect(parsed.client_payload).toHaveProperty('issue_title', 'Test Issue');
   });
 
-  it('includes ai_provider, ai_model, ai_key_secret in client_payload for pull_request when config.ai is present', async () => {
+  it('includes ai_provider and ai_model in client_payload for pull_request when config.ai is present', async () => {
     fetchSpy.mockImplementation(mockEnabledWithAiFetch());
     const body = JSON.stringify({
       action: 'opened',
@@ -1256,10 +1253,7 @@ describe('AI configuration and external installations', () => {
     const parsed = JSON.parse(dispatchCall[1].body as string);
     expect(parsed.client_payload).toHaveProperty('ai_provider', 'openai');
     expect(parsed.client_payload).toHaveProperty('ai_model', 'gpt-4o');
-    expect(parsed.client_payload).toHaveProperty(
-      'ai_key_secret',
-      'OPENAI_API_KEY'
-    );
+    expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
     expect(parsed.client_payload).not.toHaveProperty('installation_token');
   });
 
@@ -1456,7 +1450,7 @@ describe('AI-key quota exemption', () => {
     quotaControl.status = 200;
   });
 
-  it('returns 204 (not 429) for issues.opened when config.ai is present and quota is exceeded', async () => {
+  it('returns 429 for issues.opened when config.ai is present and quota is exceeded', async () => {
     const body = JSON.stringify({
       action: 'opened',
       installation: { id: 1 },
@@ -1472,14 +1466,14 @@ describe('AI-key quota exemption', () => {
       'X-Hub-Signature-256': sig,
       'Content-Type': 'application/json',
     });
-    expect(response.status).toBe(204);
+    expect(response.status).toBe(429);
     const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
       String(call[0]).includes('/dispatches')
     );
-    expect(dispatchCalls.length).toBe(1);
+    expect(dispatchCalls.length).toBe(0);
   });
 
-  it('returns 204 (not 429) for pull_request when config.ai is present and quota is exceeded', async () => {
+  it('returns 429 for pull_request when config.ai is present and quota is exceeded', async () => {
     const body = JSON.stringify({
       action: 'opened',
       installation: { id: 1 },
@@ -1495,11 +1489,11 @@ describe('AI-key quota exemption', () => {
       'X-Hub-Signature-256': sig,
       'Content-Type': 'application/json',
     });
-    expect(response.status).toBe(204);
+    expect(response.status).toBe(429);
     const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
       String(call[0]).includes('/dispatches')
     );
-    expect(dispatchCalls.length).toBe(1);
+    expect(dispatchCalls.length).toBe(0);
   });
 });
 
@@ -1997,14 +1991,14 @@ describe('mention commands', () => {
     expect(dispatchBody.client_payload.comment_body_truncated).toBe(true);
   });
 
-  it('bypasses quota when config.ai is present for mention-triggered events', async () => {
+  it('enforces quota when config.ai is present for mention-triggered events', async () => {
     fetchSpy.mockImplementation((url: string | URL | Request) => {
       const urlStr =
         typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
       if (urlStr.includes('/contents/.github/aptu.yml')) {
         return Promise.resolve(
           makeConfigResponse(
-            'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o\n  api-key-secret: OPENAI_API_KEY'
+            'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o'
           )
         );
       }
@@ -2021,7 +2015,6 @@ describe('mention commands', () => {
       }
       return Promise.resolve(new Response(null, { status: 204 }));
     });
-    // Quota is exceeded, but AI exemption should bypass it
     quotaControl.body = JSON.stringify({
       count: 50,
       exceeded: true,
@@ -2044,11 +2037,11 @@ describe('mention commands', () => {
       'X-Hub-Signature-256': sig,
       'Content-Type': 'application/json',
     });
-    expect(response.status).toBe(204);
+    expect(response.status).toBe(429);
     const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
       String(call[0]).includes('/dispatches')
     );
-    expect(dispatchCalls.length).toBe(1);
+    expect(dispatchCalls.length).toBe(0);
   });
 
   it('proceeds to quota enforcement when config fetch fails for mention', async () => {
