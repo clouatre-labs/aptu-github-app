@@ -65,7 +65,6 @@ scan:
 ai:
   provider: openrouter                            # required if ai block present
   model: google/gemma-4-26b-a4b-it                # required if ai block present
-  api-key-secret: OPENROUTER_API_KEY              # required if ai block present
 ```
 
 ### Scan configuration
@@ -86,17 +85,16 @@ originating repository. `fail-on` takes a comma-separated list of severities (`c
 | `review.instructions-file` | string | `.github/instructions/pr-review.md` | Path to PR review instructions file, relative to the target repo root. Passed to aptu as `--instructions-file`. |
 | `review.skip-labeled` | boolean | `false` | Passed to aptu as `--skip-labeled`. When true, aptu skips review if the PR already carries a label. |
 | `review.paths` | string[] | -- | Glob patterns (picomatch) evaluated against the full PR file list. Bare patterns are includes; `!`-prefixed patterns are excludes. A PR is dispatched if at least one file qualifies. If no file qualifies, the review dispatch is suppressed. |
-| `ai.provider` | string | -- | AI provider name passed to aptu as `--provider`. Supported: `gemini`, `anthropic`, `openrouter`. Required if `ai` block present. |
+| `ai.provider` | string | -- | AI provider name passed to aptu as `--provider`. Supported: `gemini`, `anthropic`, `openrouter`. Required if `ai` block present. Also selects which of the caller's own repository secrets (`GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`) the dispatch handler resolves. |
 | `ai.model` | string | -- | AI model name passed to aptu as `--model`. Required if `ai` block present. |
-| `ai.api-key-secret` | string | -- | Name of a repository secret in the CALLER's own repo holding the AI provider API key. Resolved dynamically per-dispatch by the dispatch handler; never sent as a value. Required if `ai` block present. |
 | `scan.enabled` | boolean | `false` | Enable aptu scan-security on pull requests. Runs local pattern-based secret scanning and uploads SARIF results to GitHub Code Scanning. No `ai` block required. |
 | `scan.fail-on` | string | -- | Comma-separated severities that fail the scan (`critical`, `high`, `medium`, `low`). Omit to report findings without failing the check. |
 | `scan.path` | string | `.` | Root directory to scan. |
 
 All fields under `triage`, `review`, `scan`, and `ai` are validated strictly: unknown keys are
 ignored, but a missing `enabled` boolean causes the entire config to be rejected (no dispatch).
-All three `ai` fields (`provider`, `model`, and `api-key-secret`) are required if the `ai`
-block is present; a partial or empty-string block is rejected.
+Both `ai` fields (`provider` and `model`) are required if the `ai` block is present; a partial
+or empty-string block is rejected.
 
 ### Minimal opt-in example
 
@@ -127,7 +125,6 @@ review:
 ai:
   provider: openrouter
   model: google/gemma-4-26b-a4b-it
-  api-key-secret: OPENROUTER_API_KEY
 ```
 
 ## Installation
@@ -141,10 +138,12 @@ The dispatch handler receives `repository_dispatch` events from the Worker and c
 appropriate reusable workflow hosted in `clouatre-labs/aptu-github-app`. The caller's AI API
 key secret is passed to the reusable workflow via the `secrets:` block.
 
-The dispatch handler resolves your AI provider's API key dynamically from the
-`ai.api-key-secret` field in your own `.github/aptu.yml` -- create a repository secret with
-that exact name holding your AI provider's API key. Then add the following workflow file
-verbatim; it is identical for every installation and you never need to hand-edit it:
+The dispatch handler resolves your AI provider's API key from a repository secret named after
+the `ai.provider` you set in your own `.github/aptu.yml`: `OPENROUTER_API_KEY`,
+`ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`. Create that secret in your own repository (or rely
+on an org-visible secret of the same name, if your org provisions one). Then add the following
+workflow file verbatim; it is identical for every installation and you never need to hand-edit
+it:
 
 ```yaml
 # .github/workflows/aptu.yml
@@ -180,7 +179,10 @@ jobs:
       ai_provider: ${{ github.event.client_payload.ai_provider || 'openrouter' }}
       ai_model: ${{ github.event.client_payload.ai_model || 'google/gemma-4-26b-a4b-it' }}
     secrets:
-      ai-api-key: ${{ secrets[github.event.client_payload.ai_key_secret] }}
+      ai-api-key: >-
+        ${{ (github.event.client_payload.ai_provider == 'anthropic' && secrets.ANTHROPIC_API_KEY)
+         || (github.event.client_payload.ai_provider == 'gemini' && secrets.GEMINI_API_KEY)
+         || secrets.OPENROUTER_API_KEY }}
 
   triage:
     name: Triage Issue
@@ -192,7 +194,10 @@ jobs:
       ai_provider: ${{ github.event.client_payload.ai_provider || 'openrouter' }}
       ai_model: ${{ github.event.client_payload.ai_model || 'google/gemma-4-26b-a4b-it' }}
     secrets:
-      ai-api-key: ${{ secrets[github.event.client_payload.ai_key_secret] }}
+      ai-api-key: >-
+        ${{ (github.event.client_payload.ai_provider == 'anthropic' && secrets.ANTHROPIC_API_KEY)
+         || (github.event.client_payload.ai_provider == 'gemini' && secrets.GEMINI_API_KEY)
+         || secrets.OPENROUTER_API_KEY }}
 
   scan:
     name: Scan Security
@@ -206,9 +211,10 @@ jobs:
       fail_on: ${{ github.event.client_payload.fail_on || '' }}
 ```
 
-The secret name comes from `ai.api-key-secret` in your `.github/aptu.yml`, not from editing
-this file. The same secret value is passed to all three provider inputs (anthropic, gemini,
-openrouter); the aptu action selects the correct one based on the `provider` field.
+The secret resolved (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, or `OPENROUTER_API_KEY`) is
+selected by the `ai.provider` in your `.github/aptu.yml`, not by editing this file. The
+resolved secret value is passed to all three provider inputs of the reusable workflow; the
+aptu action selects the correct one based on the `provider` field.
 
 ## Deployment
 
@@ -225,9 +231,9 @@ GitHub secrets and variables:
 - `APP_PRIVATE_KEY` -- GitHub App private key in PKCS#8 PEM format (repository secret, required for Worker)
 
 AI API keys are configured per installation in the caller's repository, not in `aptu-github-app`.
-Each caller creates a repository secret holding their AI provider API key and references
-its name via `ai.api-key-secret` in their own `.github/aptu.yml` -- never in the (static,
-unedited) dispatch handler.
+Each caller creates a repository secret named after the provider they select via `ai.provider`
+in their own `.github/aptu.yml` (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, or
+`GEMINI_API_KEY`) -- never in the (static, unedited) dispatch handler.
 
 Wrangler secrets (set via `bunx wrangler secret put`):
 

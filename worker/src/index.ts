@@ -413,7 +413,6 @@ export async function handleMentionCommand(
               ? {
                   ai_provider: config.ai.provider,
                   ai_model: config.ai.model,
-                  ai_key_secret: config.ai['api-key-secret'],
                 }
               : {}),
           }
@@ -424,7 +423,6 @@ export async function handleMentionCommand(
               ? {
                   ai_provider: config.ai.provider,
                   ai_model: config.ai.model,
-                  ai_key_secret: config.ai['api-key-secret'],
                 }
               : {}),
           }
@@ -677,7 +675,6 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
             ? {
                 ai_provider: config.ai.provider,
                 ai_model: config.ai.model,
-                ai_key_secret: config.ai['api-key-secret'],
               }
             : {}),
         });
@@ -776,7 +773,6 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
               ? {
                   ai_provider: config.ai.provider,
                   ai_model: config.ai.model,
-                  ai_key_secret: config.ai['api-key-secret'],
                 }
               : {}),
           });
