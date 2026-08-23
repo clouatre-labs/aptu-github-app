@@ -1748,6 +1748,7 @@ describe('mention commands', () => {
     const body = JSON.stringify({
       action: 'created',
       installation: { id: 1 },
+      issue: { number: 42 },
       comment: {
         user: { id: 100, login: 'user1' },
         id: 42,
@@ -1770,19 +1771,20 @@ describe('mention commands', () => {
       (dispatchCalls[0]?.[1] as RequestInit).body as string
     );
     expect(dispatchBody.event_type).toBe('aptu-triage');
-    expect(dispatchBody.client_payload.trigger_type).toBe('mention');
-    expect(dispatchBody.client_payload.comment_id).toBe(42);
-    expect(dispatchBody.client_payload.commenter_login).toBe('user1');
-    expect(dispatchBody.client_payload.comment_body).toBe(
-      'please @aptu triage this'
-    );
-    expect(dispatchBody.client_payload.comment_body_truncated).toBe(false);
+    expect(dispatchBody.client_payload.originating_repo).toBe('owner/repo');
+    expect(dispatchBody.client_payload.issue_number).toBe(42);
+    expect(dispatchBody.client_payload.trigger_type).toBeUndefined();
+    expect(dispatchBody.client_payload.comment_id).toBeUndefined();
+    expect(dispatchBody.client_payload.commenter_login).toBeUndefined();
+    expect(dispatchBody.client_payload.comment_body).toBeUndefined();
+    expect(dispatchBody.client_payload.comment_body_truncated).toBeUndefined();
   });
 
   it('dispatches aptu-review when PR review comment contains @aptu and commenter has read+ access', async () => {
     const body = JSON.stringify({
       action: 'created',
       installation: { id: 1 },
+      pull_request: { number: 99 },
       comment: {
         user: { id: 100, login: 'user1' },
         id: 99,
@@ -1805,6 +1807,43 @@ describe('mention commands', () => {
       (dispatchCalls[0]?.[1] as RequestInit).body as string
     );
     expect(dispatchBody.event_type).toBe('aptu-review');
+    expect(dispatchBody.client_payload.originating_repo).toBe('owner/repo');
+    expect(dispatchBody.client_payload.pull_number).toBe(99);
+    expect(dispatchBody.client_payload.instructions_file).toBeNull();
+    expect(dispatchBody.client_payload.skip_labeled).toBe(false);
+  });
+
+  it('dispatches aptu-review when issue_comment is on a PR (payload.issue.pull_request present)', async () => {
+    const body = JSON.stringify({
+      action: 'created',
+      installation: { id: 1 },
+      issue: { number: 55, pull_request: { url: 'https://api.github.com/repos/owner/repo/pulls/55' } },
+      comment: {
+        user: { id: 100, login: 'user1' },
+        id: 88,
+        body: '@aptu review please',
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issue_comment',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
+    const dispatchBody = JSON.parse(
+      (dispatchCalls[0]?.[1] as RequestInit).body as string
+    );
+    expect(dispatchBody.event_type).toBe('aptu-review');
+    expect(dispatchBody.client_payload.originating_repo).toBe('owner/repo');
+    expect(dispatchBody.client_payload.pull_number).toBe(55);
+    expect(dispatchBody.client_payload.instructions_file).toBeNull();
+    expect(dispatchBody.client_payload.skip_labeled).toBe(false);
   });
 
   it('returns false when @aptu appears inside a markdown code fence', async () => {
@@ -1835,6 +1874,7 @@ describe('mention commands', () => {
     const body = JSON.stringify({
       action: 'created',
       installation: { id: 1 },
+      issue: { number: 1 },
       comment: {
         user: { id: 100, login: 'user1' },
         id: 1,
@@ -1898,6 +1938,7 @@ describe('mention commands', () => {
     const body = JSON.stringify({
       action: 'created',
       installation: { id: 1 },
+      issue: { number: 1 },
       comment: {
         user: { id: 100, login: 'user1' },
         id: 1,
@@ -1927,6 +1968,7 @@ describe('mention commands', () => {
     const body = JSON.stringify({
       action: 'created',
       installation: { id: 1 },
+      pull_request: { number: 1 },
       comment: {
         user: { id: 100, login: 'user1' },
         id: 1,
@@ -1949,6 +1991,7 @@ describe('mention commands', () => {
     const body = JSON.stringify({
       action: 'created',
       installation: { id: 1 },
+      issue: { number: 1 },
       comment: {
         user: { id: 999, login: 'aptu[bot]' },
         id: 1,
@@ -1973,12 +2016,13 @@ describe('mention commands', () => {
     expect(dispatchCalls.length).toBe(0);
   });
 
-  it('includes trigger_type=mention and comment context fields in client_payload', async () => {
+  it('includes issue_number in dispatch payload when comment body is long (no truncation)', async () => {
     const longBody = 'x'.repeat(5000);
     const commentBody = `@aptu ${longBody}`;
     const body = JSON.stringify({
       action: 'created',
       installation: { id: 1 },
+      issue: { number: 77 },
       comment: {
         user: { id: 100, login: 'user1' },
         id: 77,
@@ -2000,11 +2044,11 @@ describe('mention commands', () => {
     const dispatchBody = JSON.parse(
       (dispatchCalls[0]?.[1] as RequestInit).body as string
     );
-    expect(dispatchBody.client_payload.trigger_type).toBe('mention');
-    expect(dispatchBody.client_payload.comment_id).toBe(77);
-    expect(dispatchBody.client_payload.commenter_login).toBe('user1');
-    expect(dispatchBody.client_payload.comment_body.length).toBe(4000);
-    expect(dispatchBody.client_payload.comment_body_truncated).toBe(true);
+    expect(dispatchBody.event_type).toBe('aptu-triage');
+    expect(dispatchBody.client_payload.originating_repo).toBe('owner/repo');
+    expect(dispatchBody.client_payload.issue_number).toBe(77);
+    expect(dispatchBody.client_payload.trigger_type).toBeUndefined();
+    expect(dispatchBody.client_payload.comment_body).toBeUndefined();
   });
 
   it('bypasses quota when config.ai is present for mention-triggered events', async () => {
@@ -2041,6 +2085,7 @@ describe('mention commands', () => {
     const body = JSON.stringify({
       action: 'created',
       installation: { id: 1 },
+      issue: { number: 42 },
       comment: {
         user: { id: 100, login: 'user1' },
         id: 42,
@@ -2093,6 +2138,7 @@ describe('mention commands', () => {
     const body = JSON.stringify({
       action: 'created',
       installation: { id: 1 },
+      issue: { number: 42 },
       comment: {
         user: { id: 100, login: 'user1' },
         id: 42,
