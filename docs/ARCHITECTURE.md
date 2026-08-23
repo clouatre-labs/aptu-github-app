@@ -155,6 +155,17 @@ from IPs outside the published hooks list receive a `403 Forbidden`. The check f
 if `/meta` is unavailable or `CF-Connecting-IP` is missing, the request proceeds with a
 warning.
 
+## Operational Prerequisites
+
+The following GitHub variables and secrets must be provisioned before the app can handle
+webhook events or run workflows:
+
+| Name | Type | Scope | Value |
+| --- | --- | --- | --- |
+| `APP_ID` | Repository variable | `aptu-github-app` | GitHub App numeric ID |
+| `APP_PRIVATE_KEY` | Repository secret | `aptu-github-app` | PKCS#1 PEM private key for the `aptu-dev` App |
+| `OPENROUTER_API_KEY` | Organization secret | `clouatre-labs` | OpenRouter API key |
+
 ## Configuration
 
 ### Worker environment (`wrangler.toml`)
@@ -166,7 +177,7 @@ warning.
 | `ALLOWED_OWNERS` | var | Comma-separated GitHub account/org names permitted to use the app; any other owner is rejected with 403 before any dispatch |
 | `APTU_BOT_ID` | var | GitHub numeric user ID of the `aptu[bot]` account; gates the self-mention loop guard |
 | `WEBHOOK_SECRET` | secret | HMAC key matching the GitHub App webhook secret |
-| `APP_PRIVATE_KEY` | secret | PKCS#8 PEM private key for the GitHub App |
+| `APP_PRIVATE_KEY` | secret | PKCS#1 PEM private key for the GitHub App |
 | `QUOTA` | Durable Object binding | `InstallationQuota` namespace |
 | `GLOBAL_QUOTA` | Durable Object binding | `GlobalQuota` namespace |
 | `GLOBAL_QUOTA_LIMIT` | var | Org-wide dispatch ceiling per rolling 24h (default `500`) |
@@ -208,7 +219,7 @@ to use via `ai.api-key-secret` in `.github/aptu.yml`. The secret name is validat
 resolves `secrets[github.event.client_payload.ai_key_secret]` inside GitHub Actions.
 
 The secret value never passes through the webhook dispatch payload. The caller controls which
-secret is used; the `aptu-github-app` repository must have a matching repository secret defined.
+secret is used; the named secret must be accessible to the `aptu-github-app` repository, either as a repository secret or as an organization-level secret in `clouatre-labs`.
 
 ## Security Boundaries
 
@@ -267,7 +278,7 @@ the Worker. Required secrets and variables:
 - `CLOUDFLARE_API_TOKEN` (GitHub Actions secret)
 - `CLOUDFLARE_ACCOUNT_ID` (GitHub Actions variable)
 - `WEBHOOK_SECRET` (Wrangler secret, set via `bunx wrangler secret put`)
-- `APP_PRIVATE_KEY` (Wrangler secret, PKCS#8 PEM format)
+- `APP_PRIVATE_KEY` (Wrangler secret, PKCS#1 PEM format)
 
 The Worker route `aptu.dev/webhook` requires a proxied `AAAA 100::` DNS record on the
 `aptu.dev` zone; without it the domain does not resolve and GitHub cannot deliver webhooks.
