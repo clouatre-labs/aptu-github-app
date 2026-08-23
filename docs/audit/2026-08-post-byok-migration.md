@@ -58,6 +58,8 @@ or a prior audit.
 | D2 | Docs | Medium | `docs/ARCHITECTURE.md` retains a full "GitHub Actions Workflows" section, an "`enforceQuota`/`checkGlobalQuota`" section, and a "`GlobalQuota` Durable Object" section describing an architecture that no longer exists in source, self-contradicting the file's own later "Token Model" and "Caller-Supplied AI Keys" sections | Yes | No | Open -- same issue |
 | S1 | Security | Low | Dormant repo secret `APTU_AI_KEY` in `aptu-github-app`, created 2026-08-23, referenced by zero current workflows | Yes | No | Open -- same issue |
 | C1 | Cost | Medium | Aggregate/global quota ceiling (`GlobalQuota`, added PR #88) was permanently removed in PR #123 and never reinstated; only the 50-events/24h per-installation cap remains, so Cloudflare Durable Object request costs scale unbounded with install count | Yes | No | Open -- same issue |
+| F2 | Security | Medium | `secret_scanning`, `secret_scanning_push_protection`, and `code_security` are all `disabled` on `aptu-github-app` (`gh api repos/clouatre-labs/aptu-github-app --jq .security_and_analysis`); should be enabled before visibility flips to public | Yes | Yes (precondition for F1's fix) | Open -- same issue |
+| F3 | CI/CD | Medium | `main` has no branch protection (`gh api repos/clouatre-labs/aptu-github-app/branches/main/protection` -> 404 "Branch not protected") -- no required review, no required status checks; should be set before the repo accepts public traffic | Yes | Yes (precondition for F1's fix) | Open -- same issue |
 | S2 | Security | **Info (sound)** | The prior audit's S1 vulnerability class (caller-supplied AI-key secret name resolving against the operator's own repo) is now structurally impossible: `AiConfig` in `config.ts` carries no field that can name a secret at all | Yes | N/A (sound) | N/A (sound) |
 | C2 | Cost | **Info (sound)** | No AI API key of any kind ever leaves the caller's own repository; the Worker's dispatch payload and every reusable workflow carry only `ai_provider`/`ai_model`, never a key or a key-name | Yes | N/A (sound) | N/A (sound) |
 | C3 | Cost | **Info (sound)** | GitHub Actions minutes for `workflow_call` jobs invoked via `uses: clouatre-labs/aptu-github-app/...@main` bill to the calling repository, not to `aptu-github-app` -- the operator's Actions-minutes exposure from the prior audit (C3) is closed by this architecture, contingent on F1 being resolved so the calls can execute at all | Yes (billing model); contingent on F1 | N/A | N/A (sound once F1 resolved) |
@@ -137,6 +139,45 @@ work for any caller regardless of the caller's own visibility.
 
 **Resolved:** Not resolved. Filed as issue (see below); the choice between remediation options
 is the operator's, not applied in this audit.
+
+---
+
+### External validation for the "make public" recommendation
+
+Two questions were researched independently after this audit, to confirm the recommended fix
+against GitHub's documented behavior and industry practice rather than inference:
+
+**GitHub's rule has no cross-org exception.** Per
+[GitHub Docs: Sharing actions and workflows from your private repository](https://docs.github.com/en/actions/creating-actions/sharing-actions-and-workflows-from-your-private-repository),
+a private (or internal) repository's reusable workflows are resolvable only by callers in the
+*same organization or enterprise*, with access explicitly granted in
+Settings > Actions > General > Access. There is no mechanism, at any visibility level short of
+public, for a private repo's reusable workflows to be called from outside that org/enterprise.
+Reusable-workflow GA'd private/internal sharing in
+[December 2022](https://github.blog/changelog/2022-12-13-github-actions-sharing-actions-and-reusable-workflows-from-private-repositories-is-now-ga/);
+no subsequent changelog entry (through 2026) altered this boundary. Since external installers by
+definition sit outside `clouatre-labs`, no private-repo configuration can satisfy audit goal 2
+("fully functional for everyone").
+
+**Industry precedent keeps the wrapper repo public.** Commercial and OSS Actions-based products
+that need work to bill to the caller's own runners -- Snyk (`snyk/actions`), Codecov
+(`codecov/codecov-action`), CodeQL (`github/codeql-action`), SonarSource
+(`sonarqube-scan-action`) -- all keep their workflow/action-defining repository public. In every
+case the proprietary logic lives in a closed-source CLI, binary, or backend service invoked *by*
+the public YAML; the YAML wrapper itself carries no secret-sauce risk. This repo already follows
+that exact shape: `clouatre-labs/aptu` (`gh repo view clouatre-labs/aptu --json visibility` ->
+`"PUBLIC"`), the composite action that does the actual AI review/triage work, is already public.
+`aptu-github-app`'s three reusable workflows (`pr-review.yml`, `issue-triage.yml`,
+`scan-security.yml`) are thin `workflow_call` wrappers (50-154 lines each) around that
+already-public action -- making `aptu-github-app` public discloses no logic that isn't already
+open. What remains private either way are the Worker's runtime secrets
+(`WEBHOOK_SECRET`, `APP_PRIVATE_KEY`, `CLOUDFLARE_API_TOKEN`), which are GitHub/Wrangler secrets,
+never committed to source.
+
+A variant considered and rejected: splitting the three thin workflow files into a separate,
+minimal public repo while keeping the Worker source private. Technically viable, but it adds a
+second repo to maintain with no security benefit over making `aptu-github-app` public outright,
+since the Worker's actual secrets are unaffected by either choice.
 
 ---
 
@@ -308,10 +349,17 @@ rather than trusted from PR #156's description.
 
 ## Filed Issue
 
-- [#162](https://github.com/clouatre-labs/aptu-github-app/issues/162) -- tracks F1, D1, D2, S1,
-  and C1 as a single decision: whether to make `aptu-github-app` public (recommended, pending a
-  git-history secret scan) or restructure away from cross-repo reusable workflows, plus the
-  documentation corrections and secret cleanup that follow from whichever path is chosen.
+- [#162](https://github.com/clouatre-labs/aptu-github-app/issues/162) -- tracks F1, F2, F3, D1,
+  D2, S1, and C1 as a single decision: whether to make `aptu-github-app` public (recommended,
+  confirmed as the only option that satisfies external callers) or restructure away from
+  cross-repo reusable workflows, plus the documentation corrections and secret cleanup that
+  follow from whichever path is chosen. Blocked by #164 and #165.
+- [#164](https://github.com/clouatre-labs/aptu-github-app/issues/164) -- pre-public-release scan:
+  full git-history secret scan (all branches/tags), enabling `secret_scanning` and
+  `secret_scanning_push_protection` (F2), and branch protection on `main` (F3).
+- [#165](https://github.com/clouatre-labs/aptu-github-app/issues/165) -- align CI workflows with
+  `clouatre-labs/template-repo` (missing `security.yml`, `scorecard.yml`,
+  `scheduled-security-audit.yml`, and three others).
 
 ---
 
