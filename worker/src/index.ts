@@ -433,13 +433,22 @@ export async function handleMentionCommand(
 
   try {
     await dispatchEvent(token, env.TARGET_REPO, dispatchType, {
-      installation_token: token,
+      installation_id: installationId,
+      originating_owner: owner ?? '',
+      originating_repo_name: name ?? '',
       originating_repo: repo,
       trigger_type: 'mention',
       comment_id: comment.id,
       commenter_login: comment.user?.login ?? '',
       comment_body: body,
       comment_body_truncated: truncated,
+      ...(config?.ai
+        ? {
+            ai_provider: config.ai.provider,
+            ai_model: config.ai.model,
+            ai_key_secret: config.ai['api-key-secret'],
+          }
+        : {}),
     });
   } catch {
     return new Response('Internal Server Error', { status: 500 });
@@ -682,15 +691,6 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       if (!shouldDispatch(config, 'triage'))
         return new Response('OK', { status: 200 });
 
-      const triageToken = await getTokenOr500(
-        env,
-        installationId,
-        repo,
-        PERMS.triage,
-        'issues.opened'
-      );
-      if (triageToken instanceof Response) return triageToken;
-
       const dispatchToken = await getTokenOr500(
         env,
         installationId,
@@ -702,7 +702,9 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
 
       try {
         await dispatchEvent(dispatchToken, env.TARGET_REPO, 'aptu-triage', {
-          installation_token: triageToken,
+          installation_id: installationId,
+          originating_owner: owner,
+          originating_repo_name: repoName,
           originating_repo: repo,
           issue_number: issue.number,
           issue_title: issue.title,
@@ -804,18 +806,11 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       if (dispatchToken instanceof Response) return dispatchToken;
 
       if (shouldReview) {
-        const reviewToken = await getTokenOr500(
-          env,
-          installationId,
-          repo,
-          PERMS.review,
-          'pull_request'
-        );
-        if (reviewToken instanceof Response) return reviewToken;
-
         try {
           await dispatchEvent(dispatchToken, env.TARGET_REPO, 'aptu-review', {
-            installation_token: reviewToken,
+            installation_id: installationId,
+            originating_owner: owner,
+            originating_repo_name: repoName,
             originating_repo: repo,
             pull_number: pr.number,
             pull_title: pr.title,
@@ -844,27 +839,27 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       }
 
       if (shouldScan) {
-        const scanToken = await getTokenOr500(
-          env,
-          installationId,
-          repo,
-          PERMS.scan,
-          'pull_request'
-        );
-        if (scanToken instanceof Response) return scanToken;
-
         try {
           await dispatchEvent(
             dispatchToken,
             env.TARGET_REPO,
             'aptu-scan-security',
             {
-              installation_token: scanToken,
+              installation_id: installationId,
+              originating_owner: owner,
+              originating_repo_name: repoName,
               originating_repo: repo,
               head_sha: pr.head.sha,
               pull_number: pr.number,
               scan_path: config?.scan?.path ?? '.',
               fail_on: config?.scan?.['fail-on'] ?? null,
+              ...(config?.ai
+                ? {
+                    ai_provider: config.ai.provider,
+                    ai_model: config.ai.model,
+                    ai_key_secret: config.ai['api-key-secret'],
+                  }
+                : {}),
             }
           );
           await recordQuota(env, installationId, 'review');
