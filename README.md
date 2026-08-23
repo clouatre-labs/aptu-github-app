@@ -1,9 +1,10 @@
 # aptu-github-app
 
-A Cloudflare Worker and GitHub Actions that automate issue triage and PR review for repositories
-in the clouatre-labs org, powered by [aptu](https://aptu.dev). The Worker validates GitHub
-webhook signatures, reads each repository's `.github/aptu.yml` opt-in config, and dispatches
-`repository_dispatch` events to trigger aptu-powered triage, review, and security scan workflows.
+A Cloudflare Worker and GitHub Actions that automate issue triage and PR review for any
+repository with the aptu GitHub App installed, powered by [aptu](https://aptu.dev). The Worker
+validates GitHub webhook signatures, reads each repository's `.github/aptu.yml` opt-in config,
+and dispatches `repository_dispatch` events to the originating repository to trigger
+aptu-powered triage, review, and security scan workflows via reusable workflows.
 
 ## Architecture
 
@@ -14,20 +15,21 @@ GitHub event (issues.opened / pull_request.opened|synchronize|reopened|ready_for
        1. Verify X-Hub-Signature-256 (HMAC)
        2. Deduplicate by X-GitHub-Delivery (ReplayGuard Durable Object)
        3. Validate source IP against GitHub /meta hook CIDRs (fail-open)
-       4. Check ALLOWED_OWNERS allowlist -- 403 if not allowed
-       5. Get installation token (scoped to originating repo)
-       6. Fetch .github/aptu.yml from originating repo
-       7. Check per-installation quota (skipped if ai block present)
-       8. For PRs: skip draft PRs; evaluate review.paths filters
-       9. Get dispatch token (scoped to TARGET_REPO)
-      10. POST repository_dispatch to TARGET_REPO
-  -> GitHub Actions workflow (actions/create-github-app-token, run aptu CLI)
-  -> GitHub Reviews API (inline comments as aptu[bot])
+       4. Get installation token (scoped to originating repo)
+       5. Fetch .github/aptu.yml from originating repo
+       6. Check per-installation quota (enforced for all installations)
+       7. For PRs: skip draft PRs; evaluate review.paths filters
+       8. Get dispatch token (scoped to originating repo)
+       9. POST repository_dispatch to originating repo
+  -> Caller's .github/workflows/aptu.yml (repository_dispatch handler)
+       -> Calls reusable workflow from aptu-github-app repo
+            -> Checkout caller repo, run aptu CLI with caller's AI API key
+  -> GitHub Reviews API (inline comments as github-actions[bot])
 ```
 
 The Worker uses two Durable Objects: `InstallationQuota` for per-installation rate limiting
-(bypassed when a repo provides its own AI key), and `ReplayGuard` for webhook deduplication.
-No external database is required.
+(50 events per event type per 24h rolling window, enforced for all installations), and
+`ReplayGuard` for webhook deduplication. No external database is required.
 
 ### Mention commands
 
@@ -85,14 +87,13 @@ originating repository. `fail-on` takes a comma-separated list of severities (`c
 | `review.paths` | string[] | -- | Glob patterns (picomatch) evaluated against the full PR file list. Bare patterns are includes; `!`-prefixed patterns are excludes. A PR is dispatched if at least one file qualifies. If no file qualifies, the review dispatch is suppressed. |
 | `ai.provider` | string | -- | AI provider name passed to aptu as `--provider`. Supported: `gemini`, `anthropic`, `openrouter`. Required if `ai` block present. |
 | `ai.model` | string | -- | AI model name passed to aptu as `--model`. Required if `ai` block present. |
-| `ai.api-key-secret` | string | -- | Name of the GitHub repository secret in `aptu-github-app` that holds the AI provider API key. Must match `^[A-Z0-9_]+$`. Required if `ai` block present. This is the BYOK (bring your own key) model: each installation specifies which org-level secret to use. |
 | `scan.enabled` | boolean | `false` | Enable aptu scan-security on pull requests. Runs local pattern-based secret scanning and uploads SARIF results to GitHub Code Scanning. No `ai` block required. |
 | `scan.fail-on` | string | -- | Comma-separated severities that fail the scan (`critical`, `high`, `medium`, `low`). Omit to report findings without failing the check. |
 | `scan.path` | string | `.` | Root directory to scan. |
 
 All fields under `triage`, `review`, `scan`, and `ai` are validated strictly: unknown keys are
 ignored, but a missing `enabled` boolean causes the entire config to be rejected (no dispatch).
-All three `ai` fields (`provider`, `model`, and `api-key-secret`) are required if the `ai` block is present; a partial
+Both `ai` fields (`provider` and `model`) are required if the `ai` block is present; a partial
 or empty-string block is rejected.
 
 ### Minimal opt-in example
@@ -107,11 +108,13 @@ review:
 
 ### External installation example
 
-Repositories using the aptu GitHub App may configure custom AI models via the `ai` block.
-Each installation specifies which API key secret to use via `ai.api-key-secret`. The Worker
-passes the secret name (not the value) in the dispatch payload, and the workflow resolves it
-against the `aptu-github-app` repository secrets. This is the BYOK (bring your own key) model:
-the caller controls which secret is used, and the secret value never passes through the webhook.
+Each installation provides its own AI API key via a GitHub repository secret in the caller's
+repo. The caller installs `.github/workflows/aptu.yml` (see [Installation](#installation))
+which receives `repository_dispatch` events and calls reusable workflows from the
+`clouatre-labs/aptu-github-app` repository. The reusable workflow runs in the caller's context,
+using the caller's `GITHUB_TOKEN` for repository operations and the caller's AI API key secret
+for AI provider calls. This is the BYOK (bring your own key) model: the operator's AI keys are
+never exposed to any installation.
 
 ```yaml
 version: 1
@@ -122,8 +125,85 @@ review:
 ai:
   provider: openrouter
   model: google/gemma-4-26b-a4b-it
-  api-key-secret: OPENROUTER_API_KEY
 ```
+
+## Installation
+
+Each repository that uses the aptu GitHub App must install two files:
+
+1. `.github/aptu.yml` -- opt-in configuration (see [Repository configuration](#repository-configuration) above)
+2. `.github/workflows/aptu.yml` -- dispatch handler that calls reusable workflows
+
+The dispatch handler receives `repository_dispatch` events from the Worker and calls the
+appropriate reusable workflow hosted in `clouatre-labs/aptu-github-app`. The caller's AI API
+key secret is passed to the reusable workflow via the `secrets:` block.
+
+Create a repository secret (e.g., `APTU_AI_API_KEY`) with your AI provider's API key, then
+add the following workflow file:
+
+```yaml
+# .github/workflows/aptu.yml
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
+
+name: Aptu Dispatch Handler
+
+on:
+  repository_dispatch:
+    types:
+      - aptu-review
+      - aptu-triage
+      - aptu-scan-security
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  security-events: write
+  statuses: write
+
+jobs:
+  review:
+    name: Review PR
+    if: github.event.action == 'aptu-review'
+    uses: clouatre-labs/aptu-github-app/.github/workflows/pr-review.yml@main
+    with:
+      originating_repo: ${{ github.event.client_payload.originating_repo }}
+      pull_number: ${{ github.event.client_payload.pull_number }}
+      instructions_file: ${{ github.event.client_payload.instructions_file || '.github/instructions/pr-review.md' }}
+      skip_labeled: ${{ github.event.client_payload.skip_labeled || false }}
+      ai_provider: ${{ github.event.client_payload.ai_provider || 'openrouter' }}
+      ai_model: ${{ github.event.client_payload.ai_model || 'google/gemma-4-26b-a4b-it' }}
+    secrets:
+      ai-api-key: ${{ secrets.APTU_AI_API_KEY }}
+
+  triage:
+    name: Triage Issue
+    if: github.event.action == 'aptu-triage'
+    uses: clouatre-labs/aptu-github-app/.github/workflows/issue-triage.yml@main
+    with:
+      originating_repo: ${{ github.event.client_payload.originating_repo }}
+      issue_number: ${{ github.event.client_payload.issue_number }}
+      ai_provider: ${{ github.event.client_payload.ai_provider || 'openrouter' }}
+      ai_model: ${{ github.event.client_payload.ai_model || 'google/gemma-4-26b-a4b-it' }}
+    secrets:
+      ai-api-key: ${{ secrets.APTU_AI_API_KEY }}
+
+  scan:
+    name: Scan Security
+    if: github.event.action == 'aptu-scan-security'
+    uses: clouatre-labs/aptu-github-app/.github/workflows/scan-security.yml@main
+    with:
+      originating_repo: ${{ github.event.client_payload.originating_repo }}
+      head_sha: ${{ github.event.client_payload.head_sha }}
+      pull_number: ${{ github.event.client_payload.pull_number }}
+      scan_path: ${{ github.event.client_payload.scan_path || '.' }}
+      fail_on: ${{ github.event.client_payload.fail_on || '' }}
+```
+
+Replace `APTU_AI_API_KEY` with the name of your repository secret that holds your AI provider
+API key. The same secret is passed to all provider inputs (anthropic, gemini, openrouter);
+the aptu action selects the correct one based on the `provider` field.
 
 ## Deployment
 
@@ -136,13 +216,12 @@ GitHub secrets and variables:
 
 - `CLOUDFLARE_API_TOKEN` -- Cloudflare API token with Workers edit permission
 - `CLOUDFLARE_ACCOUNT_ID` -- Cloudflare account ID (repository variable)
-- `APP_ID` -- GitHub App ID (repository variable, required for workflows to mint scoped tokens)
-- `APP_PRIVATE_KEY` -- GitHub App private key in PKCS#8 PEM format (repository secret, required for workflows)
+- `APP_ID` -- GitHub App ID (repository variable, required for Worker to mint installation tokens)
+- `APP_PRIVATE_KEY` -- GitHub App private key in PKCS#8 PEM format (repository secret, required for Worker)
 
-AI API key secrets are configured per installation via `ai.api-key-secret` in `.github/aptu.yml`.
-The named secret must exist in the `aptu-github-app` repository. For example, if a repo sets
-`api-key-secret: OPENROUTER_API_KEY`, then `OPENROUTER_API_KEY` must be created as a repository
-secret in `aptu-github-app`.
+AI API keys are configured per installation in the caller's repository, not in `aptu-github-app`.
+Each caller creates a repository secret (e.g., `APTU_AI_API_KEY`) and references it in their
+`.github/workflows/aptu.yml` dispatch handler.
 
 Wrangler secrets (set via `bunx wrangler secret put`):
 
@@ -152,10 +231,7 @@ Wrangler secrets (set via `bunx wrangler secret put`):
 Wrangler variables (in `wrangler.toml` `[vars]`):
 
 - `APP_ID` -- GitHub App ID
-- `TARGET_REPO` -- `owner/repo` that receives `repository_dispatch` events (i.e., this repo)
 - `APTU_BOT_ID` -- aptu bot user ID (used to ignore self-mentions)
-- `ALLOWED_OWNERS` -- comma-separated GitHub account/org names (e.g., `clouatre-labs,clouatre`).
-  Requests whose `repository.owner.login` does not appear in this list are rejected with `403`.
 - `SENTRY_DSN` -- Sentry DSN for error tracking (optional; set via `bunx wrangler secret put`)
 
 ### DNS prerequisite

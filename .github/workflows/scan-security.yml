@@ -4,14 +4,26 @@
 name: Scan Security
 
 on:
-  repository_dispatch:
-    types: [aptu-scan-security]
+  workflow_call:
+    inputs:
+      originating_repo:
+        required: true
+        type: string
+      head_sha:
+        required: true
+        type: string
+      pull_number:
+        required: true
+        type: number
+      scan_path:
+        required: false
+        type: string
+        default: '.'
+      fail_on:
+        required: false
+        type: string
 
 permissions: {}
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.client_payload.originating_repo }}-${{ github.event.client_payload.head_sha }}
-  cancel-in-progress: false
 
 jobs:
   scan:
@@ -20,13 +32,15 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      security-events: write
+      statuses: write
     steps:
       - name: Validate payload
         id: validate
         env:
-          ORIGINATING_REPO: ${{ github.event.client_payload.originating_repo }}
-          HEAD_SHA: ${{ github.event.client_payload.head_sha }}
-          PULL_NUMBER: ${{ github.event.client_payload.pull_number }}
+          ORIGINATING_REPO: ${{ inputs.originating_repo }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          PULL_NUMBER: ${{ inputs.pull_number }}
         run: |
           GITHUB_NAME_RE='^[a-zA-Z0-9]([a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$'
           ORIGINATING_OWNER="${ORIGINATING_REPO%%/*}"
@@ -54,39 +68,27 @@ jobs:
           echo "head_sha=${HEAD_SHA}" >> "${GITHUB_OUTPUT}"
           echo "pull_number=${PULL_NUMBER}" >> "${GITHUB_OUTPUT}"
 
-      - name: Generate installation token
-        id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          owner: ${{ steps.validate.outputs.owner }}
-          repositories: ${{ steps.validate.outputs.repo_name }}
-          permission-contents: read
-          permission-security-events: write
-          permission-statuses: write
-
       - name: Checkout caller repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ steps.validate.outputs.originating_repo }}
           ref: ${{ steps.validate.outputs.head_sha }}
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Aptu security scan
         id: scan
         uses: clouatre-labs/aptu@df65cafeae382345ca32b40c1a0e99b1eba162ef # v0.10.12
         with:
-          github-token: ${{ steps.app-token.outputs.token }}
-          scan-path: ${{ github.event.client_payload.scan_path || '.' }}
-          fail-on: ${{ github.event.client_payload.fail_on }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          scan-path: ${{ inputs.scan_path }}
+          fail-on: ${{ inputs.fail_on }}
           sarif-upload: 'false'
 
       - name: Upload SARIF to caller
         id: upload-sarif
         if: always() && hashFiles('findings.sarif') != ''
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ORIGINATING_REPO: ${{ steps.validate.outputs.originating_repo }}
           HEAD_SHA: ${{ steps.validate.outputs.head_sha }}
           PULL_NUMBER: ${{ steps.validate.outputs.pull_number }}
@@ -114,18 +116,17 @@ jobs:
       - name: Report status to caller
         if: always()
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ORIGINATING_REPO: ${{ steps.validate.outputs.originating_repo }}
           HEAD_SHA: ${{ steps.validate.outputs.head_sha }}
           PULL_NUMBER: ${{ steps.validate.outputs.pull_number }}
           VALIDATE_CONCLUSION: ${{ steps.validate.conclusion }}
-          APP_TOKEN_CONCLUSION: ${{ steps.app-token.conclusion }}
           SCAN_CONCLUSION: ${{ steps.scan.conclusion }}
           UPLOAD_STATUS: ${{ steps.upload-sarif.outputs.upload_status }}
           UPLOAD_CONCLUSION: ${{ steps.upload-sarif.conclusion }}
         run: |
-          if [[ -z "${GH_TOKEN}" || "${APP_TOKEN_CONCLUSION}" != "success" ]]; then
-            echo "No installation token available; skipping status report"
+          if [[ -z "${GH_TOKEN}" ]]; then
+            echo "No token available; skipping status report"
             exit 0
           fi
 
