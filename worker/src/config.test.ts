@@ -3,7 +3,6 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  AI_KEY_SECRET_PATTERN,
   parseConfig,
   shouldDispatch,
   shouldSkipByPathFilters,
@@ -48,16 +47,15 @@ describe('parseConfig', () => {
     expect(parseConfig(raw)).toBeNull();
   });
 
-  it('accepts valid full ai block with provider, model, api-key-secret as non-empty strings', () => {
+  it('accepts valid full ai block with provider and model as non-empty strings', () => {
     const raw = btoa(
-      'version: 1\ntriage:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o\n  api-key-secret: OPENAI_API_KEY'
+      'version: 1\ntriage:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o'
     );
     const config = parseConfig(raw);
     expect(config).not.toBeNull();
     expect(config?.ai).toEqual({
       provider: 'openai',
       model: 'gpt-4o',
-      'api-key-secret': 'OPENAI_API_KEY',
     });
   });
 
@@ -70,44 +68,9 @@ describe('parseConfig', () => {
 
   it('rejects ai block with empty-string fields', () => {
     const raw = btoa(
-      'version: 1\ntriage:\n  enabled: true\nai:\n  provider: ""\n  model: gpt-4o\n  api-key-secret: OPENAI_API_KEY'
+      'version: 1\ntriage:\n  enabled: true\nai:\n  provider: ""\n  model: gpt-4o'
     );
     expect(parseConfig(raw)).toBeNull();
-  });
-
-  it('rejects ai block when api-key-secret is empty string', () => {
-    const raw = btoa(
-      'version: 1\ntriage:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o\n  api-key-secret: ""'
-    );
-    expect(parseConfig(raw)).toBeNull();
-  });
-
-  it('rejects ai block when api-key-secret contains lowercase characters', () => {
-    const raw = btoa(
-      'version: 1\ntriage:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o\n  api-key-secret: gemini_api_key'
-    );
-    expect(parseConfig(raw)).toBeNull();
-  });
-
-  it('rejects ai block when api-key-secret contains a hyphen', () => {
-    const raw = btoa(
-      'version: 1\ntriage:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o\n  api-key-secret: GEMINI-API-KEY'
-    );
-    expect(parseConfig(raw)).toBeNull();
-  });
-});
-
-describe('AI_KEY_SECRET_PATTERN', () => {
-  it('accepts uppercase letters, digits, and underscores', () => {
-    expect(AI_KEY_SECRET_PATTERN.test('GEMINI_API_KEY')).toBe(true);
-    expect(AI_KEY_SECRET_PATTERN.test('MY_KEY_123')).toBe(true);
-  });
-
-  it('rejects empty string, lowercase, hyphens, and spaces', () => {
-    expect(AI_KEY_SECRET_PATTERN.test('')).toBe(false);
-    expect(AI_KEY_SECRET_PATTERN.test('gemini_api_key')).toBe(false);
-    expect(AI_KEY_SECRET_PATTERN.test('GEMINI-API-KEY')).toBe(false);
-    expect(AI_KEY_SECRET_PATTERN.test('MY KEY')).toBe(false);
   });
 });
 

@@ -23,16 +23,16 @@ installation. Responsibilities:
 - Validate the source IP against GitHub's published webhook IP ranges (fail-open; cached for
   3600 seconds)
 - Enforce per-installation quota via the `InstallationQuota` Durable Object (50 events per
-  event type per 24-hour rolling window; responds 429 with `Retry-After` on excess)
+  event type per 24-hour rolling window; responds 429 with `Retry-After` on excess; enforced
+  for all installations regardless of AI config)
 - Obtain per-operation scoped installation tokens via `@octokit/auth-app` with minimum
   required permissions for each operation (config read, triage, review, scan, dispatch)
 - Fetch and validate `.github/aptu.yml` from the originating repository (5-second timeout;
   no dispatch if absent or invalid)
-- Check the `ALLOWED_OWNERS` allowlist -- hard 403 gate on repository.owner.login
 - Evaluate `review.paths` globs (picomatch) against PR file lists; suppress dispatch if no
   file qualifies
-- Obtain a scoped dispatch token for `TARGET_REPO`
-- POST a `repository_dispatch` event to `TARGET_REPO`, carrying all context in
+- Obtain a scoped dispatch token for the originating repository
+- POST a `repository_dispatch` event to the originating repository, carrying all context in
   `client_payload`
 - Return 200/204 to GitHub immediately; all processing is fire-and-forget after dispatch
 
@@ -41,8 +41,10 @@ and has no knowledge of AI providers.
 
 ### GitHub Actions Workflows
 
-Two workflows in `.github/workflows/` listen for `repository_dispatch` events fired by the
-Worker and run the aptu CLI against the originating repository.
+The caller's `.github/workflows/aptu.yml` listens for `repository_dispatch` events fired by
+the Worker and calls reusable workflows hosted in `clouatre-labs/aptu-github-app`. The
+reusable workflows run the aptu CLI using the caller's `GITHUB_TOKEN` and caller-provided AI
+API key secret.
 
 | Workflow | Trigger event type | aptu command |
 | --- | --- | --- |
@@ -95,12 +97,12 @@ graph TD
     I -->|No| J["200 OK / no dispatch"]
     I -->|Yes| K{"review.paths: any file qualifies?"}
     K -->|No| J
-    K -->|Yes| L["Get dispatch token<br/>scoped to TARGET_REPO"]
-    L --> M["POST repository_dispatch<br/>to clouatre-labs/aptu-github-app"]
+    K -->|Yes| L["Get dispatch token<br/>scoped to originating repo"]
+    L --> M["POST repository_dispatch<br/>to originating repo"]
     M --> N["204 No Content"]
-    M --> O["GitHub Actions<br/>issue-triage.yml or pr-review.yml"]
+    M --> O["Caller's aptu.yml workflow<br/>calls reusable workflow"]
     O --> P["aptu CLI<br/>triage or review"]
-    P --> Q["GitHub API<br/>post labels / review comments<br/>to originating repo"]
+    P --> Q["GitHub API<br/>post labels / review comments<br/>as github-actions[bot]"]
 ```
 
 ### Mention command trigger (`@aptu` in comments)
@@ -132,13 +134,13 @@ permissions required for its operation.
 | Token | Permissions | Purpose |
 | --- | --- | --- |
 | Config token | `contents:read`, `pull_requests:read` | Fetch `.github/aptu.yml`, fetch PR file list, check collaborator permission |
-| Dispatch token | `contents:write` | Scoped to `TARGET_REPO` only; calls `POST /repos/{TARGET_REPO}/dispatches` |
+| Dispatch token | `contents:write` | Scoped to originating repo; calls `POST /repos/{originating_repo}/dispatches` |
 
 All tokens are short-lived (1 hour, GitHub default). The Worker mints only config and dispatch
-tokens. Operation tokens (triage, review, scan) are minted inside the workflow via
-`actions/create-github-app-token` using `APP_ID` and `APP_PRIVATE_KEY`. The Worker passes
-`installation_id`, `originating_owner`, and `originating_repo_name` in the `client_payload`
-instead of a token.
+tokens. Operation tokens are not needed: reusable workflows use the caller's `GITHUB_TOKEN`
+(scoped to the caller's repository by GitHub Actions). The Worker passes `ai_provider` and
+`ai_model` in the `client_payload`; the AI API key is resolved by the caller's workflow from
+the caller's own repository secrets.
 
 ### Replay Deduplication
 
@@ -173,14 +175,11 @@ webhook events or run workflows:
 | Variable | Type | Description |
 | --- | --- | --- |
 | `APP_ID` | var | GitHub App numeric ID |
-| `TARGET_REPO` | var | `owner/repo` that receives `repository_dispatch` events |
-| `ALLOWED_OWNERS` | var | Comma-separated GitHub account/org names permitted to use the app; any other owner is rejected with 403 before any dispatch |
 | `APTU_BOT_ID` | var | GitHub numeric user ID of the `aptu[bot]` account; gates the self-mention loop guard |
 | `WEBHOOK_SECRET` | secret | HMAC key matching the GitHub App webhook secret |
-| `APP_PRIVATE_KEY` | secret | PKCS#1 PEM private key for the GitHub App |
+| `APP_PRIVATE_KEY` | secret | PKCS#8 PEM private key for the GitHub App; used by Worker to mint installation tokens |
 | `QUOTA` | Durable Object binding | `InstallationQuota` namespace |
-| `GLOBAL_QUOTA` | Durable Object binding | `GlobalQuota` namespace |
-| `GLOBAL_QUOTA_LIMIT` | var | Org-wide dispatch ceiling per rolling 24h (default `500`) |
+| `REPLAY_GUARD` | Durable Object binding | `ReplayGuard` namespace |
 
 ### Repository opt-in (`.github/aptu.yml`)
 
@@ -204,31 +203,37 @@ review:
 ai:                          # optional
   provider: openrouter
   model: google/gemma-4-26b-a4b-it
-  api-key-secret: OPENROUTER_API_KEY  # name of the secret in aptu-github-app
 ```
 
-When custom AI models are configured via the `ai` block, the dispatch payload carries the
-`ai_key_secret` name (not the value). The workflow resolves the named secret from the
-`aptu-github-app` repository at runtime.
+When custom AI models are configured via the `ai` block, the dispatch payload carries
+`ai_provider` and `ai_model` (not the API key). The caller's workflow resolves the AI API
+key from the caller's own repository secrets.
 
 ## Caller-Supplied AI Keys (BYOK)
 
-The BYOK (bring your own key) model allows each installation to specify which API key secret
-to use via `ai.api-key-secret` in `.github/aptu.yml`. The secret name is validated against
-`^[A-Z0-9_]+$` and passed through the dispatch payload as `ai_key_secret`. The workflow
-resolves `secrets[github.event.client_payload.ai_key_secret]` inside GitHub Actions.
+The BYOK (bring your own key) model allows each installation to use its own AI API key. The
+caller installs `.github/workflows/aptu.yml` in their repository, which receives
+`repository_dispatch` events from the Worker and calls reusable workflows hosted in
+`clouatre-labs/aptu-github-app`. The caller's workflow passes their AI API key secret to the
+reusable workflow via the `secrets:` block.
 
-The secret value never passes through the webhook dispatch payload. The caller controls which
-secret is used; the named secret must be accessible to the `aptu-github-app` repository, either as a repository secret or as an organization-level secret in `clouatre-labs`.
+The reusable workflow runs in the caller's context: `GITHUB_TOKEN` is scoped to the caller's
+repository, and the AI API key is resolved from the caller's repository secrets. The operator's
+AI keys and `APP_PRIVATE_KEY` are never accessible to the reusable workflow (GitHub Actions
+reusable workflows can only access secrets from the calling repository, not the defining
+repository).
+
+The secret value never passes through the Worker or the webhook dispatch payload. The caller
+controls which secret is used and must create it as a repository secret in their own repository.
 
 ## Security Boundaries
 
 | Boundary | Mechanism |
 | --- | --- |
 | Webhook authenticity | HMAC-SHA256 via Web Crypto API; `WEBHOOK_SECRET` never leaves the Worker |
-| Token isolation | Installation tokens are minted in workflows scoped per-repo; dispatch tokens are scoped to `TARGET_REPO` only |
-| Quota enforcement | Durable Object per installation; 50 events per event type per 24h rolling window |
-| Caller AI keys | BYOK: caller supplies secret name via `ai.api-key-secret`; validated against `^[A-Z0-9_]+$`; secret value resolved inside GitHub Actions, never in payload |
+| Token isolation | Installation tokens are minted by the Worker scoped per-repo; dispatch tokens are scoped to the originating repo |
+| Quota enforcement | Durable Object per installation; 50 events per event type per 24h rolling window; enforced for all installations regardless of AI config |
+| Caller AI keys | BYOK: caller provides AI API key via repository secret in their own repo; passed to reusable workflow via `secrets:` block; operator keys never exposed |
 | Config validation | Strict field-level validation; unknown keys ignored; partial blocks rejected |
 | Self-mention loop | `APTU_BOT_ID` check prevents the bot from triggering itself via `@aptu` |
 | Path filtering | `review.paths` evaluated against full PR file list before dispatch |

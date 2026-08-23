@@ -136,7 +136,7 @@ function mockEnabledWithAiFetch(): (
     if (urlStr.includes('/contents/.github/aptu.yml')) {
       return Promise.resolve(
         makeConfigResponse(
-          'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o\n  api-key-secret: OPENAI_API_KEY'
+          'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o'
         )
       );
     }
@@ -148,9 +148,7 @@ const mockEnv = {
   WEBHOOK_SECRET: 'test-secret',
   APP_PRIVATE_KEY: 'fake-key',
   APP_ID: '4134521',
-  TARGET_REPO: 'clouatre-labs/aptu-github-app',
   APTU_BOT_ID: '0',
-  ALLOWED_OWNERS: 'clouatre-labs,clouatre,owner,myorg,unconfigured',
   SENTRY_DSN: '',
   QUOTA: makeMockQuotaNamespace(),
   REPLAY_GUARD: makeReplayGuardMockNamespace(),
@@ -214,39 +212,19 @@ describe('HMAC validation', () => {
   });
 });
 
-describe('isOwnerAllowed', () => {
-  it('returns false when ALLOWED_OWNERS is empty string', async () => {
-    const { isOwnerAllowed } = await import('./index.js');
-    expect(isOwnerAllowed('clouatre-labs', '')).toBe(false);
-  });
-
-  it('matches owner case-insensitively (Clouatre-Labs == clouatre-labs)', async () => {
-    const { isOwnerAllowed } = await import('./index.js');
-    expect(isOwnerAllowed('Clouatre-Labs', 'clouatre-labs,clouatre')).toBe(
-      true
-    );
-    expect(isOwnerAllowed('CLOUATRE', 'clouatre-labs,clouatre')).toBe(true);
-  });
-
-  it('handles trailing comma and whitespace in comma-separated list', async () => {
-    const { isOwnerAllowed } = await import('./index.js');
-    expect(isOwnerAllowed('clouatre', 'clouatre-labs, clouatre, ')).toBe(true);
-  });
-});
-
-describe('ALLOWED_OWNERS gate', () => {
+describe('owner processing without allowlist', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchSpy = vi.spyOn(globalThis, 'fetch');
     fetchSpy.mockImplementation(mockEnabledFetch());
   });
 
-  it('returns 403 for issues.opened when owner not in allowlist with no dispatch or token fetch', async () => {
+  it('processes webhooks from any owner without checking allowlist', async () => {
     const body = JSON.stringify({
       action: 'opened',
       installation: { id: 1 },
       issue: { number: 1, title: 'Test' },
-      repository: { full_name: 'evil-org/repo', owner: { login: 'evil-org' } },
+      repository: { full_name: 'any-org/any-repo', owner: { login: 'any-org' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -254,52 +232,7 @@ describe('ALLOWED_OWNERS gate', () => {
       'X-Hub-Signature-256': sig,
       'Content-Type': 'application/json',
     });
-    expect(response.status).toBe(403);
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it('returns 403 for pull_request when owner not in allowlist', async () => {
-    const body = JSON.stringify({
-      action: 'opened',
-      installation: { id: 1 },
-      pull_request: { number: 7, title: 'Test PR' },
-      repository: { full_name: 'evil-org/repo', owner: { login: 'evil-org' } },
-    });
-    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
-    const response = await callHandler(body, {
-      'X-GitHub-Event': 'pull_request',
-      'X-Hub-Signature-256': sig,
-      'Content-Type': 'application/json',
-    });
-    expect(response.status).toBe(403);
-  });
-
-  it('returns 403 for mention-triggered issue_comment when owner not in allowlist', async () => {
-    const body = JSON.stringify({
-      action: 'created',
-      installation: { id: 1 },
-      comment: { body: '@aptu triage', user: { id: 2, login: 'someone' } },
-      issue: {},
-      repository: { full_name: 'evil-org/repo', owner: { login: 'evil-org' } },
-    });
-    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
-    const response = await callHandler(body, {
-      'X-GitHub-Event': 'issue_comment',
-      'X-Hub-Signature-256': sig,
-      'Content-Type': 'application/json',
-    });
-    expect(response.status).toBe(403);
-  });
-
-  it('returns 403 when repository.owner.login and organization.login both absent', async () => {
-    const body = JSON.stringify({ action: 'opened' });
-    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
-    const response = await callHandler(body, {
-      'X-GitHub-Event': 'issues',
-      'X-Hub-Signature-256': sig,
-      'Content-Type': 'application/json',
-    });
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(204);
   });
 });
 
@@ -506,7 +439,7 @@ describe('repository_dispatch client_payload', () => {
     expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
   });
 
-  it('requests dispatch token with full owner/repo name, not short name', async () => {
+  it('requests dispatch token with short repository name for caller repository', async () => {
     const { createAppAuth } = await import('@octokit/auth-app');
     const body = JSON.stringify({
       action: 'opened',
@@ -537,7 +470,7 @@ describe('repository_dispatch client_payload', () => {
       expect.objectContaining({
         type: 'installation',
         installationId: 20,
-        repositoryNames: ['aptu-github-app'],
+        repositoryNames: ['myrepo'],
         permissions: { contents: 'write' },
       })
     );
@@ -1206,7 +1139,7 @@ describe('AI configuration and external installations', () => {
     fetchSpy = vi.spyOn(globalThis, 'fetch');
   });
 
-  it('includes ai_provider, ai_model, ai_key_secret in client_payload for issues.opened when config.ai is present', async () => {
+  it('includes ai_provider and ai_model but omits ai_key_secret in client_payload for issues.opened when config.ai is present', async () => {
     fetchSpy.mockImplementation(mockEnabledWithAiFetch());
     const body = JSON.stringify({
       action: 'opened',
@@ -1226,10 +1159,7 @@ describe('AI configuration and external installations', () => {
     const parsed = JSON.parse(dispatchCall[1].body as string);
     expect(parsed.client_payload).toHaveProperty('ai_provider', 'openai');
     expect(parsed.client_payload).toHaveProperty('ai_model', 'gpt-4o');
-    expect(parsed.client_payload).toHaveProperty(
-      'ai_key_secret',
-      'OPENAI_API_KEY'
-    );
+    expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
     expect(parsed.client_payload).not.toHaveProperty('installation_token');
     expect(parsed.client_payload).toHaveProperty(
       'originating_repo',
@@ -1242,7 +1172,7 @@ describe('AI configuration and external installations', () => {
     expect(parsed.client_payload).not.toHaveProperty('originating_repo_name');
   });
 
-  it('includes ai_provider, ai_model, ai_key_secret in client_payload for pull_request when config.ai is present', async () => {
+  it('includes ai_provider and ai_model but omits ai_key_secret in client_payload for pull_request when config.ai is present', async () => {
     fetchSpy.mockImplementation(mockEnabledWithAiFetch());
     const body = JSON.stringify({
       action: 'opened',
@@ -1262,10 +1192,7 @@ describe('AI configuration and external installations', () => {
     const parsed = JSON.parse(dispatchCall[1].body as string);
     expect(parsed.client_payload).toHaveProperty('ai_provider', 'openai');
     expect(parsed.client_payload).toHaveProperty('ai_model', 'gpt-4o');
-    expect(parsed.client_payload).toHaveProperty(
-      'ai_key_secret',
-      'OPENAI_API_KEY'
-    );
+    expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
     expect(parsed.client_payload).not.toHaveProperty('installation_token');
     expect(parsed.client_payload).not.toHaveProperty('installation_id');
     expect(parsed.client_payload).not.toHaveProperty('originating_owner');
@@ -1453,7 +1380,7 @@ describe('Quota check integration', () => {
   });
 });
 
-describe('AI-key quota exemption', () => {
+describe('quota enforcement with AI config', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchSpy = vi.spyOn(globalThis, 'fetch');
@@ -1466,7 +1393,7 @@ describe('AI-key quota exemption', () => {
     quotaControl.status = 200;
   });
 
-  it('returns 204 (not 429) for issues.opened when config.ai is present and quota is exceeded', async () => {
+  it('returns 429 for issues.opened when config.ai is present and quota is exceeded', async () => {
     const body = JSON.stringify({
       action: 'opened',
       installation: { id: 1 },
@@ -1482,14 +1409,14 @@ describe('AI-key quota exemption', () => {
       'X-Hub-Signature-256': sig,
       'Content-Type': 'application/json',
     });
-    expect(response.status).toBe(204);
+    expect(response.status).toBe(429);
     const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
       String(call[0]).includes('/dispatches')
     );
-    expect(dispatchCalls.length).toBe(1);
+    expect(dispatchCalls.length).toBe(0);
   });
 
-  it('returns 204 (not 429) for pull_request when config.ai is present and quota is exceeded', async () => {
+  it('returns 429 for pull_request when config.ai is present and quota is exceeded', async () => {
     const body = JSON.stringify({
       action: 'opened',
       installation: { id: 1 },
@@ -1505,11 +1432,11 @@ describe('AI-key quota exemption', () => {
       'X-Hub-Signature-256': sig,
       'Content-Type': 'application/json',
     });
-    expect(response.status).toBe(204);
+    expect(response.status).toBe(429);
     const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
       String(call[0]).includes('/dispatches')
     );
-    expect(dispatchCalls.length).toBe(1);
+    expect(dispatchCalls.length).toBe(0);
   });
 });
 
@@ -2051,14 +1978,14 @@ describe('mention commands', () => {
     expect(dispatchBody.client_payload.comment_body).toBeUndefined();
   });
 
-  it('bypasses quota when config.ai is present for mention-triggered events', async () => {
+  it('enforces quota when config.ai is present for mention-triggered events', async () => {
     fetchSpy.mockImplementation((url: string | URL | Request) => {
       const urlStr =
         typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
       if (urlStr.includes('/contents/.github/aptu.yml')) {
         return Promise.resolve(
           makeConfigResponse(
-            'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o\n  api-key-secret: OPENAI_API_KEY'
+            'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o'
           )
         );
       }
@@ -2075,7 +2002,7 @@ describe('mention commands', () => {
       }
       return Promise.resolve(new Response(null, { status: 204 }));
     });
-    // Quota is exceeded, but AI exemption should bypass it
+    // Quota is exceeded; AI config does NOT bypass quota
     quotaControl.body = JSON.stringify({
       count: 50,
       exceeded: true,
@@ -2099,11 +2026,11 @@ describe('mention commands', () => {
       'X-Hub-Signature-256': sig,
       'Content-Type': 'application/json',
     });
-    expect(response.status).toBe(204);
+    expect(response.status).toBe(429);
     const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
       String(call[0]).includes('/dispatches')
     );
-    expect(dispatchCalls.length).toBe(1);
+    expect(dispatchCalls.length).toBe(0);
   });
 
   it('proceeds to quota enforcement when config fetch fails for mention', async () => {
@@ -2441,6 +2368,44 @@ describe('scan dispatch', () => {
       (dispatchCalls[0] as [string, RequestInit])[1].body as string
     );
     expect(parsed.event_type).toBe('aptu-scan-security');
+  });
+
+  it('records quota with eventType scan after scan dispatch, not review', async () => {
+    mockConfig(
+      'version: 1\ntriage:\n  enabled: false\nreview:\n  enabled: false\nscan:\n  enabled: true'
+    );
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: { number: 13, title: 'Quota scan', head: { sha: 'jkl012' } },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    const quotaStub = mockEnv.QUOTA.get(
+      'mock-id' as unknown as DurableObjectId
+    );
+    const quotaFetchCalls = (
+      quotaStub as unknown as { fetch: ReturnType<typeof vi.fn> }
+    ).fetch.mock.calls as unknown as Array<[string, RequestInit]>;
+    const recordCalls = quotaFetchCalls.filter((call) => {
+      const parsed = JSON.parse(call[1].body as string) as {
+        action?: string;
+        eventType?: string;
+      };
+      return parsed.action === 'record';
+    });
+    expect(recordCalls.length).toBe(1);
+    const recordBody = JSON.parse(recordCalls[0][1].body as string) as {
+      eventType: string;
+    };
+    expect(recordBody.eventType).toBe('scan');
   });
 });
 

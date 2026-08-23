@@ -9,7 +9,6 @@ export const REPO_CONFIG_FETCH_TIMEOUT_MS = 5000;
 export interface AiConfig {
   provider: string;
   model: string;
-  'api-key-secret': string;
 }
 
 export interface ScanConfig {
@@ -30,8 +29,6 @@ export interface AptuConfig {
   scan?: ScanConfig;
   ai?: AiConfig;
 }
-
-export const AI_KEY_SECRET_PATTERN = /^[A-Z0-9_]+$/;
 
 export async function fetchRepoConfig(
   token: string,
@@ -144,16 +141,13 @@ export function parseConfig(raw: string): AptuConfig | null {
         typeof aiObj.provider !== 'string' ||
         aiObj.provider === '' ||
         typeof aiObj.model !== 'string' ||
-        aiObj.model === '' ||
-        typeof aiObj['api-key-secret'] !== 'string' ||
-        !AI_KEY_SECRET_PATTERN.test(aiObj['api-key-secret'])
+        aiObj.model === ''
       ) {
         return null;
       }
       config.ai = {
         provider: aiObj.provider,
         model: aiObj.model,
-        'api-key-secret': aiObj['api-key-secret'],
       };
     }
 

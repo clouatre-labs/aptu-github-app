@@ -20,9 +20,7 @@ export interface Env {
   WEBHOOK_SECRET: string;
   APP_PRIVATE_KEY: string;
   APP_ID: string;
-  TARGET_REPO: string;
   APTU_BOT_ID: string;
-  ALLOWED_OWNERS: string;
   SENTRY_DSN: string;
   QUOTA: DurableObjectNamespace;
   REPLAY_GUARD: DurableObjectNamespace;
@@ -268,26 +266,6 @@ async function checkQuota(
 }
 
 /**
- * Checks per-installation quota with an optional AI-key exemption.
- *
- * If `config?.ai?.['api-key-secret']` is present, quota is bypassed entirely
- * (installations providing their own AI key are not rate-limited).
- *
- * Known limitation (TOCTOU race): concurrent webhooks from the same
- * installation can all pass this check before any recordQuota write lands,
- * allowing a burst over the limit. Acceptable for rate limiting.
- */
-async function checkQuotaOnly(
-  env: Env,
-  installationId: number,
-  eventType: string,
-  config?: AptuConfig | null
-): Promise<Response | null> {
-  if (config?.ai?.['api-key-secret']) return null;
-  return checkQuota(env, installationId, eventType);
-}
-
-/**
  * Records a quota event after a successful repository_dispatch.
  *
  * Calls InstallationQuota with action 'record' to append a timestamp.
@@ -328,14 +306,6 @@ export function hasMentionCommand(body: string): boolean {
   return /@aptu(?![a-zA-Z0-9_-])/.test(
     body.replace(/```[\s\S]*?```|`[^`]*`/g, '')
   );
-}
-
-export function isOwnerAllowed(repoOwner: string, allowedOwners = ''): boolean {
-  return allowedOwners
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0)
-    .some((allowed) => allowed.toLowerCase() === repoOwner.toLowerCase());
 }
 
 export async function checkCollaboratorPermission(
@@ -417,12 +387,7 @@ export async function handleMentionCommand(
     config = null;
   }
 
-  const quotaResponse = await checkQuotaOnly(
-    env,
-    installationId,
-    eventType,
-    config
-  );
+  const quotaResponse = await checkQuota(env, installationId, eventType);
   if (quotaResponse) return quotaResponse;
 
   const hasAccess = await checkCollaboratorPermission(
@@ -436,7 +401,7 @@ export async function handleMentionCommand(
   try {
     await dispatchEvent(
       token,
-      env.TARGET_REPO,
+      repo,
       dispatchType,
       isPrComment
         ? {
@@ -448,7 +413,6 @@ export async function handleMentionCommand(
               ? {
                   ai_provider: config.ai.provider,
                   ai_model: config.ai.model,
-                  ai_key_secret: config.ai['api-key-secret'],
                 }
               : {}),
           }
@@ -459,7 +423,6 @@ export async function handleMentionCommand(
               ? {
                   ai_provider: config.ai.provider,
                   ai_model: config.ai.model,
-                  ai_key_secret: config.ai['api-key-secret'],
                 }
               : {}),
           }
@@ -648,11 +611,6 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
     const event = request.headers.get('X-GitHub-Event') ?? '';
     // biome-ignore lint/suspicious/noExplicitAny: webhook payload is untyped
     const payload = JSON.parse(body) as Record<string, any>;
-    const owner =
-      payload.repository?.owner?.login ?? payload.organization?.login;
-    if (!isOwnerAllowed(owner ?? '', env.ALLOWED_OWNERS)) {
-      return new Response('Forbidden', { status: 403 });
-    }
     const action = (payload.action as string) ?? '';
     const installationId = (payload.installation as { id: number } | undefined)
       ?.id;
@@ -694,12 +652,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         config = null;
       }
 
-      const quotaResponse = await checkQuotaOnly(
-        env,
-        installationId,
-        'triage',
-        config
-      );
+      const quotaResponse = await checkQuota(env, installationId, 'triage');
       if (quotaResponse) return quotaResponse;
 
       if (!shouldDispatch(config, 'triage'))
@@ -708,21 +661,20 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       const dispatchToken = await getTokenOr500(
         env,
         installationId,
-        env.TARGET_REPO,
+        repo,
         PERMS.dispatch,
         'issues.opened'
       );
       if (dispatchToken instanceof Response) return dispatchToken;
 
       try {
-        await dispatchEvent(dispatchToken, env.TARGET_REPO, 'aptu-triage', {
+        await dispatchEvent(dispatchToken, repo, 'aptu-triage', {
           originating_repo: repo,
           issue_number: issue.number,
           ...(config?.ai
             ? {
                 ai_provider: config.ai.provider,
                 ai_model: config.ai.model,
-                ai_key_secret: config.ai['api-key-secret'],
               }
             : {}),
         });
@@ -784,12 +736,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         config = null;
       }
 
-      const quotaResponse = await checkQuotaOnly(
-        env,
-        installationId,
-        'review',
-        config
-      );
+      const quotaResponse = await checkQuota(env, installationId, 'review');
       if (quotaResponse) return quotaResponse;
 
       const reviewWouldSkip = await shouldSkipPrDispatch(
@@ -809,7 +756,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       const dispatchToken = await getTokenOr500(
         env,
         installationId,
-        env.TARGET_REPO,
+        repo,
         PERMS.dispatch,
         'pull_request'
       );
@@ -817,7 +764,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
 
       if (shouldReview) {
         try {
-          await dispatchEvent(dispatchToken, env.TARGET_REPO, 'aptu-review', {
+          await dispatchEvent(dispatchToken, repo, 'aptu-review', {
             originating_repo: repo,
             pull_number: pr.number,
             instructions_file: config?.review?.['instructions-file'] ?? null,
@@ -826,7 +773,6 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
               ? {
                   ai_provider: config.ai.provider,
                   ai_model: config.ai.model,
-                  ai_key_secret: config.ai['api-key-secret'],
                 }
               : {}),
           });
@@ -848,7 +794,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         try {
           await dispatchEvent(
             dispatchToken,
-            env.TARGET_REPO,
+            repo,
             'aptu-scan-security',
             {
               originating_repo: repo,
@@ -858,7 +804,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
               fail_on: config?.scan?.['fail-on'] ?? null,
             }
           );
-          await recordQuota(env, installationId, 'review');
+          await recordQuota(env, installationId, 'scan');
         } catch (error) {
           captureException(error, {
             tags: { eventType: 'pull_request', repo },
