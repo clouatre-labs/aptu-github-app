@@ -386,7 +386,15 @@ export async function handleMentionCommand(
   if (!installationId) return new Response('Bad Request', { status: 400 });
   if (comment.user?.id === Number(env.APTU_BOT_ID)) return null;
 
-  const eventType = event === 'issue_comment' ? 'triage' : 'review';
+  const isPrComment =
+    event === 'pull_request_review_comment' ||
+    (event === 'issue_comment' && Boolean(payload.issue?.pull_request));
+  const eventType = isPrComment ? 'review' : 'triage';
+  const dispatchType = isPrComment ? 'aptu-review' : 'aptu-triage';
+  const number =
+    event === 'pull_request_review_comment'
+      ? payload.pull_request?.number
+      : payload.issue?.number;
 
   const repo = (payload.repository as { full_name: string }).full_name;
   const [owner, name] = repo.split('/');
@@ -425,31 +433,37 @@ export async function handleMentionCommand(
   );
   if (!hasAccess) return new Response('Forbidden', { status: 403 });
 
-  const dispatchType =
-    event === 'issue_comment' ? 'aptu-triage' : 'aptu-review';
-  let body = comment.body ?? '';
-  const truncated = body.length > 4000;
-  if (truncated) body = body.slice(0, 4000);
-
   try {
-    await dispatchEvent(token, env.TARGET_REPO, dispatchType, {
-      installation_id: installationId,
-      originating_owner: owner ?? '',
-      originating_repo_name: name ?? '',
-      originating_repo: repo,
-      trigger_type: 'mention',
-      comment_id: comment.id,
-      commenter_login: comment.user?.login ?? '',
-      comment_body: body,
-      comment_body_truncated: truncated,
-      ...(config?.ai
+    await dispatchEvent(
+      token,
+      env.TARGET_REPO,
+      dispatchType,
+      isPrComment
         ? {
-            ai_provider: config.ai.provider,
-            ai_model: config.ai.model,
-            ai_key_secret: config.ai['api-key-secret'],
+            originating_repo: repo,
+            pull_number: number,
+            instructions_file: config?.review?.['instructions-file'] ?? null,
+            skip_labeled: config?.review?.['skip-labeled'] ?? false,
+            ...(config?.ai
+              ? {
+                  ai_provider: config.ai.provider,
+                  ai_model: config.ai.model,
+                  ai_key_secret: config.ai['api-key-secret'],
+                }
+              : {}),
           }
-        : {}),
-    });
+        : {
+            originating_repo: repo,
+            issue_number: number,
+            ...(config?.ai
+              ? {
+                  ai_provider: config.ai.provider,
+                  ai_model: config.ai.model,
+                  ai_key_secret: config.ai['api-key-secret'],
+                }
+              : {}),
+          }
+    );
   } catch {
     return new Response('Internal Server Error', { status: 500 });
   }
