@@ -126,7 +126,7 @@ authentication if the new key is not yet accepted by the Worker runtime.
 ### 3.1 Symptom-to-Action Table
 
 | Symptom | Likely Cause | Action |
-|---------|-------------|--------|
+| --- | --- | --- |
 | `ERR_NAME_NOT_RESOLVED` when GitHub delivers webhooks to `aptu.dev/webhook` | Missing or unproxied DNS AAAA record for `aptu.dev` | Add `AAAA aptu.dev 100::` (proxied) in the Cloudflare DNS dashboard. See DNS prerequisite in [README.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/README.md). |
 | `401 Unauthorized` on all webhook requests | `WEBHOOK_SECRET` mismatch between GitHub App and Worker | Re-run `bunx wrangler secret put WEBHOOK_SECRET` with the correct value. Verify the GitHub App webhook secret field matches. See Section 2.1. |
 | `429 Too Many Requests` on GitHub API calls from the Worker | Installation has exceeded its quota (rate-limit per installation, enforced by `InstallationQuota` Durable Object) | Inspect quota state (see Section 3.4). The quota resets hourly; no operator action is required unless abuse is suspected. |
@@ -163,7 +163,7 @@ new_sqlite_classes = ["InstallationQuota"]
 If a future deployment adds a new migration (tag `v2`), rollback to any deployment
 with tag `v1` will fail with an error similar to:
 
-```
+```text
 Migration tag v2 is not compatible with the target deployment's tag v1.
 ```
 
