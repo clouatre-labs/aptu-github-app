@@ -2402,7 +2402,7 @@ describe('scan dispatch', () => {
       return parsed.action === 'record';
     });
     expect(recordCalls.length).toBe(1);
-    const recordBody = JSON.parse(recordCalls[0][1].body as string) as {
+    const recordBody = JSON.parse(recordCalls[0]![1].body as string) as {
       eventType: string;
     };
     expect(recordBody.eventType).toBe('scan');
