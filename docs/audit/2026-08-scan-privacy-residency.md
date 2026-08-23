@@ -4,6 +4,14 @@ Date: 2026-08-22
 Commit: a7dca25
 Trigger: Broken `aptu-scan-security` status check link on `clouatre-labs/clouatre.ca` PR #1374
 
+> **Amendment (2026-08-23):** Findings V08 and V09 originally recommended setting
+> `retention-days` as a per-job key in workflow YAML. This is incorrect.
+> `retention-days` is not a valid job-level key in GitHub Actions workflow syntax;
+> it is a valid input parameter for `actions/upload-artifact` only. Workflow log
+> retention is configured at the GitHub organization, repository, or enterprise
+> settings level. The fix recommendations in V08 and V09 have been corrected.
+> See [PR #148](https://github.com/clouatre-labs/aptu-github-app/pull/148).
+
 ## See Also
 
 - [ARCHITECTURE.md](../ARCHITECTURE.md) -- module map and data flow
@@ -196,7 +204,11 @@ diagnostics, or commands print it. The workflow does not establish a source-code
 prohibition.
 
 **Fix:** Disable verbose/source-bearing diagnostics, review aptu action logging behavior,
-restrict Actions read access, and set explicit `retention-days` on all workflows.
+and restrict Actions read access. Workflow log retention is configured at the GitHub
+organization, repository, or enterprise settings level, not per-job in workflow YAML.
+`retention-days` is a valid input parameter for `actions/upload-artifact` only, not a
+job-level key. Document the intended retention period as an operational policy and enforce
+it via GitHub org/repo settings.
 
 ---
 
@@ -204,13 +216,18 @@ restrict Actions read access, and set explicit `retention-days` on all workflows
 
 **Severity:** Medium | **Issue:** [#138](https://github.com/clouatre-labs/aptu-github-app/issues/138)
 
-No workflow in the repository sets `retention-days`. GitHub's default retention applies (90 days
+No workflow in the repository configures log retention. GitHub's default retention applies (90 days
 for private repos with configurable org/enterprise settings). No documentation specifies the
 intended retention period, access controls, or deletion procedures for workflow logs that may
 contain caller source code or commit metadata.
 
-**Fix:** Set `retention-days` on all workflows (e.g., 7-14 days for scan workflows that process
-caller source code). Document the retention policy and access controls.
+`retention-days` is not a valid job-level key in GitHub Actions workflow syntax. It is a valid
+input parameter for the `actions/upload-artifact` action only. Workflow log retention is
+configured at the GitHub organization, repository, or enterprise settings level.
+
+**Fix:** Document the intended retention period as an operational policy. Enforce it via GitHub
+org/repo settings, not workflow YAML. Document access controls and deletion procedures for
+workflow logs that may contain caller source code or commit metadata.
 
 ---
 
@@ -324,3 +341,5 @@ runners, Cloudflare's global edge, and third-party AI providers.
 | [#136](https://github.com/clouatre-labs/aptu-github-app/issues/136) | fix(scan): broken target_url, silent SARIF failures, binary status | V01, V02, V03, V04 |
 | [#137](https://github.com/clouatre-labs/aptu-github-app/issues/137) | fix(security): installation token in dispatch payload and masking limitations | V05, V06, V07 |
 | [#138](https://github.com/clouatre-labs/aptu-github-app/issues/138) | docs: privacy policy, data inventory, and residency documentation | V08, V09, V10, V11, V12 |
+| [#147](https://github.com/clouatre-labs/aptu-github-app/issues/147) | docs: rescoped privacy policy, data-flow inventory, and audit amendment | V08, V09 (amended), V10, V11, V12 |
+| [aptu#1494](https://github.com/clouatre-labs/aptu/issues/1494) | feat(scan): SARIF content policy, data minimization, and provider data controls | V08, V10 |
