@@ -28,7 +28,7 @@ jobs:
           HEAD_SHA: ${{ github.event.client_payload.head_sha }}
           PULL_NUMBER: ${{ github.event.client_payload.pull_number }}
         run: |
-          GITHUB_NAME_RE='^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,38}[a-zA-Z0-9])?$'
+          GITHUB_NAME_RE='^[a-zA-Z0-9]([a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$'
           ORIGINATING_OWNER="${ORIGINATING_REPO%%/*}"
           ORIGINATING_REPO_NAME="${ORIGINATING_REPO#*/}"
           if [[ "${ORIGINATING_REPO}" != *"/"* || -z "${ORIGINATING_OWNER}" || -z "${ORIGINATING_REPO_NAME}" || ! "${ORIGINATING_OWNER}" =~ ${GITHUB_NAME_RE} ]]; then
