@@ -20,6 +20,7 @@ jobs:
   changes:
     name: Detect Changes
     runs-on: ubuntu-24.04-arm
+    retention-days: 14
     permissions:
       contents: read
       pull-requests: read
@@ -43,6 +44,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-24.04-arm
+    retention-days: 14
     permissions:
       contents: read
     steps:
@@ -64,6 +66,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-24.04-arm
+    retention-days: 14
     permissions:
       contents: read
     steps:
@@ -81,6 +84,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-24.04-arm
+    retention-days: 14
     permissions:
       contents: read
     steps:
@@ -96,6 +100,7 @@ jobs:
   ci-result:
     name: CI Result
     runs-on: ubuntu-24.04-arm
+    retention-days: 14
     if: always()
     needs: [lint, typecheck, test]
     permissions: {}
