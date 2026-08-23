@@ -85,14 +85,15 @@ originating repository. `fail-on` takes a comma-separated list of severities (`c
 | `review.paths` | string[] | -- | Glob patterns (picomatch) evaluated against the full PR file list. Bare patterns are includes; `!`-prefixed patterns are excludes. A PR is dispatched if at least one file qualifies. If no file qualifies, the review dispatch is suppressed. |
 | `ai.provider` | string | -- | AI provider name passed to aptu as `--provider`. Supported: `gemini`, `anthropic`, `openrouter`. Required if `ai` block present. |
 | `ai.model` | string | -- | AI model name passed to aptu as `--model`. Required if `ai` block present. |
+| `ai.api-key-secret` | string | -- | Name of the GitHub repository secret in `aptu-github-app` that holds the AI provider API key. Must match `^[A-Z0-9_]+$`. Required if `ai` block present. This is the BYOK (bring your own key) model: each installation specifies which org-level secret to use. |
 | `scan.enabled` | boolean | `false` | Enable aptu scan-security on pull requests. Runs local pattern-based secret scanning and uploads SARIF results to GitHub Code Scanning. No `ai` block required. |
 | `scan.fail-on` | string | -- | Comma-separated severities that fail the scan (`critical`, `high`, `medium`, `low`). Omit to report findings without failing the check. |
 | `scan.path` | string | `.` | Root directory to scan. |
 
 All fields under `triage`, `review`, `scan`, and `ai` are validated strictly: unknown keys are
 ignored, but a missing `enabled` boolean causes the entire config to be rejected (no dispatch).
-Both `ai` fields (`provider` and `model`) are required if the `ai` block is present; a partial or empty-string block
-is rejected.
+All three `ai` fields (`provider`, `model`, and `api-key-secret`) are required if the `ai` block is present; a partial
+or empty-string block is rejected.
 
 ### Minimal opt-in example
 
@@ -107,8 +108,10 @@ review:
 ### External installation example
 
 Repositories using the aptu GitHub App may configure custom AI models via the `ai` block.
-The workflow resolves the AI key from a fixed repository secret (`APTU_AI_KEY`) in the
-`aptu-github-app` repository.
+Each installation specifies which API key secret to use via `ai.api-key-secret`. The Worker
+passes the secret name (not the value) in the dispatch payload, and the workflow resolves it
+against the `aptu-github-app` repository secrets. This is the BYOK (bring your own key) model:
+the caller controls which secret is used, and the secret value never passes through the webhook.
 
 ```yaml
 version: 1
@@ -119,6 +122,7 @@ review:
 ai:
   provider: openrouter
   model: google/gemma-4-26b-a4b-it
+  api-key-secret: OPENROUTER_API_KEY
 ```
 
 ## Deployment
@@ -134,7 +138,11 @@ GitHub secrets and variables:
 - `CLOUDFLARE_ACCOUNT_ID` -- Cloudflare account ID (repository variable)
 - `APP_ID` -- GitHub App ID (repository variable, required for workflows to mint scoped tokens)
 - `APP_PRIVATE_KEY` -- GitHub App private key in PKCS#8 PEM format (repository secret, required for workflows)
-- `APTU_AI_KEY` -- AI provider API key (repository secret used by triage and review workflows)
+
+AI API key secrets are configured per installation via `ai.api-key-secret` in `.github/aptu.yml`.
+The named secret must exist in the `aptu-github-app` repository. For example, if a repo sets
+`api-key-secret: OPENROUTER_API_KEY`, then `OPENROUTER_API_KEY` must be created as a repository
+secret in `aptu-github-app`.
 
 Wrangler secrets (set via `bunx wrangler secret put`):
 

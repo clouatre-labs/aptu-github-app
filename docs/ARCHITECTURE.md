@@ -45,7 +45,7 @@ Two workflows in `.github/workflows/` listen for `repository_dispatch` events fi
 Worker and run the aptu CLI against the originating repository.
 
 | Workflow | Trigger event type | aptu command |
-|---|---|---|
+| --- | --- | --- |
 | `issue-triage.yml` | `aptu-triage` | `aptu issue triage` |
 | `pr-review.yml` | `aptu-review` | `aptu pr review` |
 
@@ -130,7 +130,7 @@ via `@octokit/auth-app`. Each token is scoped to the originating repository with
 permissions required for its operation.
 
 | Token | Permissions | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | Config token | `contents:read`, `pull_requests:read` | Fetch `.github/aptu.yml`, fetch PR file list, check collaborator permission |
 | Dispatch token | `contents:write` | Scoped to `TARGET_REPO` only; calls `POST /repos/{TARGET_REPO}/dispatches` |
 
@@ -160,7 +160,7 @@ warning.
 ### Worker environment (`wrangler.toml`)
 
 | Variable | Type | Description |
-|---|---|---|
+| --- | --- | --- |
 | `APP_ID` | var | GitHub App numeric ID |
 | `TARGET_REPO` | var | `owner/repo` that receives `repository_dispatch` events |
 | `ALLOWED_OWNERS` | var | Comma-separated GitHub account/org names permitted to use the app; any other owner is rejected with 403 before any dispatch |
@@ -193,27 +193,31 @@ review:
 ai:                          # optional
   provider: openrouter
   model: google/gemma-4-26b-a4b-it
+  api-key-secret: OPENROUTER_API_KEY  # name of the secret in aptu-github-app
 ```
 
-When custom AI models are configured via the `ai` block, the workflow resolves the AI key
-from the `APTU_AI_KEY` repository secret in `aptu-github-app`.
+When custom AI models are configured via the `ai` block, the dispatch payload carries the
+`ai_key_secret` name (not the value). The workflow resolves the named secret from the
+`aptu-github-app` repository at runtime.
 
-## Caller-Supplied AI Keys
+## Caller-Supplied AI Keys (BYOK)
 
-Repositories may configure custom AI providers and models using the `ai` block in
-`.github/aptu.yml`. The dispatch payload carries the requested `ai_provider` and `ai_model`.
-The workflows resolve the required API key from the fixed `APTU_AI_KEY` secret stored in the
-`aptu-github-app` repository. Sensitive credentials never pass through the webhook dispatch
-payload.
+The BYOK (bring your own key) model allows each installation to specify which API key secret
+to use via `ai.api-key-secret` in `.github/aptu.yml`. The secret name is validated against
+`^[A-Z0-9_]+$` and passed through the dispatch payload as `ai_key_secret`. The workflow
+resolves `secrets[github.event.client_payload.ai_key_secret]` inside GitHub Actions.
+
+The secret value never passes through the webhook dispatch payload. The caller controls which
+secret is used; the `aptu-github-app` repository must have a matching repository secret defined.
 
 ## Security Boundaries
 
 | Boundary | Mechanism |
-|---|---|
+| --- | --- |
 | Webhook authenticity | HMAC-SHA256 via Web Crypto API; `WEBHOOK_SECRET` never leaves the Worker |
 | Token isolation | Installation tokens are minted in workflows scoped per-repo; dispatch tokens are scoped to `TARGET_REPO` only |
 | Quota enforcement | Durable Object per installation; 50 events per event type per 24h rolling window |
-| Caller AI keys | Model and provider configuration in dispatch payload; fixed `APTU_AI_KEY` secret resolved inside GitHub Actions |
+| Caller AI keys | BYOK: caller supplies secret name via `ai.api-key-secret`; validated against `^[A-Z0-9_]+$`; secret value resolved inside GitHub Actions, never in payload |
 | Config validation | Strict field-level validation; unknown keys ignored; partial blocks rejected |
 | Self-mention loop | `APTU_BOT_ID` check prevents the bot from triggering itself via `@aptu` |
 | Path filtering | `review.paths` evaluated against full PR file list before dispatch |
