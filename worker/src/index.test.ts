@@ -446,7 +446,7 @@ describe('repository_dispatch client_payload', () => {
     fetchSpy.mockImplementation(mockEnabledFetch());
   });
 
-  it('dispatched payload includes installation_id, originating_owner, originating_repo_name, originating_repo, and issue_number for issues event', async () => {
+  it('dispatched payload includes originating_repo and issue_number for issues event', async () => {
     const body = JSON.stringify({
       action: 'opened',
       installation: { id: 10 },
@@ -464,18 +464,18 @@ describe('repository_dispatch client_payload', () => {
     ) as [string, RequestInit];
     const parsed = JSON.parse(dispatchCall[1].body as string);
     expect(parsed.client_payload).toEqual({
-      installation_id: 10,
-      originating_owner: 'myorg',
-      originating_repo_name: 'myrepo',
       originating_repo: 'myorg/myrepo',
       issue_number: 42,
-      issue_title: 'Payload test',
     });
+    expect(parsed.client_payload).not.toHaveProperty('installation_id');
+    expect(parsed.client_payload).not.toHaveProperty('originating_owner');
+    expect(parsed.client_payload).not.toHaveProperty('originating_repo_name');
+    expect(parsed.client_payload).not.toHaveProperty('issue_title');
     expect(parsed.client_payload).not.toHaveProperty('installation_token');
     expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
   });
 
-  it('dispatched payload includes installation_id, originating_owner, originating_repo_name, originating_repo, and pull_number for pull_request event', async () => {
+  it('dispatched payload includes originating_repo, pull_number, instructions_file, skip_labeled for pull_request event', async () => {
     const body = JSON.stringify({
       action: 'opened',
       installation: { id: 20 },
@@ -493,12 +493,15 @@ describe('repository_dispatch client_payload', () => {
     ) as [string, RequestInit];
     const parsed = JSON.parse(dispatchCall[1].body as string);
     expect(parsed.client_payload).toMatchObject({
-      installation_id: 20,
-      originating_owner: 'myorg',
-      originating_repo_name: 'myrepo',
       originating_repo: 'myorg/myrepo',
       pull_number: 99,
+      instructions_file: '.github/instructions/review.md',
+      skip_labeled: true,
     });
+    expect(parsed.client_payload).not.toHaveProperty('installation_id');
+    expect(parsed.client_payload).not.toHaveProperty('originating_owner');
+    expect(parsed.client_payload).not.toHaveProperty('originating_repo_name');
+    expect(parsed.client_payload).not.toHaveProperty('pull_title');
     expect(parsed.client_payload).not.toHaveProperty('installation_token');
     expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
   });
@@ -1233,7 +1236,10 @@ describe('AI configuration and external installations', () => {
       'owner/repo'
     );
     expect(parsed.client_payload).toHaveProperty('issue_number', 42);
-    expect(parsed.client_payload).toHaveProperty('issue_title', 'Test Issue');
+    expect(parsed.client_payload).not.toHaveProperty('issue_title');
+    expect(parsed.client_payload).not.toHaveProperty('installation_id');
+    expect(parsed.client_payload).not.toHaveProperty('originating_owner');
+    expect(parsed.client_payload).not.toHaveProperty('originating_repo_name');
   });
 
   it('includes ai_provider, ai_model, ai_key_secret in client_payload for pull_request when config.ai is present', async () => {
@@ -1261,6 +1267,10 @@ describe('AI configuration and external installations', () => {
       'OPENAI_API_KEY'
     );
     expect(parsed.client_payload).not.toHaveProperty('installation_token');
+    expect(parsed.client_payload).not.toHaveProperty('installation_id');
+    expect(parsed.client_payload).not.toHaveProperty('originating_owner');
+    expect(parsed.client_payload).not.toHaveProperty('originating_repo_name');
+    expect(parsed.client_payload).not.toHaveProperty('pull_title');
   });
 
   it('omits ai_provider, ai_model, ai_key_secret from client_payload when config.ai is absent', async () => {
@@ -2270,16 +2280,62 @@ describe('scan dispatch', () => {
     const scanCall = dispatchCalls[1] as [string, RequestInit];
     const parsed = JSON.parse(scanCall[1].body as string);
     expect(parsed.event_type).toBe('aptu-scan-security');
-    expect(parsed.client_payload).toMatchObject({
-      installation_id: 1,
-      originating_owner: 'owner',
-      originating_repo_name: 'repo',
+    expect(parsed.client_payload).toEqual({
       originating_repo: 'owner/repo',
       head_sha: 'abc123',
       pull_number: 10,
       scan_path: 'src/',
       fail_on: 'critical,high',
     });
+    expect(parsed.client_payload).not.toHaveProperty('installation_id');
+    expect(parsed.client_payload).not.toHaveProperty('originating_owner');
+    expect(parsed.client_payload).not.toHaveProperty('originating_repo_name');
+    expect(parsed.client_payload).not.toHaveProperty('ai_provider');
+    expect(parsed.client_payload).not.toHaveProperty('ai_model');
+    expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
+    expect(parsed.client_payload).not.toHaveProperty('installation_token');
+  });
+
+  it('dispatches aptu-scan-security with exactly 5 keys when config.ai is present', async () => {
+    mockConfig(
+      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nscan:\n  enabled: true\n  fail-on: critical,high\n  path: src/\nai:\n  provider: openai\n  model: gpt-4o\n  api-key-secret: OPENAI_API_KEY'
+    );
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: { number: 10, title: 'Scan test with AI', head: { sha: 'abc123' } },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(2);
+    const scanCall = dispatchCalls[1] as [string, RequestInit];
+    const parsed = JSON.parse(scanCall[1].body as string);
+    expect(parsed.event_type).toBe('aptu-scan-security');
+    expect(parsed.client_payload).toEqual({
+      originating_repo: 'owner/repo',
+      head_sha: 'abc123',
+      pull_number: 10,
+      scan_path: 'src/',
+      fail_on: 'critical,high',
+    });
+    expect(Object.keys(parsed.client_payload).length).toBe(5);
+    expect(parsed.client_payload).not.toHaveProperty('ai_provider');
+    expect(parsed.client_payload).not.toHaveProperty('ai_model');
+    expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
+    expect(parsed.client_payload).not.toHaveProperty('installation_id');
+    expect(parsed.client_payload).not.toHaveProperty('originating_owner');
+    expect(parsed.client_payload).not.toHaveProperty('originating_repo_name');
     expect(parsed.client_payload).not.toHaveProperty('installation_token');
   });
 

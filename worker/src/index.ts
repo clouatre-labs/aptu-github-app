@@ -702,12 +702,8 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
 
       try {
         await dispatchEvent(dispatchToken, env.TARGET_REPO, 'aptu-triage', {
-          installation_id: installationId,
-          originating_owner: owner,
-          originating_repo_name: repoName,
           originating_repo: repo,
           issue_number: issue.number,
-          issue_title: issue.title,
           ...(config?.ai
             ? {
                 ai_provider: config.ai.provider,
@@ -808,12 +804,8 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       if (shouldReview) {
         try {
           await dispatchEvent(dispatchToken, env.TARGET_REPO, 'aptu-review', {
-            installation_id: installationId,
-            originating_owner: owner,
-            originating_repo_name: repoName,
             originating_repo: repo,
             pull_number: pr.number,
-            pull_title: pr.title,
             instructions_file: config?.review?.['instructions-file'] ?? null,
             skip_labeled: config?.review?.['skip-labeled'] ?? false,
             ...(config?.ai
@@ -845,21 +837,11 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
             env.TARGET_REPO,
             'aptu-scan-security',
             {
-              installation_id: installationId,
-              originating_owner: owner,
-              originating_repo_name: repoName,
               originating_repo: repo,
               head_sha: pr.head.sha,
               pull_number: pr.number,
               scan_path: config?.scan?.path ?? '.',
               fail_on: config?.scan?.['fail-on'] ?? null,
-              ...(config?.ai
-                ? {
-                    ai_provider: config.ai.provider,
-                    ai_model: config.ai.model,
-                    ai_key_secret: config.ai['api-key-secret'],
-                  }
-                : {}),
             }
           );
           await recordQuota(env, installationId, 'review');
