@@ -99,9 +99,17 @@ jobs:
             -f "sarif=$SARIF_B64"; then
             echo "upload_status=succeeded" >> "${GITHUB_OUTPUT}"
           else
-            echo "upload_status=failed" >> "${GITHUB_OUTPUT}"
-            exit 1
+            echo "::warning::SARIF API upload failed (Code Security may not be enabled on ${ORIGINATING_REPO}); SARIF will be available as a workflow artifact"
+            echo "upload_status=skipped" >> "${GITHUB_OUTPUT}"
           fi
+
+      - name: Upload SARIF artifact
+        if: always() && hashFiles('findings.sarif') != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b5815f8b425d435 # v4.6.2
+        with:
+          name: findings-sarif
+          path: findings.sarif
+          retention-days: 30
 
       - name: Report status to caller
         if: always()
@@ -126,15 +134,12 @@ jobs:
           if [[ "${VALIDATE_CONCLUSION}" != "success" ]]; then
             STATE="failure"
             DESC="aptu security scan encountered an error (invalid payload)"
-          elif [[ "${UPLOAD_STATUS}" == "failed" || "${UPLOAD_CONCLUSION}" == "failure" ]]; then
-            STATE="failure"
-            DESC="aptu security scan encountered an error (SARIF upload failed)"
-          elif [[ "${SCAN_CONCLUSION}" == "success" ]]; then
-            STATE="success"
-            DESC="aptu security scan passed"
           elif [[ "${SCAN_CONCLUSION}" == "failure" ]]; then
             STATE="failure"
             DESC="aptu security scan found issues"
+          elif [[ "${SCAN_CONCLUSION}" == "success" ]]; then
+            STATE="success"
+            DESC="aptu security scan passed"
           else
             STATE="failure"
             DESC="aptu security scan did not complete"
