@@ -21,21 +21,30 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Mask installation token
-        run: echo "::add-mask::${{ github.event.client_payload.installation_token }}"
+      - name: Generate installation token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ github.event.client_payload.originating_owner }}
+          repositories: ${{ github.event.client_payload.originating_repo_name }}
+          permission-contents: read
+          permission-security-events: write
+          permission-statuses: write
 
       - name: Checkout caller repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ github.event.client_payload.originating_repo }}
           ref: ${{ github.event.client_payload.head_sha }}
-          token: ${{ github.event.client_payload.installation_token }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Run Aptu security scan
         id: scan
         uses: clouatre-labs/aptu@df65cafeae382345ca32b40c1a0e99b1eba162ef # v0.10.12
         with:
-          github-token: ${{ github.event.client_payload.installation_token }}
+          github-token: ${{ steps.app-token.outputs.token }}
           scan-path: ${{ github.event.client_payload.scan_path || '.' }}
           fail-on: ${{ github.event.client_payload.fail_on }}
           sarif-upload: 'false'
@@ -44,30 +53,37 @@ jobs:
         if: always() && hashFiles('findings.sarif') != ''
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ github.event.client_payload.installation_token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ORIGINATING_REPO: ${{ github.event.client_payload.originating_repo }}
+          HEAD_SHA: ${{ github.event.client_payload.head_sha }}
+          PULL_NUMBER: ${{ github.event.client_payload.pull_number }}
         run: |
           SARIF_B64="$(gzip -c findings.sarif | base64 -w0)"
-          gh api "repos/${{ github.event.client_payload.originating_repo }}/code-scanning/sarifs" \
+          gh api "repos/${ORIGINATING_REPO}/code-scanning/sarifs" \
             --method POST \
-            -f "commit_sha=${{ github.event.client_payload.head_sha }}" \
-            -f "ref=refs/pull/${{ github.event.client_payload.pull_number }}/head" \
+            -f "commit_sha=${HEAD_SHA}" \
+            -f "ref=refs/pull/${PULL_NUMBER}/head" \
             -f "sarif=$SARIF_B64"
 
       - name: Report status to caller
         if: always()
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ORIGINATING_REPO: ${{ github.event.client_payload.originating_repo }}
+          HEAD_SHA: ${{ github.event.client_payload.head_sha }}
+          SCAN_CONCLUSION: ${{ steps.scan.conclusion }}
+          TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          if [[ "${{ steps.scan.conclusion }}" == "success" ]]; then
+          if [[ "${SCAN_CONCLUSION}" == "success" ]]; then
             STATE="success"
             DESC="aptu security scan passed"
           else
             STATE="failure"
             DESC="aptu security scan found issues"
           fi
-          gh api "repos/${{ github.event.client_payload.originating_repo }}/statuses/${{ github.event.client_payload.head_sha }}" \
+          gh api "repos/${ORIGINATING_REPO}/statuses/${HEAD_SHA}" \
             --method POST \
             -f state="$STATE" \
             -f context="aptu-scan-security" \
             -f description="$DESC" \
-            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-        env:
-          GH_TOKEN: ${{ github.event.client_payload.installation_token }}
+            -f target_url="${TARGET_URL}"

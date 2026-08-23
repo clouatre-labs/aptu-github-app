@@ -446,7 +446,7 @@ describe('repository_dispatch client_payload', () => {
     fetchSpy.mockImplementation(mockEnabledFetch());
   });
 
-  it('dispatched payload includes installation_token, originating_repo, and issue_number for issues event', async () => {
+  it('dispatched payload includes installation_id, originating_owner, originating_repo_name, originating_repo, and issue_number for issues event', async () => {
     const body = JSON.stringify({
       action: 'opened',
       installation: { id: 10 },
@@ -464,14 +464,18 @@ describe('repository_dispatch client_payload', () => {
     ) as [string, RequestInit];
     const parsed = JSON.parse(dispatchCall[1].body as string);
     expect(parsed.client_payload).toEqual({
-      installation_token: 'mock-installation-token',
+      installation_id: 10,
+      originating_owner: 'myorg',
+      originating_repo_name: 'myrepo',
       originating_repo: 'myorg/myrepo',
       issue_number: 42,
       issue_title: 'Payload test',
     });
+    expect(parsed.client_payload).not.toHaveProperty('installation_token');
+    expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
   });
 
-  it('dispatched payload includes installation_token, originating_repo, and pull_number for pull_request event', async () => {
+  it('dispatched payload includes installation_id, originating_owner, originating_repo_name, originating_repo, and pull_number for pull_request event', async () => {
     const body = JSON.stringify({
       action: 'opened',
       installation: { id: 20 },
@@ -489,10 +493,14 @@ describe('repository_dispatch client_payload', () => {
     ) as [string, RequestInit];
     const parsed = JSON.parse(dispatchCall[1].body as string);
     expect(parsed.client_payload).toMatchObject({
-      installation_token: 'mock-installation-token',
+      installation_id: 20,
+      originating_owner: 'myorg',
+      originating_repo_name: 'myrepo',
       originating_repo: 'myorg/myrepo',
       pull_number: 99,
     });
+    expect(parsed.client_payload).not.toHaveProperty('installation_token');
+    expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
   });
 
   it('requests dispatch token with full owner/repo name, not short name', async () => {
@@ -1219,6 +1227,7 @@ describe('AI configuration and external installations', () => {
       'ai_key_secret',
       'OPENAI_API_KEY'
     );
+    expect(parsed.client_payload).not.toHaveProperty('installation_token');
     expect(parsed.client_payload).toHaveProperty(
       'originating_repo',
       'owner/repo'
@@ -1251,6 +1260,7 @@ describe('AI configuration and external installations', () => {
       'ai_key_secret',
       'OPENAI_API_KEY'
     );
+    expect(parsed.client_payload).not.toHaveProperty('installation_token');
   });
 
   it('omits ai_provider, ai_model, ai_key_secret from client_payload when config.ai is absent', async () => {
@@ -1274,6 +1284,7 @@ describe('AI configuration and external installations', () => {
     expect(parsed.client_payload).not.toHaveProperty('ai_provider');
     expect(parsed.client_payload).not.toHaveProperty('ai_model');
     expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
+    expect(parsed.client_payload).not.toHaveProperty('installation_token');
   });
 });
 
@@ -2260,13 +2271,16 @@ describe('scan dispatch', () => {
     const parsed = JSON.parse(scanCall[1].body as string);
     expect(parsed.event_type).toBe('aptu-scan-security');
     expect(parsed.client_payload).toMatchObject({
-      installation_token: 'mock-installation-token',
+      installation_id: 1,
+      originating_owner: 'owner',
+      originating_repo_name: 'repo',
       originating_repo: 'owner/repo',
       head_sha: 'abc123',
       pull_number: 10,
       scan_path: 'src/',
       fail_on: 'critical,high',
     });
+    expect(parsed.client_payload).not.toHaveProperty('installation_token');
   });
 
   it('does not dispatch aptu-scan-security when scan.enabled is false', async () => {

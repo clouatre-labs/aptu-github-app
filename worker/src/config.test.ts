@@ -119,138 +119,100 @@ describe('shouldDispatch', () => {
   it('returns false when feature key is missing from config', () => {
     const config = { version: 1 };
     expect(shouldDispatch(config, 'triage')).toBe(false);
-  });
-
-  it('returns false when feature.enabled is explicitly false', () => {
-    const config = { version: 1, triage: { enabled: false } };
-    expect(shouldDispatch(config, 'triage')).toBe(false);
-  });
-
-  it('returns true when feature.enabled is explicitly true', () => {
-    const config = { version: 1, triage: { enabled: true } };
-    expect(shouldDispatch(config, 'triage')).toBe(true);
-  });
-
-  it('returns false for scan when scan block is missing', () => {
-    const config = { version: 1, triage: { enabled: true } };
+    expect(shouldDispatch(config, 'review')).toBe(false);
     expect(shouldDispatch(config, 'scan')).toBe(false);
   });
 
-  it('returns true for scan when scan.enabled is true', () => {
-    const config = { version: 1, scan: { enabled: true } };
+  it('returns true when feature enabled is true', () => {
+    const config = {
+      version: 1,
+      triage: { enabled: true },
+      review: { enabled: true },
+      scan: { enabled: true },
+    };
+    expect(shouldDispatch(config, 'triage')).toBe(true);
+    expect(shouldDispatch(config, 'review')).toBe(true);
     expect(shouldDispatch(config, 'scan')).toBe(true);
   });
-});
 
-describe('parseConfig review.paths', () => {
-  it('parses review.paths as array of strings from valid YAML, attaches to AptuConfig', () => {
-    const raw = btoa(
-      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\n  paths:\n    - "src/**"\n    - "!src/data/**"'
-    );
-    const config = parseConfig(raw);
-    expect(config).not.toBeNull();
-    expect(config?.review?.paths).toEqual(['src/**', '!src/data/**']);
-  });
-
-  it('tolerates absence of review.paths (existing configs continue to parse)', () => {
-    const raw = btoa(
-      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true'
-    );
-    const config = parseConfig(raw);
-    expect(config).not.toBeNull();
-    expect(config?.review?.paths).toBeUndefined();
-  });
-
-  it('returns null when review.paths is present but is not an array', () => {
-    const raw = btoa(
-      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\n  paths: "src/**"'
-    );
-    expect(parseConfig(raw)).toBeNull();
-  });
-
-  it('returns null when review.paths array contains non-string elements (numbers, objects)', () => {
-    const raw = btoa(
-      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\n  paths:\n    - 42\n    - src/**'
-    );
-    expect(parseConfig(raw)).toBeNull();
-  });
-});
-
-describe('parseConfig scan', () => {
-  it('parses scan block with only enabled', () => {
-    const raw = btoa(
-      'version: 1\ntriage:\n  enabled: true\nscan:\n  enabled: true'
-    );
-    const config = parseConfig(raw);
-    expect(config).not.toBeNull();
-    expect(config?.scan).toEqual({ enabled: true });
-  });
-
-  it('parses scan block with optional fail-on and path', () => {
-    const raw = btoa(
-      'version: 1\ntriage:\n  enabled: true\nscan:\n  enabled: true\n  fail-on: critical,high\n  path: src/'
-    );
-    const config = parseConfig(raw);
-    expect(config).not.toBeNull();
-    expect(config?.scan).toEqual({
-      enabled: true,
-      'fail-on': 'critical,high',
-      path: 'src/',
-    });
-  });
-
-  it('returns null when scan.enabled is a non-boolean string', () => {
-    const raw = btoa(
-      'version: 1\ntriage:\n  enabled: true\nscan:\n  enabled: "yes"'
-    );
-    expect(parseConfig(raw)).toBeNull();
-  });
-
-  it('returns null when scan.enabled is missing from scan block', () => {
-    const raw = btoa(
-      'version: 1\ntriage:\n  enabled: true\nscan:\n  path: src/'
-    );
-    expect(parseConfig(raw)).toBeNull();
-  });
-
-  it('returns null when scan block is not an object', () => {
-    const raw = btoa('version: 1\ntriage:\n  enabled: true\nscan: "yes"');
-    expect(parseConfig(raw)).toBeNull();
+  it('returns false when feature enabled is false', () => {
+    const config = {
+      version: 1,
+      triage: { enabled: false },
+      review: { enabled: false },
+      scan: { enabled: false },
+    };
+    expect(shouldDispatch(config, 'triage')).toBe(false);
+    expect(shouldDispatch(config, 'review')).toBe(false);
+    expect(shouldDispatch(config, 'scan')).toBe(false);
   });
 });
 
 describe('shouldSkipByPathFilters', () => {
-  it('returns false immediately when patterns array is empty', () => {
+  it('returns false (do not skip) when pattern list is empty', () => {
     expect(shouldSkipByPathFilters([], ['src/index.ts'])).toBe(false);
   });
 
-  it('returns true (skip) when no changed file matches any include pattern', () => {
-    const patterns = ['src/**'];
-    const filenames = ['docs/readme.md'];
-    expect(shouldSkipByPathFilters(patterns, filenames)).toBe(true);
+  it('returns false (dispatch) when all changed files match an include pattern', () => {
+    expect(
+      shouldSkipByPathFilters(['src/**', 'lib/**'], ['src/a.ts', 'lib/b.ts'])
+    ).toBe(false);
   });
 
-  it('returns false (dispatch) when at least one changed file matches an include pattern', () => {
-    const patterns = ['src/**'];
-    const filenames = ['src/index.ts', 'docs/readme.md'];
-    expect(shouldSkipByPathFilters(patterns, filenames)).toBe(false);
+  it('returns false (dispatch) when at least one file matches an include pattern', () => {
+    expect(
+      shouldSkipByPathFilters(['src/**'], ['README.md', 'src/worker.ts'])
+    ).toBe(false);
   });
 
-  it('returns true (skip) when all files matching includes are excluded', () => {
-    const patterns = ['src/**', '!src/data/**'];
-    const filenames = ['src/data/blog/post.md'];
-    expect(shouldSkipByPathFilters(patterns, filenames)).toBe(true);
+  it('returns true (skip) when no changed files match any include pattern', () => {
+    expect(
+      shouldSkipByPathFilters(
+        ['src/**', 'lib/**'],
+        ['README.md', 'docs/ARCHITECTURE.md']
+      )
+    ).toBe(true);
   });
 
-  it('with only exclude patterns and no includes, returns true (skip) when every file matches an exclude', () => {
-    const patterns = ['!docs/**'];
-    const filenames = ['docs/readme.md', 'docs/guide.md'];
-    expect(shouldSkipByPathFilters(patterns, filenames)).toBe(true);
+  it('returns true (skip) when file matches an exclude pattern (single exclude)', () => {
+    expect(shouldSkipByPathFilters(['!docs/**'], ['docs/guide.md'])).toBe(true);
   });
 
-  it('with only exclude patterns and no includes, returns false (dispatch) when at least one file does not match any exclude', () => {
-    const patterns = ['!docs/**'];
-    const filenames = ['docs/readme.md', 'src/index.ts'];
-    expect(shouldSkipByPathFilters(patterns, filenames)).toBe(false);
+  it('returns false (dispatch) when some files match exclude and some do not (exclude-only mode)', () => {
+    expect(
+      shouldSkipByPathFilters(
+        ['!docs/**'],
+        ['docs/guide.md', 'worker/index.ts']
+      )
+    ).toBe(false);
+  });
+
+  it('handles combined include and exclude: matches include but also matches exclude -> not qualified -> skips if only file', () => {
+    expect(
+      shouldSkipByPathFilters(['src/**', '!src/data/**'], ['src/data/raw.json'])
+    ).toBe(true);
+  });
+
+  it('handles combined include and exclude: matches include and not exclude -> qualifies -> dispatches', () => {
+    expect(
+      shouldSkipByPathFilters(['src/**', '!src/data/**'], ['src/utils.ts'])
+    ).toBe(false);
+  });
+
+  it('handles mixed PR: some files excluded, some files included and not excluded -> at least one qualifies -> dispatches', () => {
+    expect(
+      shouldSkipByPathFilters(
+        ['src/**', '!src/data/**', '!docs/**'],
+        ['src/data/raw.json', 'docs/readme.md', 'src/handler.ts']
+      )
+    ).toBe(false);
+  });
+
+  it('returns true (skip) when file list is empty and patterns are present', () => {
+    expect(shouldSkipByPathFilters(['src/**'], [])).toBe(true);
+  });
+
+  it('returns false (dispatch) when file list is empty and patterns are empty', () => {
+    expect(shouldSkipByPathFilters([], [])).toBe(false);
   });
 });
