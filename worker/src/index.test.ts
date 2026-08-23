@@ -136,7 +136,7 @@ function mockEnabledWithAiFetch(): (
     if (urlStr.includes('/contents/.github/aptu.yml')) {
       return Promise.resolve(
         makeConfigResponse(
-          'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o'
+          'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o\n  api-key-secret: OPENAI_API_KEY'
         )
       );
     }
@@ -224,7 +224,10 @@ describe('owner processing without allowlist', () => {
       action: 'opened',
       installation: { id: 1 },
       issue: { number: 1, title: 'Test' },
-      repository: { full_name: 'any-org/any-repo', owner: { login: 'any-org' } },
+      repository: {
+        full_name: 'any-org/any-repo',
+        owner: { login: 'any-org' },
+      },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -1139,7 +1142,7 @@ describe('AI configuration and external installations', () => {
     fetchSpy = vi.spyOn(globalThis, 'fetch');
   });
 
-  it('includes ai_provider and ai_model but omits ai_key_secret in client_payload for issues.opened when config.ai is present', async () => {
+  it('includes ai_provider, ai_model, and ai_key_secret in client_payload for issues.opened when config.ai is present', async () => {
     fetchSpy.mockImplementation(mockEnabledWithAiFetch());
     const body = JSON.stringify({
       action: 'opened',
@@ -1159,7 +1162,10 @@ describe('AI configuration and external installations', () => {
     const parsed = JSON.parse(dispatchCall[1].body as string);
     expect(parsed.client_payload).toHaveProperty('ai_provider', 'openai');
     expect(parsed.client_payload).toHaveProperty('ai_model', 'gpt-4o');
-    expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
+    expect(parsed.client_payload).toHaveProperty(
+      'ai_key_secret',
+      'OPENAI_API_KEY'
+    );
     expect(parsed.client_payload).not.toHaveProperty('installation_token');
     expect(parsed.client_payload).toHaveProperty(
       'originating_repo',
@@ -1172,7 +1178,7 @@ describe('AI configuration and external installations', () => {
     expect(parsed.client_payload).not.toHaveProperty('originating_repo_name');
   });
 
-  it('includes ai_provider and ai_model but omits ai_key_secret in client_payload for pull_request when config.ai is present', async () => {
+  it('includes ai_provider, ai_model, and ai_key_secret in client_payload for pull_request when config.ai is present', async () => {
     fetchSpy.mockImplementation(mockEnabledWithAiFetch());
     const body = JSON.stringify({
       action: 'opened',
@@ -1192,7 +1198,10 @@ describe('AI configuration and external installations', () => {
     const parsed = JSON.parse(dispatchCall[1].body as string);
     expect(parsed.client_payload).toHaveProperty('ai_provider', 'openai');
     expect(parsed.client_payload).toHaveProperty('ai_model', 'gpt-4o');
-    expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
+    expect(parsed.client_payload).toHaveProperty(
+      'ai_key_secret',
+      'OPENAI_API_KEY'
+    );
     expect(parsed.client_payload).not.toHaveProperty('installation_token');
     expect(parsed.client_payload).not.toHaveProperty('installation_id');
     expect(parsed.client_payload).not.toHaveProperty('originating_owner');
@@ -1744,7 +1753,12 @@ describe('mention commands', () => {
     const body = JSON.stringify({
       action: 'created',
       installation: { id: 1 },
-      issue: { number: 55, pull_request: { url: 'https://api.github.com/repos/owner/repo/pulls/55' } },
+      issue: {
+        number: 55,
+        pull_request: {
+          url: 'https://api.github.com/repos/owner/repo/pulls/55',
+        },
+      },
       comment: {
         user: { id: 100, login: 'user1' },
         id: 88,
@@ -1985,7 +1999,7 @@ describe('mention commands', () => {
       if (urlStr.includes('/contents/.github/aptu.yml')) {
         return Promise.resolve(
           makeConfigResponse(
-            'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o'
+            'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nai:\n  provider: openai\n  model: gpt-4o\n  api-key-secret: OPENAI_API_KEY'
           )
         );
       }
@@ -2277,7 +2291,11 @@ describe('scan dispatch', () => {
     const body = JSON.stringify({
       action: 'opened',
       installation: { id: 1 },
-      pull_request: { number: 10, title: 'Scan test with AI', head: { sha: 'abc123' } },
+      pull_request: {
+        number: 10,
+        title: 'Scan test with AI',
+        head: { sha: 'abc123' },
+      },
       repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
@@ -2378,7 +2396,11 @@ describe('scan dispatch', () => {
     const body = JSON.stringify({
       action: 'opened',
       installation: { id: 1 },
-      pull_request: { number: 13, title: 'Quota scan', head: { sha: 'jkl012' } },
+      pull_request: {
+        number: 13,
+        title: 'Quota scan',
+        head: { sha: 'jkl012' },
+      },
       repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
@@ -2402,7 +2424,7 @@ describe('scan dispatch', () => {
       return parsed.action === 'record';
     });
     expect(recordCalls.length).toBe(1);
-    const recordBody = JSON.parse(recordCalls[0]![1].body as string) as {
+    const recordBody = JSON.parse(recordCalls[0]?.[1].body as string) as {
       eventType: string;
     };
     expect(recordBody.eventType).toBe('scan');
