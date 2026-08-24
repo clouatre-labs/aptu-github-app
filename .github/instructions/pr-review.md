@@ -18,6 +18,7 @@ When reviewing `.github/workflows/` changes:
   regression (see CVE-2025-30066).
 - Flag duplicated workflow YAML in Markdown files; SHA pins in Markdown go stale because
   Renovate only updates `uses:` refs in workflow files, not in Markdown.
+- Flag steps that omit `name:`; every step must have a human-readable name for CI logs.
 - Check that `permissions:` blocks are present and minimal.
 
 ## TypeScript / Cloudflare Worker

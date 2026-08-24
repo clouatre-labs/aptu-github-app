@@ -67,6 +67,7 @@ All commits must be GPG-signed with DCO sign-off (`git commit -S --signoff`).
 ## Workflow Security
 
 - Reusable workflow `uses:` refs and action pins must use commit SHAs, not mutable tags (see CVE-2025-30066)
+- Every workflow step must have a `name:` key for readable CI logs
 - Do not duplicate workflow YAML in Markdown files; link to the source file instead (Renovate cannot update SHA pins in Markdown)
 - Renovate manages SHA pin updates via `matchManagers: ["github-actions"]`
 
