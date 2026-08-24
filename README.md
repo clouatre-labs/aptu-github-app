@@ -138,86 +138,13 @@ The dispatch handler receives `repository_dispatch` events from the Worker and c
 appropriate reusable workflow hosted in `clouatre-labs/aptu-github-app`. The caller's AI API
 key secret is passed to the reusable workflow via the `secrets:` block.
 
-The dispatch handler resolves your AI provider's API key from a repository secret named after
-the `ai.provider` you set in your own `.github/aptu.yml`: `OPENROUTER_API_KEY`,
-`ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`. Create that secret in your own repository (or rely
-on an org-visible secret of the same name, if your org provisions one). Then add the following
-workflow file verbatim; it is identical for every installation and you never need to hand-edit
-it:
-
-```yaml
-# .github/workflows/aptu.yml
-# SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
-
-name: Aptu Dispatch Handler
-
-on:
-  repository_dispatch:
-    types:
-      - aptu-review
-      - aptu-triage
-      - aptu-scan-security
-
-jobs:
-  review:
-    name: Review PR
-    if: github.event.action == 'aptu-review'
-    permissions:
-      contents: read
-      pull-requests: write
-    uses: clouatre-labs/aptu-github-app/.github/workflows/pr-review.yml@be3845a6f9d9059ff025d87f283c48ee35abbf1d # main
-    with:
-      originating_repo: ${{ github.event.client_payload.originating_repo }}
-      pull_number: ${{ github.event.client_payload.pull_number }}
-      instructions_file: ${{ github.event.client_payload.instructions_file || '.github/instructions/pr-review.md' }}
-      skip_labeled: ${{ github.event.client_payload.skip_labeled || false }}
-      ai_provider: ${{ github.event.client_payload.ai_provider || 'openrouter' }}
-      ai_model: ${{ github.event.client_payload.ai_model || 'google/gemma-4-26b-a4b-it' }}
-    secrets:
-      ai-api-key: >-
-        ${{ (github.event.client_payload.ai_provider == 'anthropic' && secrets.ANTHROPIC_API_KEY)
-         || (github.event.client_payload.ai_provider == 'gemini' && secrets.GEMINI_API_KEY)
-         || secrets.OPENROUTER_API_KEY }}
-
-  triage:
-    name: Triage Issue
-    if: github.event.action == 'aptu-triage'
-    permissions:
-      contents: read
-      issues: write
-    uses: clouatre-labs/aptu-github-app/.github/workflows/issue-triage.yml@be3845a6f9d9059ff025d87f283c48ee35abbf1d # main
-    with:
-      originating_repo: ${{ github.event.client_payload.originating_repo }}
-      issue_number: ${{ github.event.client_payload.issue_number }}
-      ai_provider: ${{ github.event.client_payload.ai_provider || 'openrouter' }}
-      ai_model: ${{ github.event.client_payload.ai_model || 'google/gemma-4-26b-a4b-it' }}
-    secrets:
-      ai-api-key: >-
-        ${{ (github.event.client_payload.ai_provider == 'anthropic' && secrets.ANTHROPIC_API_KEY)
-         || (github.event.client_payload.ai_provider == 'gemini' && secrets.GEMINI_API_KEY)
-         || secrets.OPENROUTER_API_KEY }}
-
-  scan:
-    name: Scan Security
-    if: github.event.action == 'aptu-scan-security'
-    permissions:
-      contents: read
-      security-events: write
-      statuses: write
-    uses: clouatre-labs/aptu-github-app/.github/workflows/scan-security.yml@be3845a6f9d9059ff025d87f283c48ee35abbf1d # main
-    with:
-      originating_repo: ${{ github.event.client_payload.originating_repo }}
-      head_sha: ${{ github.event.client_payload.head_sha }}
-      pull_number: ${{ github.event.client_payload.pull_number }}
-      scan_path: ${{ github.event.client_payload.scan_path || '.' }}
-      fail_on: ${{ github.event.client_payload.fail_on || '' }}
-```
-
-The secret resolved (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, or `OPENROUTER_API_KEY`) is
-selected by the `ai.provider` in your `.github/aptu.yml`, not by editing this file. The
-resolved secret value is passed to all three provider inputs of the reusable workflow; the
-aptu action selects the correct one based on the `provider` field.
+Copy the dispatch handler from
+[`.github/workflows/aptu.yml`](https://github.com/clouatre-labs/aptu-github-app/blob/main/.github/workflows/aptu.yml)
+into your repo verbatim. It is identical for every installation and never needs hand-editing.
+The handler resolves your AI provider's API key from a repository secret named after the
+`ai.provider` in your `.github/aptu.yml` (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, or
+`GEMINI_API_KEY`). Create that secret in your own repository or rely on an org-visible secret
+of the same name.
 
 ## Deployment
 
