@@ -11,7 +11,13 @@ When reviewing `.github/workflows/` changes:
 - Evaluate the full job context, not individual steps in isolation.
 - Flag `${{ expression }}` interpolation directly inside `run:` scripts as an injection risk;
   inputs should be passed via `env:` blocks.
-- Verify action pins use commit SHAs, not mutable tags.
+- Verify action pins and reusable workflow `uses:` refs (e.g.,
+  `clouatre-labs/aptu-github-app/.github/workflows/pr-review.yml@SHA`) use commit SHAs, not
+  mutable tags.
+- Flag switching FROM SHA pins TO mutable tags (like `@v1` or `@main`) as a security
+  regression (see CVE-2025-30066).
+- Flag duplicated workflow YAML in Markdown files; SHA pins in Markdown go stale because
+  Renovate only updates `uses:` refs in workflow files, not in Markdown.
 - Check that `permissions:` blocks are present and minimal.
 
 ## TypeScript / Cloudflare Worker
