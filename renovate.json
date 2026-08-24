@@ -10,13 +10,26 @@
   "packageRules": [
     {
       "groupName": "non-major",
-      "matchUpdateTypes": ["patch", "minor", "digest", "pin", "lockFileMaintenance"],
+      "matchUpdateTypes": [
+        "patch",
+        "minor",
+        "digest",
+        "pin",
+        "lockFileMaintenance"
+      ],
       "automerge": true
     },
     {
       "groupName": "github-actions",
       "matchManagers": ["github-actions"],
-      "matchUpdateTypes": ["major", "minor", "patch", "digest", "pin", "lockFileMaintenance"],
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch",
+        "digest",
+        "pin",
+        "lockFileMaintenance"
+      ],
       "automerge": true
     }
   ]
