@@ -92,25 +92,35 @@ Worker never loses authentication.
 1. **Generate a new private key:**
 
    Navigate to `https://github.com/settings/apps/aptu-dev`, scroll to **Private keys**,
-   and click **Generate a private key**. GitHub downloads a new PKCS#8 PEM file and adds
-   it to the App's active key list. The old key remains valid.
+   and click **Generate a private key**. GitHub downloads a new PKCS#1 PEM file (starts
+   with `-----BEGIN RSA PRIVATE KEY-----`) and adds it to the App's active key list. The
+   old key remains valid.
 
-2. **Upload the new key to the Worker:**
+2. **Convert the key to PKCS#8:**
+
+   The Worker's JWT signing uses the WebCrypto API, which only supports PKCS#8. Convert
+   the downloaded file before uploading it:
+
+   ```bash
+   openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt -in downloaded-key.pem -out converted-key.pem
+   ```
+
+3. **Upload the converted key to the Worker:**
 
    ```bash
    bunx wrangler secret put APP_PRIVATE_KEY
    ```
 
-   Paste the contents of the new PEM file (including the `-----BEGIN PRIVATE KEY-----`
+   Paste the contents of the converted file (including the `-----BEGIN PRIVATE KEY-----`
    and `-----END PRIVATE KEY-----` delimiters) when prompted.
 
-3. **Verify authentication:**
+4. **Verify authentication:**
 
    Trigger a `repository_dispatch` event or check the Worker logs for successful
    GitHub API authentication (e.g., `202 Accepted` on a test webhook). Confirm the
    Worker can authenticate using the new key.
 
-4. **Delete the old private key:**
+5. **Delete the old private key:**
 
    Return to the GitHub App settings page, locate the old key in the **Private keys**
    list, and click **Delete**. The Worker now uses the new key exclusively.
