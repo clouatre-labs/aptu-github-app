@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
+
+name: Release Reusable Workflows
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pr-review.yml'
+      - '.github/workflows/issue-triage.yml'
+      - '.github/workflows/scan-security.yml'
+
+# Note: Tag protection rulesets block semantic version tags matching refs/tags/v*.*.* (e.g. v1.0.0)
+# for standard GITHUB_TOKEN authentication. Floating major tag 'v1' does not match the semver pattern
+# and is updated directly via GITHUB_TOKEN.
+
+permissions:
+  contents: write
+
+jobs:
+  tag-v1:
+    name: Move v1 Tag
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Create or move v1 tag
+        run: |
+          git tag -f v1 HEAD
+          git push origin v1 --force

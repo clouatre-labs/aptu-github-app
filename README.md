@@ -149,6 +149,7 @@ it:
 # .github/workflows/aptu.yml
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
+# aptu-dispatch-handler-version: 1
 
 name: Aptu Dispatch Handler
 
@@ -166,7 +167,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: clouatre-labs/aptu-github-app/.github/workflows/pr-review.yml@be3845a6f9d9059ff025d87f283c48ee35abbf1d # main
+    uses: clouatre-labs/aptu-github-app/.github/workflows/pr-review.yml@v1
     with:
       originating_repo: ${{ github.event.client_payload.originating_repo }}
       pull_number: ${{ github.event.client_payload.pull_number }}
@@ -186,7 +187,7 @@ jobs:
     permissions:
       contents: read
       issues: write
-    uses: clouatre-labs/aptu-github-app/.github/workflows/issue-triage.yml@be3845a6f9d9059ff025d87f283c48ee35abbf1d # main
+    uses: clouatre-labs/aptu-github-app/.github/workflows/issue-triage.yml@v1
     with:
       originating_repo: ${{ github.event.client_payload.originating_repo }}
       issue_number: ${{ github.event.client_payload.issue_number }}
@@ -205,7 +206,7 @@ jobs:
       contents: read
       security-events: write
       statuses: write
-    uses: clouatre-labs/aptu-github-app/.github/workflows/scan-security.yml@be3845a6f9d9059ff025d87f283c48ee35abbf1d # main
+    uses: clouatre-labs/aptu-github-app/.github/workflows/scan-security.yml@v1
     with:
       originating_repo: ${{ github.event.client_payload.originating_repo }}
       head_sha: ${{ github.event.client_payload.head_sha }}

@@ -46,13 +46,47 @@ curl -X POST https://aptu.dev/webhook \
 
 Expected response: `202 Accepted`. If the response is `401 Unauthorized`, verify that
 the `WEBHOOK_SECRET` value matches between the GitHub App settings and the Wrangler
-secret (see Section 2.1).
+secret (see Section 3.1).
 
 ---
 
-## 2. Secret Rotation
+## 2. Reusable Workflow Versioning
 
-### 2.1 Rotate WEBHOOK_SECRET
+The reusable workflows (`pr-review.yml`, `issue-triage.yml`, and `scan-security.yml`)
+are distributed to caller repositories via the floating `@v1` major version tag.
+
+### 2.1 Floating major tag lifecycle
+
+- **Automatic tag updates:** The `.github/workflows/release-workflows.yml` workflow runs on
+  every push to `main` that touches any of the reusable workflow files. It automatically creates
+  or fast-forwards the `v1` git tag to `HEAD`.
+- **Caller experience:** Repositories using `@v1` in their `.github/workflows/aptu.yml`
+  automatically receive backwards-compatible updates, fixes, and improvements on each run
+  without manual workflow file edits.
+- **Breaking changes:** If a breaking change to workflow interfaces or inputs is introduced in
+  the future, a new major tag (e.g. `v2`) must be established. Existing installations continue
+  pointing to `@v1` until repository operators update their dispatcher workflow manually.
+- **Version marker enforcement:** Whenever reusable workflow files are modified in a PR, CI
+  requires incrementing the `# aptu-dispatch-handler-version: <integer>` marker comment in
+  `.github/workflows/aptu.yml` and the README.md template.
+
+### 2.2 Reusable workflow rollback
+
+If a bad workflow change reaches `main` and breaks caller repositories, immediately point the
+`v1` tag back to the last known good commit:
+
+```bash
+git tag -f v1 <commit-sha>
+git push origin v1 --force
+```
+
+This immediately reverts all caller repositories resolving `@v1` to the designated commit.
+
+---
+
+## 3. Secret Rotation
+
+### 3.1 Rotate WEBHOOK_SECRET
 
 The `WEBHOOK_SECRET` is shared between the GitHub App webhook configuration and the
 Worker's environment. Both sides must be updated within the same maintenance window.
@@ -83,7 +117,7 @@ Worker's environment. Both sides must be updated within the same maintenance win
 
    Send a test webhook request (see Section 1.3) and confirm `202 Accepted`.
 
-### 2.2 Rotate APP_PRIVATE_KEY
+### 3.2 Rotate APP_PRIVATE_KEY
 
 The `APP_PRIVATE_KEY` authenticates the App's GitHub API requests. Unlike
 `WEBHOOK_SECRET`, two keys must be valid concurrently during rotation so that the
@@ -121,17 +155,17 @@ authentication if the new key is not yet accepted by the Worker runtime.
 
 ---
 
-## 3. Incident Response and Rollback
+## 4. Incident Response and Rollback
 
-### 3.1 Symptom-to-Action Table
+### 4.1 Symptom-to-Action Table
 
 | Symptom | Likely Cause | Action |
 | --- | --- | --- |
 | `ERR_NAME_NOT_RESOLVED` when GitHub delivers webhooks to `aptu.dev/webhook` | Missing or unproxied DNS AAAA record for `aptu.dev` | Add `AAAA aptu.dev 100::` (proxied) in the Cloudflare DNS dashboard. See DNS prerequisite in [README.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/README.md). |
-| `401 Unauthorized` on all webhook requests | `WEBHOOK_SECRET` mismatch between GitHub App and Worker | Re-run `bunx wrangler secret put WEBHOOK_SECRET` with the correct value. Verify the GitHub App webhook secret field matches. See Section 2.1. |
-| `429 Too Many Requests` on GitHub API calls from the Worker | Installation has exceeded its quota (rate-limit per installation, enforced by `InstallationQuota` Durable Object) | Inspect quota state (see Section 3.4). The quota resets hourly; no operator action is required unless abuse is suspected. |
+| `401 Unauthorized` on all webhook requests | `WEBHOOK_SECRET` mismatch between GitHub App and Worker | Re-run `bunx wrangler secret put WEBHOOK_SECRET` with the correct value. Verify the GitHub App webhook secret field matches. See Section 3.1. |
+| `429 Too Many Requests` on GitHub API calls from the Worker | Installation has exceeded its quota (rate-limit per installation, enforced by `InstallationQuota` Durable Object) | Inspect quota state (see Section 4.4). The quota resets hourly; no operator action is required unless abuse is suspected. |
 
-### 3.2 Rollback to a Previous Deployment
+### 4.2 Rollback to a Previous Deployment
 
 1. **List recent deployments:**
 
@@ -149,7 +183,7 @@ authentication if the new key is not yet accepted by the Worker runtime.
 
    Wrangler reverts the Worker code and bindings to the specified deployment.
 
-### 3.3 Rollback Caveat: Durable Object Migration Tag
+### 4.3 Rollback Caveat: Durable Object Migration Tag
 
 Wrangler rollback is **blocked** if the Durable Object migration tag has changed between
 the current and target deployment. The `worker/wrangler.toml` currently defines:
@@ -171,7 +205,7 @@ In this scenario, the only recovery path is to deploy a new version that directl
 contains the rollback fix, rather than using `wrangler rollback`. Plan for this
 limitation when adding new Durable Objects or SQLite classes.
 
-### 3.4 Inspect Quota State
+### 4.4 Inspect Quota State
 
 The `InstallationQuota` Durable Object stores per-installation rate-limit state. To
 inspect current quota usage:

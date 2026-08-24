@@ -146,11 +146,67 @@ jobs:
             exit 1
           fi
 
+  marker-check:
+    name: Check Workflow Version Marker
+    runs-on: ubuntu-24.04-arm
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Verify version marker bump on reusable workflow changes
+        run: |
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          head_sha="${{ github.event.pull_request.head.sha }}"
+
+          # Check if any of the three reusable workflow files changed
+          changed_workflows=$(git diff --name-only "$base_sha" "$head_sha" -- \
+            .github/workflows/pr-review.yml \
+            .github/workflows/issue-triage.yml \
+            .github/workflows/scan-security.yml)
+
+          if [ -z "$changed_workflows" ]; then
+            echo "No reusable workflows changed. Version marker check skipped."
+            exit 0
+          fi
+
+          echo "Reusable workflow files changed:"
+          echo "$changed_workflows"
+
+          # Extract marker integer from aptu.yml at base and HEAD
+          old_marker_line=$(git show "$base_sha:.github/workflows/aptu.yml" 2>/dev/null | grep -E '^# aptu-dispatch-handler-version: [0-9]+$' || true)
+          old_marker=$(echo "$old_marker_line" | awk '{print $NF}')
+          if [ -z "$old_marker" ]; then
+            old_marker=0
+          fi
+
+          new_marker_line=$(git show "$head_sha:.github/workflows/aptu.yml" 2>/dev/null | grep -E '^# aptu-dispatch-handler-version: [0-9]+$' || true)
+          new_marker=$(echo "$new_marker_line" | awk '{print $NF}')
+
+          if [ -z "$new_marker" ]; then
+            echo "::error::Reusable workflows were modified, but .github/workflows/aptu.yml does not contain a valid '# aptu-dispatch-handler-version: <integer>' marker."
+            exit 1
+          fi
+
+          echo "Base marker version: $old_marker"
+          echo "Head marker version: $new_marker"
+
+          if [ "$new_marker" -le "$old_marker" ]; then
+            echo "::error::Reusable workflows were modified, but aptu-dispatch-handler-version was not incremented (base: $old_marker, head: $new_marker). Please increment the version marker in .github/workflows/aptu.yml and README.md template."
+            exit 1
+          fi
+
+          echo "Version marker successfully incremented from $old_marker to $new_marker."
+
   ci-result:
     name: CI Result
     runs-on: ubuntu-24.04-arm
     if: always()
-    needs: [lint, typecheck, test, commitlint, check-base]
+    needs: [lint, typecheck, test, commitlint, check-base, marker-check]
     permissions: {}
     steps:
       - name: Verify all jobs passed or were skipped
