@@ -22,9 +22,10 @@ installation. Responsibilities:
   of `X-GitHub-Delivery`; returns 202 on duplicate)
 - Validate the source IP against GitHub's published webhook IP ranges (fail-open; cached for
   3600 seconds)
-- Enforce per-installation quota via the `InstallationQuota` Durable Object (50 events per
+- Enforce per-installation quota via the `InstallationQuota` Durable Object (500 events per
   event type per 24-hour rolling window; responds 429 with `Retry-After` on excess; enforced
-  for all installations regardless of AI config)
+  for all installations regardless of AI config, except the operator's own org -- see
+  `OPERATOR_ORG` below)
 - Obtain per-operation scoped installation tokens via `@octokit/auth-app` with minimum
   required permissions for each operation (config read, triage, review, scan, dispatch)
 - Fetch and validate `.github/aptu.yml` from the originating repository (5-second timeout;
@@ -61,17 +62,26 @@ repo and post review comments or labels.
 
 Persists per-installation event counters using Cloudflare Durable Object SQLite-backed
 storage. Each counter is keyed by `quota:{installationId}:{eventType}`. On every request,
-timestamps older than 24 hours are pruned. At 50 events within the rolling window the Durable
-Object returns `exceeded: true` and a `retryAfter` value in seconds.
+timestamps older than 24 hours are pruned. At `QUOTA_LIMIT` (500) events within the rolling
+window the Durable Object returns `exceeded: true` and a `retryAfter` value in seconds.
 
-#### Aggregate Quota Ceiling Decision
+#### Operator Org Exemption
 
-No org-wide aggregate quota ceiling exists; enforcement is per-installation only. This is an
-accepted gap at the current deployment scale (12 operator-owned repositories, decision
-documented 2026-08-24). The intended stopgap mitigation is a Cloudflare account-level Budget
-Alert on Durable Objects usage-based spend; this requires manual dashboard configuration (no
-Cloudflare API exists to create budget alerts programmatically) and is not yet configured.
-This gap should be revisited before external adoption.
+`aptu-dev` has exactly one GitHub App installation, covering the entire `clouatre-labs` org
+(`repository_selection: "all"`). Because the quota key is `installationId`-only with no
+per-repo dimension, that single installation means quota is a de facto **org-wide** bucket
+across every clouatre-labs repo combined, not per-repo -- a normal day of active development
+across several repos can exhaust it. Decision (2026-08-24): the Worker checks `owner ===
+env.OPERATOR_ORG` (`clouatre-labs`, set in `worker/wrangler.toml`) before every quota
+check/record call and skips both entirely for the operator's own org. Quota's remaining
+purpose -- after BYOK removed the shared-AI-key-cost rationale for it -- is abuse protection
+for untrusted external installations, which doesn't apply to the operator's own repos.
+
+There is still no org-wide aggregate *spend* ceiling (Durable Objects usage-based billing);
+this is an accepted gap at the current scale, mitigated by the Cloudflare account-level Budget
+Alert dashboard setting (no API exists to configure this programmatically) rather than
+application logic. Revisit both the exemption and the spend gap before `aptu-dev` is ever
+installed on an org other than `clouatre-labs`.
 ### Config Parser (`worker/src/config.ts`)
 
 `fetchRepoConfig` fetches `.github/aptu.yml` from the originating repository via the GitHub
@@ -243,7 +253,7 @@ own repository.
 | --- | --- |
 | Webhook authenticity | HMAC-SHA256 via Web Crypto API; `WEBHOOK_SECRET` never leaves the Worker |
 | Token isolation | Installation tokens are minted by the Worker scoped per-repo; dispatch tokens are scoped to the originating repo |
-| Quota enforcement | Durable Object per installation; 50 events per event type per 24h rolling window; enforced for all installations regardless of AI config |
+| Quota enforcement | Durable Object per installation; 500 events per event type per 24h rolling window; enforced for all installations regardless of AI config, except the operator's own org (`OPERATOR_ORG`) |
 | Caller AI keys | BYOK: caller provides AI API key via a repository secret in their own repo, named after the provider selected via `ai.provider` in their own `.github/aptu.yml` (`ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `OPENROUTER_API_KEY`); the dispatch handler statically selects one of these three fixed names per-dispatch and passes the secret to the reusable workflow via `secrets:`; operator keys never exposed |
 | Config validation | Strict field-level validation; unknown keys ignored; partial blocks rejected |
 | Self-mention loop | `APTU_BOT_ID` check prevents the bot from triggering itself via `@aptu` |

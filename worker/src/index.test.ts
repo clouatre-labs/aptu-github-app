@@ -160,6 +160,7 @@ const mockEnv = {
   APP_ID: '4134521',
   APTU_BOT_ID: '0',
   SENTRY_DSN: '',
+  OPERATOR_ORG: 'clouatre-labs',
   QUOTA: makeMockQuotaNamespace(),
   REPLAY_GUARD: makeReplayGuardMockNamespace(),
 };
@@ -2549,6 +2550,135 @@ describe('scan dispatch', () => {
       String(call[0]).includes('/dispatches')
     );
     expect(dispatchCalls.length).toBe(0);
+  });
+});
+
+describe('operator org quota exemption', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const { createAppAuth } = await import('@octokit/auth-app');
+    // biome-ignore lint/suspicious/noExplicitAny: restoring the mocked auth factory
+    (createAppAuth as any).mockImplementation(() =>
+      vi.fn().mockResolvedValue({ token: 'mock-installation-token' })
+    );
+    quotaControl.body = JSON.stringify({
+      count: 500,
+      exceeded: true,
+      retryAfter: 3600,
+    });
+    quotaControl.status = 200;
+    quotaControl.overrides = undefined;
+  });
+
+  function mockConfig(yaml: string) {
+    fetchSpy.mockImplementation((url: unknown) => {
+      const urlStr =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.href
+            : (url as Request).url;
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(makeConfigResponse(yaml));
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+  }
+
+  function quotaDoCallCount(): number {
+    const quotaStub = mockEnv.QUOTA.get(
+      'mock-id' as unknown as DurableObjectId
+    );
+    return (quotaStub as unknown as { fetch: ReturnType<typeof vi.fn> }).fetch
+      .mock.calls.length;
+  }
+
+  it('dispatches triage for a clouatre-labs repo despite exceeded quota, with no quota DO calls', async () => {
+    mockConfig('version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true');
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 1, title: 'Operator org triage' },
+      repository: {
+        full_name: 'clouatre-labs/some-repo',
+        owner: { login: 'clouatre-labs' },
+      },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
+    expect(quotaDoCallCount()).toBe(0);
+  });
+
+  it('dispatches review and scan for a clouatre-labs repo despite exceeded quota, with no quota DO calls', async () => {
+    mockConfig(
+      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nscan:\n  enabled: true'
+    );
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: {
+        number: 30,
+        title: 'Operator org PR',
+        head: { sha: 'ddd444' },
+      },
+      repository: {
+        full_name: 'clouatre-labs/some-repo',
+        owner: { login: 'clouatre-labs' },
+      },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(2);
+    expect(quotaDoCallCount()).toBe(0);
+  });
+
+  it('still enforces quota for a non-clouatre-labs repo (contrast case)', async () => {
+    mockConfig('version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true');
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      issue: { number: 2, title: 'External repo triage' },
+      repository: {
+        full_name: 'external-org/some-repo',
+        owner: { login: 'external-org' },
+      },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(429);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(0);
+    expect(quotaDoCallCount()).toBeGreaterThan(0);
   });
 });
 

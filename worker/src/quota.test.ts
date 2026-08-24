@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { QUOTA_LIMIT } from './quota.js';
 
 interface MockStorage {
   get: ReturnType<typeof vi.fn>;
@@ -52,12 +53,12 @@ describe('InstallationQuota Durable Object', () => {
     expect(body.exceeded).toBe(false);
   });
 
-  it('returns exceeded=true once count reaches 50 within rolling 24h window', async () => {
+  it('returns exceeded=true once count reaches QUOTA_LIMIT within rolling 24h window', async () => {
     const { InstallationQuota } = await import('./quota.js');
     const ctx = makeMockCtx();
     const now = Date.now();
     const existingTimestamps = Array.from(
-      { length: 50 },
+      { length: QUOTA_LIMIT },
       (_, i) => now - i * 60000
     );
     ctx.storage.get.mockResolvedValue({ timestamps: existingTimestamps });
@@ -79,7 +80,7 @@ describe('InstallationQuota Durable Object', () => {
       exceeded: boolean;
       retryAfter: number | null;
     };
-    expect(body.count).toBe(50);
+    expect(body.count).toBe(QUOTA_LIMIT);
     expect(body.exceeded).toBe(true);
     expect(body.retryAfter).toBeGreaterThan(0);
   });
@@ -89,7 +90,7 @@ describe('InstallationQuota Durable Object', () => {
     const ctx = makeMockCtx();
     const now = Date.now();
     const existingTimestamps = Array.from(
-      { length: 50 },
+      { length: QUOTA_LIMIT },
       (_, i) => now - i * 60000
     );
     ctx.storage.get.mockResolvedValue({ timestamps: existingTimestamps });
@@ -111,7 +112,7 @@ describe('InstallationQuota Durable Object', () => {
       exceeded: boolean;
       retryAfter: number | null;
     };
-    expect(body.count).toBe(50);
+    expect(body.count).toBe(QUOTA_LIMIT);
     expect(body.exceeded).toBe(true);
     expect(ctx.storage.put).not.toHaveBeenCalled();
   });
@@ -121,7 +122,10 @@ describe('InstallationQuota Durable Object', () => {
     const ctx = makeMockCtx();
     const now = Date.now();
     const windowMs = 24 * 60 * 60 * 1000;
-    const recent = Array.from({ length: 49 }, (_, i) => now - i * 60000);
+    const recent = Array.from(
+      { length: QUOTA_LIMIT - 1 },
+      (_, i) => now - i * 60000
+    );
     ctx.storage.get.mockResolvedValue({
       timestamps: [...recent, now - windowMs - 3600000],
     });
@@ -142,7 +146,7 @@ describe('InstallationQuota Durable Object', () => {
       count: number;
       exceeded: boolean;
     };
-    expect(body.count).toBe(50);
+    expect(body.count).toBe(QUOTA_LIMIT);
     expect(body.exceeded).toBe(false);
   });
 
@@ -161,7 +165,7 @@ describe('InstallationQuota Durable Object', () => {
     );
     const now = Date.now();
     storageMap.set('quota:1:triage', {
-      timestamps: Array.from({ length: 50 }, (_, i) => now - i * 60000),
+      timestamps: Array.from({ length: QUOTA_LIMIT }, (_, i) => now - i * 60000),
     });
     const quota = new InstallationQuota(ctx as unknown as DurableObjectState);
 
@@ -180,7 +184,7 @@ describe('InstallationQuota Durable Object', () => {
       count: number;
       exceeded: boolean;
     };
-    expect(triageBody.count).toBe(50);
+    expect(triageBody.count).toBe(QUOTA_LIMIT);
     expect(triageBody.exceeded).toBe(true);
 
     const reviewResp = await quota.fetch(

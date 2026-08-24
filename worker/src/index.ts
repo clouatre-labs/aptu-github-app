@@ -22,6 +22,7 @@ export interface Env {
   APP_ID: string;
   APTU_BOT_ID: string;
   SENTRY_DSN: string;
+  OPERATOR_ORG: string;
   QUOTA: DurableObjectNamespace;
   REPLAY_GUARD: DurableObjectNamespace;
 }
@@ -217,6 +218,16 @@ export async function shouldSkipPrDispatch(
 // Quota
 // ---------------------------------------------------------------------------
 
+/**
+ * The operator's own org is exempt from quota enforcement -- see OPERATOR_ORG
+ * in wrangler.toml. Quota's remaining purpose (after BYOK removed the shared
+ * AI-key-cost rationale) is abuse protection for untrusted external
+ * installations, not the operator's own repos.
+ */
+function isOperatorOrg(env: Env, owner: string): boolean {
+  return owner === env.OPERATOR_ORG;
+}
+
 async function checkQuota(
   env: Env,
   installationId: number,
@@ -386,7 +397,9 @@ export async function handleMentionCommand(
     config = null;
   }
 
-  const quotaResponse = await checkQuota(env, installationId, eventType);
+  const quotaResponse = isOperatorOrg(env, owner ?? '')
+    ? null
+    : await checkQuota(env, installationId, eventType);
   if (quotaResponse) return quotaResponse;
 
   const hasAccess = await checkCollaboratorPermission(
@@ -430,7 +443,9 @@ export async function handleMentionCommand(
     return new Response('Internal Server Error', { status: 500 });
   }
 
-  await recordQuota(env, installationId, eventType);
+  if (!isOperatorOrg(env, owner ?? '')) {
+    await recordQuota(env, installationId, eventType);
+  }
 
   return new Response(null, { status: 204 });
 }
@@ -651,7 +666,9 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         config = null;
       }
 
-      const quotaResponse = await checkQuota(env, installationId, 'triage');
+      const quotaResponse = isOperatorOrg(env, owner)
+        ? null
+        : await checkQuota(env, installationId, 'triage');
       if (quotaResponse) return quotaResponse;
 
       if (!shouldDispatch(config, 'triage'))
@@ -686,7 +703,9 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         return new Response('Internal Server Error', { status: 500 });
       }
 
-      await recordQuota(env, installationId, 'triage');
+      if (!isOperatorOrg(env, owner)) {
+        await recordQuota(env, installationId, 'triage');
+      }
 
       return new Response(null, { status: 204 });
     }
@@ -764,7 +783,9 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       let maxRetryAfter = 0;
 
       if (shouldReview) {
-        const reviewQuota = await checkQuota(env, installationId, 'review');
+        const reviewQuota = isOperatorOrg(env, owner)
+          ? null
+          : await checkQuota(env, installationId, 'review');
         if (reviewQuota && reviewQuota.status !== 429) {
           return reviewQuota;
         }
@@ -799,13 +820,17 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
             return new Response('Internal Server Error', { status: 500 });
           }
 
-          await recordQuota(env, installationId, 'review');
+          if (!isOperatorOrg(env, owner)) {
+            await recordQuota(env, installationId, 'review');
+          }
           reviewDispatched = true;
         }
       }
 
       if (shouldScan) {
-        const scanQuota = await checkQuota(env, installationId, 'scan');
+        const scanQuota = isOperatorOrg(env, owner)
+          ? null
+          : await checkQuota(env, installationId, 'scan');
         if (scanQuota && scanQuota.status !== 429) {
           return scanQuota;
         }
@@ -824,7 +849,9 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
               scan_path: config?.scan?.path ?? '.',
               fail_on: config?.scan?.['fail-on'] ?? null,
             });
-            await recordQuota(env, installationId, 'scan');
+            if (!isOperatorOrg(env, owner)) {
+              await recordQuota(env, installationId, 'scan');
+            }
             scanDispatched = true;
           } catch (error) {
             captureException(error, {
