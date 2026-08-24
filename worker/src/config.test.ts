@@ -2,11 +2,7 @@
 // SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
 
 import { describe, expect, it } from 'vitest';
-import {
-  parseConfig,
-  shouldDispatch,
-  shouldSkipByPathFilters,
-} from './config';
+import { parseConfig, shouldDispatch, shouldSkipByPathFilters } from './config';
 
 describe('parseConfig', () => {
   it('returns null for version != 1', () => {

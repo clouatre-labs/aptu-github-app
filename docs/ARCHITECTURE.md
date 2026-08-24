@@ -77,8 +77,9 @@ counter uses the same rolling 24-hour window and pruning logic as `InstallationQ
 `fetchRepoConfig` fetches `.github/aptu.yml` from the originating repository via the GitHub
 Contents API and decodes the base64 response. `parseConfig` validates the YAML strictly: all
 required fields must be present and correctly typed; unknown fields are ignored; a partial or
-empty `ai` block causes the entire config to be rejected. `shouldDispatch` checks whether the
-resolved config enables the requested feature (`triage` or `review`).
+empty `ai` block -- missing or empty `provider` or `model` -- causes the entire config to be
+rejected. `shouldDispatch` checks whether the resolved config enables the requested feature
+(`triage` or `review`).
 
 ## Data Flow
 
@@ -205,17 +206,26 @@ ai:                          # optional
   model: google/gemma-4-26b-a4b-it
 ```
 
-When custom AI models are configured via the `ai` block, the dispatch payload carries
-`ai_provider` and `ai_model` (not the API key). The caller's workflow resolves the AI API
-key from the caller's own repository secrets.
+When the `ai` block is configured, the dispatch payload carries `ai_provider` and `ai_model`.
+The caller's static dispatch handler derives which repository secret to use from
+`ai_provider` via a static mapping (`anthropic` -> `secrets.ANTHROPIC_API_KEY`, `gemini` ->
+`secrets.GEMINI_API_KEY`, otherwise `secrets.OPENROUTER_API_KEY`), resolved inside the
+caller's own workflow run against the caller's own repository secrets. Every secret name in
+that mapping is a fixed literal, not a caller-supplied string -- this avoids GitHub Actions'
+requirement to provision the entire secrets context for a dynamically-computed secret key
+(zizmor's `overprovisioned-secrets` audit).
 
 ## Caller-Supplied AI Keys (BYOK)
 
 The BYOK (bring your own key) model allows each installation to use its own AI API key. The
 caller installs `.github/workflows/aptu.yml` in their repository, which receives
 `repository_dispatch` events from the Worker and calls reusable workflows hosted in
-`clouatre-labs/aptu-github-app`. The caller's workflow passes their AI API key secret to the
-reusable workflow via the `secrets:` block.
+`clouatre-labs/aptu-github-app`. The caller's static dispatch handler picks one of three fixed
+repository secrets (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`) based on the
+`ai_provider` value in the dispatch payload, and passes the resolved secret to the reusable
+workflow via the `secrets:` block. No installer ever hand-edits the workflow file to reference
+a specific secret name -- they only need to name their own repository secret after their
+chosen provider's canonical env var.
 
 The reusable workflow runs in the caller's context: `GITHUB_TOKEN` is scoped to the caller's
 repository, and the AI API key is resolved from the caller's repository secrets. The operator's
@@ -223,8 +233,10 @@ AI keys and `APP_PRIVATE_KEY` are never accessible to the reusable workflow (Git
 reusable workflows can only access secrets from the calling repository, not the defining
 repository).
 
-The secret value never passes through the Worker or the webhook dispatch payload. The caller
-controls which secret is used and must create it as a repository secret in their own repository.
+The secret value never passes through the Worker or the webhook dispatch payload; only the
+provider name (`ai_provider`) passes through, and only one of three fixed secret names is ever
+referenced by the workflow. The caller must create the correspondingly-named secret in their
+own repository.
 
 ## Security Boundaries
 
@@ -233,7 +245,7 @@ controls which secret is used and must create it as a repository secret in their
 | Webhook authenticity | HMAC-SHA256 via Web Crypto API; `WEBHOOK_SECRET` never leaves the Worker |
 | Token isolation | Installation tokens are minted by the Worker scoped per-repo; dispatch tokens are scoped to the originating repo |
 | Quota enforcement | Durable Object per installation; 50 events per event type per 24h rolling window; enforced for all installations regardless of AI config |
-| Caller AI keys | BYOK: caller provides AI API key via repository secret in their own repo; passed to reusable workflow via `secrets:` block; operator keys never exposed |
+| Caller AI keys | BYOK: caller provides AI API key via a repository secret in their own repo, named after the provider selected via `ai.provider` in their own `.github/aptu.yml` (`ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `OPENROUTER_API_KEY`); the dispatch handler statically selects one of these three fixed names per-dispatch and passes the secret to the reusable workflow via `secrets:`; operator keys never exposed |
 | Config validation | Strict field-level validation; unknown keys ignored; partial blocks rejected |
 | Self-mention loop | `APTU_BOT_ID` check prevents the bot from triggering itself via `@aptu` |
 | Path filtering | `review.paths` evaluated against full PR file list before dispatch |

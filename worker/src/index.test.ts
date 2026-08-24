@@ -224,7 +224,10 @@ describe('owner processing without allowlist', () => {
       action: 'opened',
       installation: { id: 1 },
       issue: { number: 1, title: 'Test' },
-      repository: { full_name: 'any-org/any-repo', owner: { login: 'any-org' } },
+      repository: {
+        full_name: 'any-org/any-repo',
+        owner: { login: 'any-org' },
+      },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
     const response = await callHandler(body, {
@@ -405,7 +408,6 @@ describe('repository_dispatch client_payload', () => {
     expect(parsed.client_payload).not.toHaveProperty('originating_repo_name');
     expect(parsed.client_payload).not.toHaveProperty('issue_title');
     expect(parsed.client_payload).not.toHaveProperty('installation_token');
-    expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
   });
 
   it('dispatched payload includes originating_repo, pull_number, instructions_file, skip_labeled for pull_request event', async () => {
@@ -436,7 +438,6 @@ describe('repository_dispatch client_payload', () => {
     expect(parsed.client_payload).not.toHaveProperty('originating_repo_name');
     expect(parsed.client_payload).not.toHaveProperty('pull_title');
     expect(parsed.client_payload).not.toHaveProperty('installation_token');
-    expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
   });
 
   it('requests dispatch token with short repository name for caller repository', async () => {
@@ -1139,7 +1140,7 @@ describe('AI configuration and external installations', () => {
     fetchSpy = vi.spyOn(globalThis, 'fetch');
   });
 
-  it('includes ai_provider and ai_model but omits ai_key_secret in client_payload for issues.opened when config.ai is present', async () => {
+  it('includes ai_provider and ai_model in client_payload for issues.opened when config.ai is present', async () => {
     fetchSpy.mockImplementation(mockEnabledWithAiFetch());
     const body = JSON.stringify({
       action: 'opened',
@@ -1159,7 +1160,6 @@ describe('AI configuration and external installations', () => {
     const parsed = JSON.parse(dispatchCall[1].body as string);
     expect(parsed.client_payload).toHaveProperty('ai_provider', 'openai');
     expect(parsed.client_payload).toHaveProperty('ai_model', 'gpt-4o');
-    expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
     expect(parsed.client_payload).not.toHaveProperty('installation_token');
     expect(parsed.client_payload).toHaveProperty(
       'originating_repo',
@@ -1172,7 +1172,7 @@ describe('AI configuration and external installations', () => {
     expect(parsed.client_payload).not.toHaveProperty('originating_repo_name');
   });
 
-  it('includes ai_provider and ai_model but omits ai_key_secret in client_payload for pull_request when config.ai is present', async () => {
+  it('includes ai_provider and ai_model in client_payload for pull_request when config.ai is present', async () => {
     fetchSpy.mockImplementation(mockEnabledWithAiFetch());
     const body = JSON.stringify({
       action: 'opened',
@@ -1192,7 +1192,6 @@ describe('AI configuration and external installations', () => {
     const parsed = JSON.parse(dispatchCall[1].body as string);
     expect(parsed.client_payload).toHaveProperty('ai_provider', 'openai');
     expect(parsed.client_payload).toHaveProperty('ai_model', 'gpt-4o');
-    expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
     expect(parsed.client_payload).not.toHaveProperty('installation_token');
     expect(parsed.client_payload).not.toHaveProperty('installation_id');
     expect(parsed.client_payload).not.toHaveProperty('originating_owner');
@@ -1200,7 +1199,7 @@ describe('AI configuration and external installations', () => {
     expect(parsed.client_payload).not.toHaveProperty('pull_title');
   });
 
-  it('omits ai_provider, ai_model, ai_key_secret from client_payload when config.ai is absent', async () => {
+  it('omits ai_provider and ai_model from client_payload when config.ai is absent', async () => {
     fetchSpy.mockImplementation(mockEnabledFetch());
     const body = JSON.stringify({
       action: 'opened',
@@ -1220,7 +1219,6 @@ describe('AI configuration and external installations', () => {
     const parsed = JSON.parse(dispatchCall[1].body as string);
     expect(parsed.client_payload).not.toHaveProperty('ai_provider');
     expect(parsed.client_payload).not.toHaveProperty('ai_model');
-    expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
     expect(parsed.client_payload).not.toHaveProperty('installation_token');
   });
 });
@@ -1744,7 +1742,12 @@ describe('mention commands', () => {
     const body = JSON.stringify({
       action: 'created',
       installation: { id: 1 },
-      issue: { number: 55, pull_request: { url: 'https://api.github.com/repos/owner/repo/pulls/55' } },
+      issue: {
+        number: 55,
+        pull_request: {
+          url: 'https://api.github.com/repos/owner/repo/pulls/55',
+        },
+      },
       comment: {
         user: { id: 100, login: 'user1' },
         id: 88,
@@ -2265,19 +2268,22 @@ describe('scan dispatch', () => {
     expect(parsed.client_payload).not.toHaveProperty('originating_repo_name');
     expect(parsed.client_payload).not.toHaveProperty('ai_provider');
     expect(parsed.client_payload).not.toHaveProperty('ai_model');
-    expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
     expect(parsed.client_payload).not.toHaveProperty('installation_token');
   });
 
   it('dispatches aptu-scan-security with exactly 5 keys when config.ai is present', async () => {
     mockConfig(
-      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nscan:\n  enabled: true\n  fail-on: critical,high\n  path: src/\nai:\n  provider: openai\n  model: gpt-4o\n  api-key-secret: OPENAI_API_KEY'
+      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nscan:\n  enabled: true\n  fail-on: critical,high\n  path: src/\nai:\n  provider: openai\n  model: gpt-4o'
     );
 
     const body = JSON.stringify({
       action: 'opened',
       installation: { id: 1 },
-      pull_request: { number: 10, title: 'Scan test with AI', head: { sha: 'abc123' } },
+      pull_request: {
+        number: 10,
+        title: 'Scan test with AI',
+        head: { sha: 'abc123' },
+      },
       repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
@@ -2305,7 +2311,6 @@ describe('scan dispatch', () => {
     expect(Object.keys(parsed.client_payload).length).toBe(5);
     expect(parsed.client_payload).not.toHaveProperty('ai_provider');
     expect(parsed.client_payload).not.toHaveProperty('ai_model');
-    expect(parsed.client_payload).not.toHaveProperty('ai_key_secret');
     expect(parsed.client_payload).not.toHaveProperty('installation_id');
     expect(parsed.client_payload).not.toHaveProperty('originating_owner');
     expect(parsed.client_payload).not.toHaveProperty('originating_repo_name');
@@ -2378,7 +2383,11 @@ describe('scan dispatch', () => {
     const body = JSON.stringify({
       action: 'opened',
       installation: { id: 1 },
-      pull_request: { number: 13, title: 'Quota scan', head: { sha: 'jkl012' } },
+      pull_request: {
+        number: 13,
+        title: 'Quota scan',
+        head: { sha: 'jkl012' },
+      },
       repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
@@ -2402,7 +2411,7 @@ describe('scan dispatch', () => {
       return parsed.action === 'record';
     });
     expect(recordCalls.length).toBe(1);
-    const recordBody = JSON.parse(recordCalls[0]![1].body as string) as {
+    const recordBody = JSON.parse(recordCalls[0]?.[1].body as string) as {
       eventType: string;
     };
     expect(recordBody.eventType).toBe('scan');

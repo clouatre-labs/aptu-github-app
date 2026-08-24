@@ -792,18 +792,13 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
 
       if (shouldScan) {
         try {
-          await dispatchEvent(
-            dispatchToken,
-            repo,
-            'aptu-scan-security',
-            {
-              originating_repo: repo,
-              head_sha: pr.head.sha,
-              pull_number: pr.number,
-              scan_path: config?.scan?.path ?? '.',
-              fail_on: config?.scan?.['fail-on'] ?? null,
-            }
-          );
+          await dispatchEvent(dispatchToken, repo, 'aptu-scan-security', {
+            originating_repo: repo,
+            head_sha: pr.head.sha,
+            pull_number: pr.number,
+            scan_path: config?.scan?.path ?? '.',
+            fail_on: config?.scan?.['fail-on'] ?? null,
+          });
           await recordQuota(env, installationId, 'scan');
         } catch (error) {
           captureException(error, {
