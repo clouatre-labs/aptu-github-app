@@ -103,7 +103,7 @@ graph TD
     M --> N["204 No Content"]
     M --> O["Caller's aptu.yml workflow<br/>calls reusable workflow"]
     O --> P["aptu CLI<br/>triage or review"]
-    P --> Q["GitHub API<br/>post labels / review comments<br/>as github-actions[bot]"]
+    P --> Q["GitHub API<br/>post labels / review comments<br/>as aptu-dev[bot]"]
 ```
 
 ### Mention command trigger (`@aptu` in comments)
