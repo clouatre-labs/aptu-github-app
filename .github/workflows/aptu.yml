@@ -10,18 +10,14 @@ on:
       - aptu-triage
       - aptu-scan-security
 
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
-  security-events: write
-  statuses: write
-
 jobs:
   review:
     name: Review PR
     if: github.event.action == 'aptu-review'
-    uses: clouatre-labs/aptu-github-app/.github/workflows/pr-review.yml@main
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: clouatre-labs/aptu-github-app/.github/workflows/pr-review.yml@be3845a6f9d9059ff025d87f283c48ee35abbf1d # main
     with:
       originating_repo: ${{ github.event.client_payload.originating_repo }}
       pull_number: ${{ github.event.client_payload.pull_number }}
@@ -38,7 +34,10 @@ jobs:
   triage:
     name: Triage Issue
     if: github.event.action == 'aptu-triage'
-    uses: clouatre-labs/aptu-github-app/.github/workflows/issue-triage.yml@main
+    permissions:
+      contents: read
+      issues: write
+    uses: clouatre-labs/aptu-github-app/.github/workflows/issue-triage.yml@be3845a6f9d9059ff025d87f283c48ee35abbf1d # main
     with:
       originating_repo: ${{ github.event.client_payload.originating_repo }}
       issue_number: ${{ github.event.client_payload.issue_number }}
@@ -53,7 +52,11 @@ jobs:
   scan:
     name: Scan Security
     if: github.event.action == 'aptu-scan-security'
-    uses: clouatre-labs/aptu-github-app/.github/workflows/scan-security.yml@main
+    permissions:
+      contents: read
+      security-events: write
+      statuses: write
+    uses: clouatre-labs/aptu-github-app/.github/workflows/scan-security.yml@be3845a6f9d9059ff025d87f283c48ee35abbf1d # main
     with:
       originating_repo: ${{ github.event.client_payload.originating_repo }}
       head_sha: ${{ github.event.client_payload.head_sha }}
