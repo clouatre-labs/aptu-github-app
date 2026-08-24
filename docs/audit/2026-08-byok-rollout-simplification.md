@@ -17,7 +17,12 @@ provider-keyed AI-key resolution").
   audit, resolved.
 - Issues [#168](https://github.com/clouatre-labs/aptu-github-app/issues/168) (closed, core
   regression fix) and [#169](https://github.com/clouatre-labs/aptu-github-app/issues/169) (open,
-  the subject of this audit's central recommendation).
+  rescoped per this audit's R2 recommendation).
+- Follow-up issues filed from this audit:
+  [#174](https://github.com/clouatre-labs/aptu-github-app/issues/174) (Critical, R1 rollout),
+  [#175](https://github.com/clouatre-labs/aptu-github-app/issues/175) (Medium, D2 docs
+  staleness), and
+  [#176](https://github.com/clouatre-labs/aptu-github-app/issues/176) (housekeeping, S1/C1).
 
 ## Purpose
 
@@ -89,7 +94,8 @@ mechanical PRs (or one script looping `gh api` PR creation) -- no bot, no per-re
 customization, no waiting on anything. This alone resolves the outage.
 
 **Resolved:** Not resolved. Recommended as an immediate, scriptable action; not applied by this
-audit (write action, left to the operator per this repo's own risk posture).
+audit (write action, left to the operator per this repo's own risk posture). Tracked in
+[#174](https://github.com/clouatre-labs/aptu-github-app/issues/174).
 
 ---
 
@@ -138,7 +144,9 @@ This was independently adversarially reviewed: the one legitimate gap in "just d
 rollout" is that it doesn't prevent a *future* 12th repo from silently missing the handler with
 no alert. Items 2 and 3 above close that gap cheaply, without building the bot.
 
-**Resolved:** Not resolved. This is a scoping recommendation for #169, not a code change.
+**Resolved:** Not resolved. This is a scoping recommendation, applied in place to
+[#169](https://github.com/clouatre-labs/aptu-github-app/issues/169) (rescoped to items 2 and 3
+above; item 4 deferred, no issue filed).
 
 ---
 
@@ -200,7 +208,8 @@ all touched this file; none removed the stale sections. Still present on current
 AI Keys / Security Boundaries sections (lines 128-251), which are accurate. This is a
 documentation-only change with no code risk.
 
-**Resolved:** Not resolved.
+**Resolved:** Not resolved. Tracked in
+[#175](https://github.com/clouatre-labs/aptu-github-app/issues/175).
 
 ---
 
@@ -217,7 +226,8 @@ dispatch content -- the same failure class BYOK was built to close.
 **Fix:** Delete the secret. One `gh secret delete APTU_AI_KEY --repo clouatre-labs/aptu-github-app`
 call.
 
-**Resolved:** Not resolved.
+**Resolved:** Not resolved. Tracked in
+[#176](https://github.com/clouatre-labs/aptu-github-app/issues/176).
 
 ---
 
@@ -234,7 +244,8 @@ adoption.
 
 **Fix:** Carried forward unchanged from the prior audit; no new information this pass.
 
-**Resolved:** Not resolved.
+**Resolved:** Not resolved. Tracked in
+[#176](https://github.com/clouatre-labs/aptu-github-app/issues/176).
 
 ---
 
