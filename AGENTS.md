@@ -24,6 +24,8 @@ dispatch, return 200.
 - `.github/workflows/issue-triage.yml` -- aptu-powered issue triage
 - `.github/workflows/pr-review.yml` -- aptu-powered PR review
 - `.github/workflows/release.yml` -- Release Please automation
+- `.github/workflows/scan-security.yml` -- Security scanning workflow
+- `.github/workflows/aptu.yml` -- aptu workflow dispatcher
 - `docs/` -- Architecture and design documentation
 
 ## Tooling
@@ -61,6 +63,13 @@ All commits must be GPG-signed with DCO sign-off (`git commit -S --signoff`).
 - `CLOUDFLARE_ACCOUNT_ID` -- GitHub Action variable
 - App private key and ID -- installed via `actions/create-github-app-token` in workflows
 - No secrets in committed files; SPDX headers on all TypeScript and YAML source files
+
+## Workflow Security
+
+- Reusable workflow `uses:` refs and action pins must use commit SHAs, not mutable tags (see CVE-2025-30066)
+- Every workflow step must have a `name:` key for readable CI logs
+- Do not duplicate workflow YAML in Markdown files; link to the source file instead (Renovate cannot update SHA pins in Markdown)
+- Renovate manages SHA pin updates via `matchManagers: ["github-actions"]`
 
 ## SPDX Headers
 

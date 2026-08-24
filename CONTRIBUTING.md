@@ -103,6 +103,7 @@ Reviewer checklist:
 
 - **Correctness**: logic is sound, edge cases handled, no regressions
 - **Security**: HMAC validation present for all webhook paths; no `WEBHOOK_SECRET` or credentials in code; Wrangler bindings used for all secrets
+- **Workflow Security**: workflow `uses:` refs and action pins use commit SHAs, not mutable tags (see CVE-2025-30066); no duplicated workflow YAML in Markdown (stale SHA pins); every step has a `name:` key
 - **Conventions**: conventional commits, GPG + DCO sign-off, Biome clean
 - **Documentation**: public functions documented; architectural changes update `docs/`
 
