@@ -21,7 +21,7 @@ GitHub event (issues.opened / pull_request.opened|synchronize|reopened|ready_for
        7. For PRs: skip draft PRs; evaluate review.paths filters
        8. Get dispatch token (scoped to originating repo)
        9. POST repository_dispatch to originating repo
-  -> Caller's .github/workflows/aptu.yml (repository_dispatch handler)
+  -> Caller's .github/workflows/aptu-{review,triage,scan-security}.yml (repository_dispatch handlers)
        -> Calls reusable workflow from aptu-github-app repo
             -> Checkout caller repo, run aptu CLI with caller's AI API key
   -> GitHub Reviews API (inline comments as github-actions[bot])
@@ -109,8 +109,8 @@ review:
 ### External installation example
 
 Each installation provides its own AI API key via a GitHub repository secret in the caller's
-repo. The caller installs `.github/workflows/aptu.yml` (see [Installation](#installation))
-which receives `repository_dispatch` events and calls reusable workflows from the
+repo. The caller installs the dispatch handler workflows (see [Installation](#installation))
+which receive `repository_dispatch` events and call reusable workflows from the
 `clouatre-labs/aptu-github-app` repository. The reusable workflow runs in the caller's context,
 using the caller's `GITHUB_TOKEN` for repository operations and the caller's AI API key secret
 for AI provider calls. This is the BYOK (bring your own key) model: the operator's AI keys are
@@ -129,19 +129,23 @@ ai:
 
 ## Installation
 
-Each repository that uses the aptu GitHub App must install two files:
+Each repository that uses the aptu GitHub App must install four files:
 
 1. `.github/aptu.yml` -- opt-in configuration (see [Repository configuration](#repository-configuration) above)
-2. `.github/workflows/aptu.yml` -- dispatch handler that calls reusable workflows
+2. `.github/workflows/aptu-review.yml` -- dispatch handler for PR review
+3. `.github/workflows/aptu-triage.yml` -- dispatch handler for issue triage
+4. `.github/workflows/aptu-scan-security.yml` -- dispatch handler for security scans
 
-The dispatch handler receives `repository_dispatch` events from the Worker and calls the
-appropriate reusable workflow hosted in `clouatre-labs/aptu-github-app`. The caller's AI API
-key secret is passed to the reusable workflow via the `secrets:` block.
+Each dispatch handler receives its own `repository_dispatch` event type from the Worker and
+calls the appropriate reusable workflow hosted in `clouatre-labs/aptu-github-app`. The caller's
+AI API key secret is passed to the reusable workflow via the `secrets:` block.
 
-Copy the dispatch handler from
-[`.github/workflows/aptu.yml`](https://github.com/clouatre-labs/aptu-github-app/blob/main/.github/workflows/aptu.yml)
-into your repo verbatim. It is identical for every installation and never needs hand-editing.
-The handler resolves your AI provider's API key from a repository secret named after the
+Copy the dispatch handlers from
+[`.github/workflows/aptu-review.yml`](https://github.com/clouatre-labs/aptu-github-app/blob/main/.github/workflows/aptu-review.yml),
+[`.github/workflows/aptu-triage.yml`](https://github.com/clouatre-labs/aptu-github-app/blob/main/.github/workflows/aptu-triage.yml), and
+[`.github/workflows/aptu-scan-security.yml`](https://github.com/clouatre-labs/aptu-github-app/blob/main/.github/workflows/aptu-scan-security.yml)
+into your repo verbatim. They are identical for every installation and never need hand-editing.
+Each handler resolves your AI provider's API key from a repository secret named after the
 `ai.provider` in your `.github/aptu.yml` (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, or
 `GEMINI_API_KEY`). Create that secret in your own repository or rely on an org-visible secret
 of the same name.
