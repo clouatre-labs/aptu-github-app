@@ -37,6 +37,9 @@ APTU_BOT_ID = "296574906"
 # Secrets (set post-deploy via CLI):
 #   bunx wrangler secret put WEBHOOK_SECRET
 #   bunx wrangler secret put APP_PRIVATE_KEY
-# APP_PRIVATE_KEY must be PKCS#8 format PEM (GitHub UI downloads PKCS#8 by default).
+# APP_PRIVATE_KEY must be PKCS#8 format PEM. GitHub downloads the App's private key in
+# PKCS#1 format; convert it first (@octokit/auth-app requires PKCS#8 for its WebCrypto
+# API-based JWT signing):
+#   openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt -in private-key.pem -out private-key-pkcs8.key
 # After deploy: update aptu-dev App manifest to add Contents:Write permission
 # and re-authorize existing installations before repository_dispatch will succeed.
