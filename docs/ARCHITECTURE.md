@@ -7,8 +7,8 @@ review to any GitHub repository. It consists of two components that live in this
 a stateless Cloudflare Worker that receives GitHub webhooks and dispatches events, and a pair
 of GitHub Actions workflows that consume those events and invoke the aptu CLI.
 
-External repositories never run workflows themselves. They install the GitHub App, add a
-`.github/aptu.yml` opt-in config, and all processing happens centrally here.
+External repositories install the GitHub App and add a `.github/aptu.yml` opt-in config.
+The Worker dispatches events to the caller's workflows, which run in the caller's context.
 
 ## Components
 
@@ -51,12 +51,11 @@ API key secret.
 | `issue-triage.yml` | `aptu-triage` | `aptu issue triage` |
 | `pr-review.yml` | `aptu-review` | `aptu pr review` |
 
-Both workflows run in this repository (`clouatre-labs/aptu-github-app`), not in the
-originating repository. The originating repo, PR or issue number, and installation ID
-arrive via `github.event.client_payload`. Workflows mint scoped installation tokens via
-`actions/create-github-app-token` using the App ID and private key stored in this repository,
-and the aptu CLI uses that token to read the originating repo and post review comments or
-labels back to it.
+The reusable workflows are defined in this repository (`clouatre-labs/aptu-github-app`) but
+run in the originating repository's context. The originating repo, PR or issue number, and
+installation ID arrive via `github.event.client_payload`. The aptu CLI runs with the caller's
+`GITHUB_TOKEN` (scoped to the caller's repository by GitHub Actions) to read the originating
+repo and post review comments or labels.
 
 ### `InstallationQuota` Durable Object (`worker/src/quota.ts`)
 
@@ -64,13 +63,6 @@ Persists per-installation event counters using Cloudflare Durable Object SQLite-
 storage. Each counter is keyed by `quota:{installationId}:{eventType}`. On every request,
 timestamps older than 24 hours are pruned. At 50 events within the rolling window the Durable
 Object returns `exceeded: true` and a `retryAfter` value in seconds.
-
-### `GlobalQuota` Durable Object (`worker/src/quota.ts`)
-
-Persists an org-wide aggregate event counter using a single well-known Durable Object
-instance (`idFromName('global')`). The limit is passed in the Request body (the DO has no
-`env` access) and is coerced from `GLOBAL_QUOTA_LIMIT` with a default of 500/day. The
-counter uses the same rolling 24-hour window and pruning logic as `InstallationQuota`.
 
 ### Config Parser (`worker/src/config.ts`)
 
@@ -166,8 +158,7 @@ webhook events or run workflows:
 | Name | Type | Scope | Value |
 | --- | --- | --- | --- |
 | `APP_ID` | Repository variable | `aptu-github-app` | GitHub App numeric ID |
-| `APP_PRIVATE_KEY` | Repository secret | `aptu-github-app` | PKCS#1 PEM private key for the `aptu-dev` App |
-| `OPENROUTER_API_KEY` | Organization secret | `clouatre-labs` | OpenRouter API key |
+| `APP_PRIVATE_KEY` | Repository secret | `aptu-github-app` | PKCS#8 PEM private key for the `aptu-dev` App |
 
 ## Configuration
 
@@ -257,14 +248,11 @@ own repository.
 Verifies `X-Hub-Signature-256` using `crypto.subtle.verify` (HMAC-SHA256). Called first on
 every request before any payload is parsed.
 
-### `enforceQuota` / `checkQuota`
+### `checkQuota`
 
-Enforces a two-level quota model. `enforceQuota` first calls `checkGlobalQuota`, which
-delegates to the `GlobalQuota` Durable Object via an internal `POST /quota` fetch. A failing
-(500) global check short-circuits before the per-installation check. If the org-wide quota is
-within its ceiling, `checkQuota` then delegates to the `InstallationQuota` Durable Object.
-Returns a `Response` to short-circuit the handler if either quota is exceeded or fails, or
-`null` to continue.
+Enforces per-installation quota by delegating to the `InstallationQuota` Durable Object
+via a request to `https://quota/quota`. Returns a `Response` to short-circuit the handler if
+quota is exceeded or the check fails, or `null` to continue.
 
 ### `shouldSkipPrDispatch`
 
@@ -295,7 +283,7 @@ the Worker. Required secrets and variables:
 - `CLOUDFLARE_API_TOKEN` (GitHub Actions secret)
 - `CLOUDFLARE_ACCOUNT_ID` (GitHub Actions variable)
 - `WEBHOOK_SECRET` (Wrangler secret, set via `bunx wrangler secret put`)
-- `APP_PRIVATE_KEY` (Wrangler secret, PKCS#1 PEM format)
+- `APP_PRIVATE_KEY` (Wrangler secret, PKCS#8 PEM format)
 
 The Worker route `aptu.dev/webhook` requires a proxied `AAAA 100::` DNS record on the
 `aptu.dev` zone; without it the domain does not resolve and GitHub cannot deliver webhooks.
