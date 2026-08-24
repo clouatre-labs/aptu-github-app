@@ -7,25 +7,31 @@ import { describe, expect, it } from 'vitest';
 import YAML from 'yaml';
 
 const root = resolve(__dirname, '..', '..');
-const aptuYml = readFileSync(
-  resolve(root, '.github/workflows/aptu.yml'),
-  'utf-8'
-);
-const parsed = YAML.parse(aptuYml);
-const { jobs } = parsed;
 
-describe('aptu dispatch handler template', () => {
+function loadWorkflow(name: string) {
+  return YAML.parse(
+    readFileSync(resolve(root, '.github/workflows', name), 'utf-8')
+  );
+}
+
+const review = loadWorkflow('aptu-review.yml');
+const triage = loadWorkflow('aptu-triage.yml');
+const scan = loadWorkflow('aptu-scan-security.yml');
+
+describe('aptu dispatch handler templates', () => {
   it('has correct permissions and SHA-pinned refs', () => {
-    expect(parsed).not.toHaveProperty('permissions');
-    expect(jobs.review.permissions.contents).toBe('read');
-    expect(jobs.review.permissions['pull-requests']).toBe('write');
-    expect(jobs.triage.permissions.contents).toBe('read');
-    expect(jobs.triage.permissions.issues).toBe('write');
-    expect(jobs.scan.permissions.contents).toBe('read');
-    expect(jobs.scan.permissions['security-events']).toBe('write');
-    expect(jobs.scan.permissions.statuses).toBe('write');
-    expect(jobs.review.uses).toMatch(/@[0-9a-f]{40}/);
-    expect(jobs.triage.uses).toMatch(/@[0-9a-f]{40}/);
-    expect(jobs.scan.uses).toMatch(/@[0-9a-f]{40}/);
+    expect(review).not.toHaveProperty('permissions');
+    expect(triage).not.toHaveProperty('permissions');
+    expect(scan).not.toHaveProperty('permissions');
+    expect(review.jobs.review.permissions.contents).toBe('read');
+    expect(review.jobs.review.permissions['pull-requests']).toBe('write');
+    expect(triage.jobs.triage.permissions.contents).toBe('read');
+    expect(triage.jobs.triage.permissions.issues).toBe('write');
+    expect(scan.jobs.scan.permissions.contents).toBe('read');
+    expect(scan.jobs.scan.permissions['security-events']).toBe('write');
+    expect(scan.jobs.scan.permissions.statuses).toBe('write');
+    expect(review.jobs.review.uses).toMatch(/@[0-9a-f]{40}/);
+    expect(triage.jobs.triage.uses).toMatch(/@[0-9a-f]{40}/);
+    expect(scan.jobs.scan.uses).toMatch(/@[0-9a-f]{40}/);
   });
 });

@@ -42,8 +42,9 @@ and has no knowledge of AI providers.
 
 ### GitHub Actions Workflows
 
-The caller's `.github/workflows/aptu.yml` listens for `repository_dispatch` events fired by
-the Worker and calls reusable workflows hosted in `clouatre-labs/aptu-github-app`. The
+The caller's `.github/workflows/aptu-{review,triage,scan-security}.yml` handlers listen for
+their respective `repository_dispatch` event types fired by the Worker and call reusable
+workflows hosted in `clouatre-labs/aptu-github-app`. The
 reusable workflows run the aptu CLI using the caller's `GITHUB_TOKEN` and caller-provided AI
 API key secret.
 
@@ -227,12 +228,13 @@ requirement to provision the entire secrets context for a dynamically-computed s
 ## Caller-Supplied AI Keys (BYOK)
 
 The BYOK (bring your own key) model allows each installation to use its own AI API key. The
-caller installs `.github/workflows/aptu.yml` in their repository, which receives
-`repository_dispatch` events from the Worker and calls reusable workflows hosted in
-`clouatre-labs/aptu-github-app`. The caller's static dispatch handler picks one of three fixed
-repository secrets (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`) based on the
-`ai_provider` value in the dispatch payload, and passes the resolved secret to the reusable
-workflow via the `secrets:` block. No installer ever hand-edits the workflow file to reference
+caller installs the `.github/workflows/aptu-{review,triage,scan-security}.yml` handlers in
+their repository, each of which receives its own `repository_dispatch` event type from the
+Worker and calls a reusable workflow hosted in `clouatre-labs/aptu-github-app`. The caller's
+static dispatch handlers pick one of three fixed repository secrets (`ANTHROPIC_API_KEY`,
+`GEMINI_API_KEY`, `OPENROUTER_API_KEY`) based on the `ai_provider` value in the dispatch
+payload, and pass the resolved secret to the reusable workflow via the `secrets:` block. No
+installer ever hand-edits a workflow file to reference
 a specific secret name -- they only need to name their own repository secret after their
 chosen provider's canonical env var.
 

@@ -25,7 +25,9 @@ dispatch, return 200.
 - `.github/workflows/pr-review.yml` -- aptu-powered PR review
 - `.github/workflows/release.yml` -- Release Please automation
 - `.github/workflows/scan-security.yml` -- Security scanning workflow
-- `.github/workflows/aptu.yml` -- aptu workflow dispatcher
+- `.github/workflows/aptu-review.yml` -- aptu review dispatch handler
+- `.github/workflows/aptu-triage.yml` -- aptu triage dispatch handler
+- `.github/workflows/aptu-scan-security.yml` -- aptu scan dispatch handler
 - `docs/` -- Architecture and design documentation
 
 ## Tooling
