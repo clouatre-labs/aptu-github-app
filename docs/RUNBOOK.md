@@ -139,7 +139,7 @@ authentication if the new key is not yet accepted by the Worker runtime.
 | --- | --- | --- |
 | `ERR_NAME_NOT_RESOLVED` when GitHub delivers webhooks to `aptu.dev/webhook` | Missing or unproxied DNS AAAA record for `aptu.dev` | Add `AAAA aptu.dev 100::` (proxied) in the Cloudflare DNS dashboard. See DNS prerequisite in [README.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/README.md). |
 | `401 Unauthorized` on all webhook requests | `WEBHOOK_SECRET` mismatch between GitHub App and Worker | Re-run `bunx wrangler secret put WEBHOOK_SECRET` with the correct value. Verify the GitHub App webhook secret field matches. See Section 2.1. |
-| `429 Too Many Requests` on GitHub API calls from the Worker | Installation has exceeded its quota (rate-limit per installation, enforced by `InstallationQuota` Durable Object) | Inspect quota state (see Section 3.4). The quota resets on a 24-hour rolling window; no operator action is required unless abuse is suspected. |
+| `429 Too Many Requests` on GitHub API calls from the Worker | Installation has exceeded its quota (rate-limit per installation, enforced by `InstallationQuota` Durable Object). This should never happen for a `clouatre-labs` repo -- the operator's own org is exempt from quota entirely (`OPERATOR_ORG` in `worker/wrangler.toml`); if it does, that's a bug in the exemption, not expected throttling. | Inspect quota state (see Section 3.4). The quota resets on a 24-hour rolling window; no operator action is required unless abuse is suspected. |
 
 ### 3.2 Rollback to a Previous Deployment
 

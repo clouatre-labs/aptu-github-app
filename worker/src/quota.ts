@@ -4,7 +4,8 @@
 // InstallationQuota Durable Object
 // Persists per-installation event counters using Durable Object SQLite-backed storage.
 // Rolling 24-hour window: timestamps older than 24h are pruned on each request.
-// After 50 events within the window, returns exceeded=true with a Retry-After header.
+// After QUOTA_LIMIT events within the window, returns exceeded=true with a Retry-After
+// header. The operator's own org (see OPERATOR_ORG in index.ts) bypasses this entirely.
 //
 // The fetch handler accepts an `action` field in the POST body:
 //   - 'check'  (default): read-only; returns exceeded/count/retryAfter without
@@ -13,10 +14,10 @@
 //
 // Known limitation (TOCTOU race): concurrent webhooks from the same installation
 // can all pass the 'check' action before any 'record' write lands, allowing a
-// burst over the 50-event limit. This is acceptable for rate limiting; the
-// rolling window eventually catches up on subsequent requests.
+// burst over the QUOTA_LIMIT. This is acceptable for rate limiting; the rolling
+// window eventually catches up on subsequent requests.
 
-export const QUOTA_LIMIT = 50;
+export const QUOTA_LIMIT = 500;
 export const QUOTA_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 interface QuotaState {

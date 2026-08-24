@@ -34,6 +34,11 @@ deleted_classes = ["GlobalQuota"]
 APP_ID = "4134521"
 # aptu-dev[bot] user ID -- verified via: gh api /users/aptu-dev%5Bbot%5D
 APTU_BOT_ID = "296574906"
+# Operator's own org -- exempt from quota enforcement (see quota.ts). aptu-dev has a
+# single org-wide installation for clouatre-labs, so the per-installation quota is
+# effectively an org-wide bucket; quota's remaining purpose is abuse protection for
+# untrusted external installations, not the operator's own repos.
+OPERATOR_ORG = "clouatre-labs"
 # Secrets (set post-deploy via CLI):
 #   bunx wrangler secret put WEBHOOK_SECRET
 #   bunx wrangler secret put APP_PRIVATE_KEY
