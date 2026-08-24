@@ -18,18 +18,28 @@ vi.mock('@sentry/cloudflare', () => ({
 
 let fetchSpy: ReturnType<typeof vi.spyOn<typeof globalThis, 'fetch'>>;
 
-const quotaControl = {
+const quotaControl: {
+  body: string;
+  status: number;
+  overrides?: Record<string, { body: string; status: number }>;
+} = {
   body: JSON.stringify({ count: 0, exceeded: false, retryAfter: null }),
   status: 200,
 };
 
 function makeMockQuotaNamespace(): DurableObjectNamespace {
   const stub = {
-    fetch: vi.fn(() =>
-      Promise.resolve(
-        new Response(quotaControl.body, { status: quotaControl.status })
-      )
-    ),
+    fetch: vi.fn((_input: string, init?: RequestInit) => {
+      const { eventType } = JSON.parse((init?.body as string) ?? '{}') as {
+        eventType?: string;
+      };
+      const override = eventType ? quotaControl.overrides?.[eventType] : undefined;
+      return Promise.resolve(
+        new Response(override?.body ?? quotaControl.body, {
+          status: override?.status ?? quotaControl.status,
+        })
+      );
+    }),
   };
   return {
     idFromName: vi.fn(() => 'mock-id' as unknown as DurableObjectId),
@@ -1276,6 +1286,7 @@ describe('Quota check integration', () => {
       retryAfter: null,
     });
     quotaControl.status = 200;
+    quotaControl.overrides = undefined;
   });
 
   it.each([
@@ -1389,6 +1400,7 @@ describe('quota enforcement with AI config', () => {
       retryAfter: 3600,
     });
     quotaControl.status = 200;
+    quotaControl.overrides = undefined;
   });
 
   it('returns 429 for issues.opened when config.ai is present and quota is exceeded', async () => {
@@ -1449,6 +1461,7 @@ describe('quota record after dispatch', () => {
       retryAfter: null,
     });
     quotaControl.status = 200;
+    quotaControl.overrides = undefined;
   });
 
   it('records quota timestamp after successful dispatch on issues.opened', async () => {
@@ -1651,6 +1664,7 @@ describe('mention commands', () => {
       retryAfter: null,
     });
     quotaControl.status = 200;
+    quotaControl.overrides = undefined;
   });
 
   it('returns 200 OK without action when comment body does not contain @aptu', async () => {
@@ -2101,6 +2115,7 @@ describe('Sentry integration', () => {
       retryAfter: null,
     });
     quotaControl.status = 200;
+    quotaControl.overrides = undefined;
   });
 
   it('calls captureException with installationId tag when Durable Object fetch throws', async () => {
@@ -2213,6 +2228,7 @@ describe('scan dispatch', () => {
       retryAfter: null,
     });
     quotaControl.status = 200;
+    quotaControl.overrides = undefined;
   });
 
   function mockConfig(yaml: string) {
@@ -2416,6 +2432,124 @@ describe('scan dispatch', () => {
     };
     expect(recordBody.eventType).toBe('scan');
   });
+
+  it('dispatches scan even when review quota is exceeded', async () => {
+    mockConfig(
+      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nscan:\n  enabled: true'
+    );
+    quotaControl.overrides = {
+      review: {
+        body: JSON.stringify({ count: 50, exceeded: true, retryAfter: 1800 }),
+        status: 200,
+      },
+    };
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: {
+        number: 20,
+        title: 'Review blocked',
+        head: { sha: 'aaa111' },
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
+    const parsed = JSON.parse(
+      (dispatchCalls[0] as [string, RequestInit])[1].body as string
+    );
+    expect(parsed.event_type).toBe('aptu-scan-security');
+  });
+
+  it('dispatches review even when scan quota is exceeded', async () => {
+    mockConfig(
+      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nscan:\n  enabled: true'
+    );
+    quotaControl.overrides = {
+      scan: {
+        body: JSON.stringify({ count: 50, exceeded: true, retryAfter: 1800 }),
+        status: 200,
+      },
+    };
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: {
+        number: 21,
+        title: 'Scan blocked',
+        head: { sha: 'bbb222' },
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
+    const parsed = JSON.parse(
+      (dispatchCalls[0] as [string, RequestInit])[1].body as string
+    );
+    expect(parsed.event_type).toBe('aptu-review');
+  });
+
+  it('returns 429 with the max Retry-After when both review and scan quotas are exceeded', async () => {
+    mockConfig(
+      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nscan:\n  enabled: true'
+    );
+    quotaControl.overrides = {
+      review: {
+        body: JSON.stringify({ count: 50, exceeded: true, retryAfter: 1800 }),
+        status: 200,
+      },
+      scan: {
+        body: JSON.stringify({ count: 50, exceeded: true, retryAfter: 3600 }),
+        status: 200,
+      },
+    };
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: {
+        number: 22,
+        title: 'Both blocked',
+        head: { sha: 'ccc333' },
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Retry-After')).toBe('3600');
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(0);
+  });
 });
 
 describe('scoped token helper', () => {
@@ -2535,6 +2669,7 @@ describe('replay guard', () => {
       retryAfter: null,
     });
     quotaControl.status = 200;
+    quotaControl.overrides = undefined;
   });
 
   it('rejects a repeated X-GitHub-Delivery ID with 202 and does not dispatch', async () => {
@@ -2635,6 +2770,7 @@ describe('IP validation', () => {
       retryAfter: null,
     });
     quotaControl.status = 200;
+    quotaControl.overrides = undefined;
   });
 
   it('accepts a request from a known GitHub hook IP', async () => {

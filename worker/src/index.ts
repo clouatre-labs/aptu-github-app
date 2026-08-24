@@ -376,8 +376,7 @@ export async function handleMentionCommand(
     return new Response('Internal Server Error', { status: 500 });
   }
 
-  // Fetch config before quota check to enable AI-key exemption.
-  // If config fetch fails, proceed to quota enforcement as today.
+  // If config fetch fails, proceed to quota enforcement regardless.
   let config: AptuConfig | null = null;
   try {
     config = await fetchRepoConfig(token, owner ?? '', name ?? '');
@@ -736,9 +735,6 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         config = null;
       }
 
-      const quotaResponse = await checkQuota(env, installationId, 'review');
-      if (quotaResponse) return quotaResponse;
-
       const reviewWouldSkip = await shouldSkipPrDispatch(
         repo,
         pr.number,
@@ -762,53 +758,95 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       );
       if (dispatchToken instanceof Response) return dispatchToken;
 
-      if (shouldReview) {
-        try {
-          await dispatchEvent(dispatchToken, repo, 'aptu-review', {
-            originating_repo: repo,
-            pull_number: pr.number,
-            instructions_file: config?.review?.['instructions-file'] ?? null,
-            skip_labeled: config?.review?.['skip-labeled'] ?? false,
-            ...(config?.ai
-              ? {
-                  ai_provider: config.ai.provider,
-                  ai_model: config.ai.model,
-                }
-              : {}),
-          });
-        } catch (error) {
-          captureException(error, {
-            tags: { eventType: 'pull_request', repo },
-          });
-          console.error(
-            `Failed to dispatch aptu-review event for ${repo}:`,
-            error
-          );
-          return new Response('Internal Server Error', { status: 500 });
-        }
+      let reviewDispatched = false;
+      let scanDispatched = false;
+      let quotaBlocked = false;
+      let maxRetryAfter = 0;
 
-        await recordQuota(env, installationId, 'review');
+      if (shouldReview) {
+        const reviewQuota = await checkQuota(env, installationId, 'review');
+        if (reviewQuota && reviewQuota.status !== 429) {
+          return reviewQuota;
+        }
+        if (reviewQuota) {
+          quotaBlocked = true;
+          maxRetryAfter = Math.max(
+            maxRetryAfter,
+            Number(reviewQuota.headers.get('Retry-After') ?? 3600)
+          );
+        } else {
+          try {
+            await dispatchEvent(dispatchToken, repo, 'aptu-review', {
+              originating_repo: repo,
+              pull_number: pr.number,
+              instructions_file: config?.review?.['instructions-file'] ?? null,
+              skip_labeled: config?.review?.['skip-labeled'] ?? false,
+              ...(config?.ai
+                ? {
+                    ai_provider: config.ai.provider,
+                    ai_model: config.ai.model,
+                  }
+                : {}),
+            });
+          } catch (error) {
+            captureException(error, {
+              tags: { eventType: 'pull_request', repo },
+            });
+            console.error(
+              `Failed to dispatch aptu-review event for ${repo}:`,
+              error
+            );
+            return new Response('Internal Server Error', { status: 500 });
+          }
+
+          await recordQuota(env, installationId, 'review');
+          reviewDispatched = true;
+        }
       }
 
       if (shouldScan) {
-        try {
-          await dispatchEvent(dispatchToken, repo, 'aptu-scan-security', {
-            originating_repo: repo,
-            head_sha: pr.head.sha,
-            pull_number: pr.number,
-            scan_path: config?.scan?.path ?? '.',
-            fail_on: config?.scan?.['fail-on'] ?? null,
-          });
-          await recordQuota(env, installationId, 'scan');
-        } catch (error) {
-          captureException(error, {
-            tags: { eventType: 'pull_request', repo },
-          });
-          console.error(
-            `Failed to dispatch aptu-scan-security event for ${repo}:`,
-            error
-          );
+        const scanQuota = await checkQuota(env, installationId, 'scan');
+        if (scanQuota && scanQuota.status !== 429) {
+          return scanQuota;
         }
+        if (scanQuota) {
+          quotaBlocked = true;
+          maxRetryAfter = Math.max(
+            maxRetryAfter,
+            Number(scanQuota.headers.get('Retry-After') ?? 3600)
+          );
+        } else {
+          try {
+            await dispatchEvent(dispatchToken, repo, 'aptu-scan-security', {
+              originating_repo: repo,
+              head_sha: pr.head.sha,
+              pull_number: pr.number,
+              scan_path: config?.scan?.path ?? '.',
+              fail_on: config?.scan?.['fail-on'] ?? null,
+            });
+            await recordQuota(env, installationId, 'scan');
+            scanDispatched = true;
+          } catch (error) {
+            captureException(error, {
+              tags: { eventType: 'pull_request', repo },
+            });
+            console.error(
+              `Failed to dispatch aptu-scan-security event for ${repo}:`,
+              error
+            );
+          }
+        }
+      }
+
+      if (reviewDispatched || scanDispatched) {
+        return new Response(null, { status: 204 });
+      }
+
+      if (quotaBlocked) {
+        return new Response(null, {
+          status: 429,
+          headers: { 'Retry-After': String(maxRetryAfter) },
+        });
       }
 
       return new Response(null, { status: 204 });
