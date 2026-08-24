@@ -14,7 +14,7 @@ review for any repository with the app installed.
 ## Cost Model
 
 External installations use **caller-supplied AI keys** configured in `.github/aptu.yml` and
-`.github/workflows/aptu.yml`. Each installation provides its own AI API key as a repository
+`.github/workflows/aptu-{review,triage,scan-security}.yml`. Each installation provides its own AI API key as a repository
 secret in their own repo. Operator (clouatre-labs) bears no AI API cost for external accounts.
 No per-user billing infrastructure required.
 
