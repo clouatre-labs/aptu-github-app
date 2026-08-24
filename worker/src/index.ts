@@ -309,6 +309,30 @@ async function recordQuota(
   }
 }
 
+/** Skips quota enforcement for the operator's own org; see isOperatorOrg. */
+async function maybeCheckQuota(
+  env: Env,
+  owner: string,
+  installationId: number,
+  eventType: string
+): Promise<Response | null> {
+  return isOperatorOrg(env, owner)
+    ? null
+    : await checkQuota(env, installationId, eventType);
+}
+
+/** Skips quota recording for the operator's own org; see isOperatorOrg. */
+async function maybeRecordQuota(
+  env: Env,
+  owner: string,
+  installationId: number,
+  eventType: string
+): Promise<void> {
+  if (!isOperatorOrg(env, owner)) {
+    await recordQuota(env, installationId, eventType);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Mention detection & access control
 // ---------------------------------------------------------------------------
@@ -397,9 +421,12 @@ export async function handleMentionCommand(
     config = null;
   }
 
-  const quotaResponse = isOperatorOrg(env, owner ?? '')
-    ? null
-    : await checkQuota(env, installationId, eventType);
+  const quotaResponse = await maybeCheckQuota(
+    env,
+    owner ?? '',
+    installationId,
+    eventType
+  );
   if (quotaResponse) return quotaResponse;
 
   const hasAccess = await checkCollaboratorPermission(
@@ -443,9 +470,7 @@ export async function handleMentionCommand(
     return new Response('Internal Server Error', { status: 500 });
   }
 
-  if (!isOperatorOrg(env, owner ?? '')) {
-    await recordQuota(env, installationId, eventType);
-  }
+  await maybeRecordQuota(env, owner ?? '', installationId, eventType);
 
   return new Response(null, { status: 204 });
 }
@@ -666,9 +691,12 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         config = null;
       }
 
-      const quotaResponse = isOperatorOrg(env, owner)
-        ? null
-        : await checkQuota(env, installationId, 'triage');
+      const quotaResponse = await maybeCheckQuota(
+        env,
+        owner,
+        installationId,
+        'triage'
+      );
       if (quotaResponse) return quotaResponse;
 
       if (!shouldDispatch(config, 'triage'))
@@ -703,9 +731,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         return new Response('Internal Server Error', { status: 500 });
       }
 
-      if (!isOperatorOrg(env, owner)) {
-        await recordQuota(env, installationId, 'triage');
-      }
+      await maybeRecordQuota(env, owner, installationId, 'triage');
 
       return new Response(null, { status: 204 });
     }
@@ -783,9 +809,12 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       let maxRetryAfter = 0;
 
       if (shouldReview) {
-        const reviewQuota = isOperatorOrg(env, owner)
-          ? null
-          : await checkQuota(env, installationId, 'review');
+        const reviewQuota = await maybeCheckQuota(
+          env,
+          owner,
+          installationId,
+          'review'
+        );
         if (reviewQuota && reviewQuota.status !== 429) {
           return reviewQuota;
         }
@@ -820,17 +849,18 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
             return new Response('Internal Server Error', { status: 500 });
           }
 
-          if (!isOperatorOrg(env, owner)) {
-            await recordQuota(env, installationId, 'review');
-          }
+          await maybeRecordQuota(env, owner, installationId, 'review');
           reviewDispatched = true;
         }
       }
 
       if (shouldScan) {
-        const scanQuota = isOperatorOrg(env, owner)
-          ? null
-          : await checkQuota(env, installationId, 'scan');
+        const scanQuota = await maybeCheckQuota(
+          env,
+          owner,
+          installationId,
+          'scan'
+        );
         if (scanQuota && scanQuota.status !== 429) {
           return scanQuota;
         }
@@ -849,9 +879,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
               scan_path: config?.scan?.path ?? '.',
               fail_on: config?.scan?.['fail-on'] ?? null,
             });
-            if (!isOperatorOrg(env, owner)) {
-              await recordQuota(env, installationId, 'scan');
-            }
+            await maybeRecordQuota(env, owner, installationId, 'scan');
             scanDispatched = true;
           } catch (error) {
             captureException(error, {
