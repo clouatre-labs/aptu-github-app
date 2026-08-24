@@ -64,6 +64,14 @@ storage. Each counter is keyed by `quota:{installationId}:{eventType}`. On every
 timestamps older than 24 hours are pruned. At 50 events within the rolling window the Durable
 Object returns `exceeded: true` and a `retryAfter` value in seconds.
 
+#### Aggregate Quota Ceiling Decision
+
+No org-wide aggregate quota ceiling exists; enforcement is per-installation only. This is an
+accepted gap at the current deployment scale (12 operator-owned repositories, decision
+documented 2026-08-24). The intended stopgap mitigation is a Cloudflare account-level Budget
+Alert on Durable Objects usage-based spend; this requires manual dashboard configuration (no
+Cloudflare API exists to create budget alerts programmatically) and is not yet configured.
+This gap should be revisited before external adoption.
 ### Config Parser (`worker/src/config.ts`)
 
 `fetchRepoConfig` fetches `.github/aptu.yml` from the originating repository via the GitHub
