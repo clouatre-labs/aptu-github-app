@@ -36,6 +36,18 @@ Use [Conventional Commits](https://www.conventionalcommits.org/):
 
 **Types:** `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `chore`, `ci`
 
+### Commit Signing and DCO
+
+All commits must be GPG-signed with DCO sign-off. Use:
+
+```bash
+git commit -S --signoff
+```
+
+This triggers local githooks (`pre-commit`, `commit-msg`) that enforce signing key validation, email identity, conventional commit format, and DCO trailer matching your git identity.
+
+**Never use `gh api` to create commits.** The GitHub Contents API (`PUT /repos/.../contents/`), Git Commits API (`POST /repos/.../git/commits`), and GraphQL `createCommitOnBranch` create commits server-side. These commits bypass local githooks, GPG signing, and gitconfig identity. They are always unsigned and carry GitHub's noreply email as committer, failing DCO. Always clone locally and use `git commit -S --signoff`.
+
 ## Local Quality Checks
 
 Before opening a PR, run all checks locally:
