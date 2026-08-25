@@ -20,13 +20,10 @@ on:
         required: false
         type: string
         default: 'google/gemma-4-26b-a4b-it'
-      app_id:
-        required: true
-        type: string
     secrets:
       ai-api-key:
         required: false
-      app-private-key:
+      installation-token:
         required: true
 
 permissions: {}
@@ -40,32 +37,13 @@ jobs:
       contents: read
       issues: write
     steps:
-      - name: Parse originating repo
-        id: parse-repo
-        env:
-          ORIGINATING_REPO: ${{ inputs.originating_repo }}
-        run: |
-          echo "owner=${ORIGINATING_REPO%%/*}" >> "${GITHUB_OUTPUT}"
-          echo "repo_name=${ORIGINATING_REPO#*/}" >> "${GITHUB_OUTPUT}"
-
-      - name: Generate installation token
-        id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          client-id: ${{ inputs.app_id }}
-          private-key: ${{ secrets.app-private-key }}
-          owner: ${{ steps.parse-repo.outputs.owner }}
-          repositories: ${{ steps.parse-repo.outputs.repo_name }}
-          permission-contents: read
-          permission-issues: write
-
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run Aptu issue triage
         uses: clouatre-labs/aptu@5f6571cb58b139159c752eda3085368f7f2fc33c # v0.10.14
         with:
-          github-token: ${{ steps.app-token.outputs.token }}
+          github-token: ${{ secrets.installation-token }}
           anthropic-api-key: ${{ secrets.ai-api-key }}
           gemini-api-key: ${{ secrets.ai-api-key }}
           openrouter-api-key: ${{ secrets.ai-api-key }}
