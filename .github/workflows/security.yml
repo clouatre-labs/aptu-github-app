@@ -31,7 +31,7 @@ jobs:
       # requires a GITLEAKS_LICENSE org secret for GitHub Organisation repos (free tier
       # available but requires registration). TruffleHog has no per-org licensing gate.
       - name: Scan for committed secrets
-        uses: trufflesecurity/trufflehog@bcfcf73aaf4759d4dadc2783177c245a02792318 # v3.97.0
+        uses: trufflesecurity/trufflehog@20652fbbdefffcdaa493a5bf57ab2ac6b1db715b # v3.97.1
         with:
           extra_args: --only-verified
 
@@ -63,7 +63,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: /tmp/zizmor/bin/zizmor --min-severity=medium --format=sarif . > zizmor.sarif
       - name: Upload zizmor SARIF results
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         continue-on-error: true
         with:
           sarif_file: zizmor.sarif
@@ -82,7 +82,7 @@ jobs:
       - name: Audit workflow security
         uses: boostsecurityio/poutine-action@e240ebd3eff8b2db5a8e5f6b28f58739d7db2247 # v1.1.4
       - name: Upload poutine SARIF results
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         continue-on-error: true
         with:
           sarif_file: results.sarif
