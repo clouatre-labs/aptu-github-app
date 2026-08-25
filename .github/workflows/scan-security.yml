@@ -78,12 +78,28 @@ jobs:
           ref: ${{ steps.validate.outputs.head_sha }}
           token: ${{ secrets.installation-token }}
 
+      - name: Fetch PR diff
+        id: diff
+        env:
+          GH_TOKEN: ${{ secrets.installation-token }}
+          ORIGINATING_REPO: ${{ steps.validate.outputs.originating_repo }}
+          PULL_NUMBER: ${{ steps.validate.outputs.pull_number }}
+        run: |
+          if gh api "repos/${ORIGINATING_REPO}/pulls/${PULL_NUMBER}" \
+               -H "Accept: application/vnd.github.v3.diff" > pr.diff \
+             && [[ -s pr.diff ]]; then
+            echo "diff_path=pr.diff" >> "${GITHUB_OUTPUT}"
+          else
+            echo "::warning::Could not fetch PR diff; falling back to scan_path (full scan)"
+          fi
+
       - name: Run Aptu security scan
         id: scan
-        uses: clouatre-labs/aptu@5f6571cb58b139159c752eda3085368f7f2fc33c # v0.10.14
+        uses: clouatre-labs/aptu@000fae121da152b4d43db49d2d485c430d4b36ee # v0.10.15
         with:
           github-token: ${{ secrets.installation-token }}
           scan-path: ${{ inputs.scan_path }}
+          scan-security-diff: ${{ steps.diff.outputs.diff_path }}
           fail-on: ${{ inputs.fail_on }}
           sarif-upload: 'false'
 
@@ -133,7 +149,7 @@ jobs:
             exit 0
           fi
 
-          TARGET_URL="https://github.com/${ORIGINATING_REPO}/pull/${PULL_NUMBER}"
+          TARGET_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
 
           if [[ "${VALIDATE_CONCLUSION}" != "success" ]]; then
             STATE="failure"
