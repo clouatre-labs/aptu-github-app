@@ -8,9 +8,6 @@ skip:
   # ubuntu-24.04-arm is a GitHub-hosted Arm64 runner (GA'd January 2025),
   # not self-hosted -- poutine's pr_runs_on_self_hosted rule doesn't
   # recognize this label and flags every job pinned to it. No self-hosted
-  # runner infrastructure exists in this org.
+  # runner infrastructure exists in this org. Matches the same skip in
+  # clouatre-labs/aptu-coder's .poutine.yml.
   - rule: pr_runs_on_self_hosted
-    path:
-      - .github/workflows/ci.yml
-      - .github/workflows/security.yml
-      - .github/workflows/markdown-lint.yml
