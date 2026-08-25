@@ -711,10 +711,20 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       );
       if (dispatchToken instanceof Response) return dispatchToken;
 
+      const triageToken = await getTokenOr500(
+        env,
+        installationId,
+        repo,
+        PERMS.triage,
+        'issues.opened'
+      );
+      if (triageToken instanceof Response) return triageToken;
+
       try {
         await dispatchEvent(dispatchToken, repo, 'aptu-triage', {
           originating_repo: repo,
           issue_number: issue.number,
+          installation_token: triageToken,
           ...(config?.ai
             ? {
                 ai_provider: config.ai.provider,
@@ -825,12 +835,22 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
             Number(reviewQuota.headers.get('Retry-After') ?? 3600)
           );
         } else {
+          const reviewToken = await getTokenOr500(
+            env,
+            installationId,
+            repo,
+            PERMS.review,
+            'pull_request'
+          );
+          if (reviewToken instanceof Response) return reviewToken;
+
           try {
             await dispatchEvent(dispatchToken, repo, 'aptu-review', {
               originating_repo: repo,
               pull_number: pr.number,
               instructions_file: config?.review?.['instructions-file'] ?? null,
               skip_labeled: config?.review?.['skip-labeled'] ?? false,
+              installation_token: reviewToken,
               ...(config?.ai
                 ? {
                     ai_provider: config.ai.provider,
@@ -871,6 +891,15 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
             Number(scanQuota.headers.get('Retry-After') ?? 3600)
           );
         } else {
+          const scanToken = await getTokenOr500(
+            env,
+            installationId,
+            repo,
+            PERMS.scan,
+            'pull_request'
+          );
+          if (scanToken instanceof Response) return scanToken;
+
           try {
             await dispatchEvent(dispatchToken, repo, 'aptu-scan-security', {
               originating_repo: repo,
@@ -878,6 +907,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
               pull_number: pr.number,
               scan_path: config?.scan?.path ?? '.',
               fail_on: config?.scan?.['fail-on'] ?? null,
+              installation_token: scanToken,
             });
             await maybeRecordQuota(env, owner, installationId, 'scan');
             scanDispatched = true;

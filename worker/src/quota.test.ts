@@ -165,7 +165,10 @@ describe('InstallationQuota Durable Object', () => {
     );
     const now = Date.now();
     storageMap.set('quota:1:triage', {
-      timestamps: Array.from({ length: QUOTA_LIMIT }, (_, i) => now - i * 60000),
+      timestamps: Array.from(
+        { length: QUOTA_LIMIT },
+        (_, i) => now - i * 60000
+      ),
     });
     const quota = new InstallationQuota(ctx as unknown as DurableObjectState);
 

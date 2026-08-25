@@ -147,12 +147,16 @@ permissions required for its operation.
 | --- | --- | --- |
 | Config token | `contents:read`, `pull_requests:read` | Fetch `.github/aptu.yml`, fetch PR file list, check collaborator permission |
 | Dispatch token | `contents:write` | Scoped to originating repo; calls `POST /repos/{originating_repo}/dispatches` |
+| Triage token | `contents:read`, `issues:write` | Scoped to originating repo; forwarded via `client_payload.installation_token` for issue triage |
+| Review token | `contents:read`, `pull_requests:write` | Scoped to originating repo; forwarded via `client_payload.installation_token` for PR review |
+| Scan token | `contents:read`, `security_events:write`, `statuses:write` | Scoped to originating repo; forwarded via `client_payload.installation_token` for security scan |
 
-All tokens are short-lived (1 hour, GitHub default). The Worker mints only config and dispatch
-tokens. Operation tokens are not needed: reusable workflows use the caller's `GITHUB_TOKEN`
-(scoped to the caller's repository by GitHub Actions). The Worker passes `ai_provider` and
-`ai_model` in the `client_payload`; the AI API key is resolved by the caller's workflow from
-the caller's own repository secrets.
+All tokens are short-lived (1 hour, GitHub default). The Worker mints operation-scoped tokens
+(triage, review, scan) and forwards them via `client_payload.installation_token`. Caller handlers
+map this token into a `secrets:` block on the reusable workflow call. Reusable workflows receive
+the installation token from the Worker via the caller handler's `secrets:` block (not inputs,
+ensuring log masking). The Worker passes `ai_provider` and `ai_model` in the `client_payload`;
+the AI API key is resolved by the caller's workflow from the caller's own repository secrets.
 
 ### Replay Deduplication
 
@@ -238,16 +242,19 @@ installer ever hand-edits a workflow file to reference
 a specific secret name -- they only need to name their own repository secret after their
 chosen provider's canonical env var.
 
-The reusable workflow runs in the caller's context: `GITHUB_TOKEN` is scoped to the caller's
-repository, and the AI API key is resolved from the caller's repository secrets. The operator's
-AI keys and `APP_PRIVATE_KEY` are never accessible to the reusable workflow (GitHub Actions
-reusable workflows can only access secrets from the calling repository, not the defining
-repository).
+The reusable workflow runs in the caller's context: it receives the operation-scoped installation
+token from the Worker via the caller handler's `secrets:` block (scoped to the caller's repository
+with minimal permissions for that specific operation), and the AI API key is resolved from the
+caller's repository secrets. The operator's AI keys and `APP_PRIVATE_KEY` are never accessible to
+the reusable workflow (GitHub Actions reusable workflows can only access secrets from the calling
+repository, not the defining repository).
 
-The secret value never passes through the Worker or the webhook dispatch payload; only the
-provider name (`ai_provider`) passes through, and only one of three fixed secret names is ever
-referenced by the workflow. The caller must create the correspondingly-named secret in their
-own repository.
+The AI API key secret value never passes through the Worker or the webhook dispatch payload
+(it is resolved caller-side); only the provider name (`ai_provider`) passes through, and only
+one of three fixed secret names is ever referenced by the workflow. The caller must create the
+correspondingly-named secret in their own repository. In contrast, the operation-scoped
+installation token is intentionally forwarded via `client_payload.installation_token` by the
+Worker and mapped directly into the reusable workflow's `secrets:` block by the caller handler.
 
 ## Security Boundaries
 

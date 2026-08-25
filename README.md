@@ -137,8 +137,11 @@ Each repository that uses the aptu GitHub App must install four files:
 4. `.github/workflows/aptu-scan-security.yml` -- dispatch handler for security scans
 
 Each dispatch handler receives its own `repository_dispatch` event type from the Worker and
-calls the appropriate reusable workflow hosted in `clouatre-labs/aptu-github-app`. The caller's
-AI API key secret is passed to the reusable workflow via the `secrets:` block.
+calls the appropriate reusable workflow hosted in `clouatre-labs/aptu-github-app`. The Worker
+mints an operation-scoped installation token and forwards it via `client_payload.installation_token`,
+which the dispatch handler passes into the reusable workflow's `secrets:` block. Installers do
+not need `APP_ID` or `APP_PRIVATE_KEY` secrets in their repository. The caller's AI API key
+secret is also passed to the reusable workflow via the `secrets:` block.
 
 Copy the dispatch handlers from
 [`.github/workflows/aptu-review.yml`](https://github.com/clouatre-labs/aptu-github-app/blob/main/.github/workflows/aptu-review.yml),

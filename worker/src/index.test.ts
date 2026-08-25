@@ -33,7 +33,9 @@ function makeMockQuotaNamespace(): DurableObjectNamespace {
       const { eventType } = JSON.parse((init?.body as string) ?? '{}') as {
         eventType?: string;
       };
-      const override = eventType ? quotaControl.overrides?.[eventType] : undefined;
+      const override = eventType
+        ? quotaControl.overrides?.[eventType]
+        : undefined;
       return Promise.resolve(
         new Response(override?.body ?? quotaControl.body, {
           status: override?.status ?? quotaControl.status,
@@ -413,12 +415,14 @@ describe('repository_dispatch client_payload', () => {
     expect(parsed.client_payload).toEqual({
       originating_repo: 'myorg/myrepo',
       issue_number: 42,
+      installation_token: 'mock-installation-token',
     });
     expect(parsed.client_payload).not.toHaveProperty('installation_id');
     expect(parsed.client_payload).not.toHaveProperty('originating_owner');
     expect(parsed.client_payload).not.toHaveProperty('originating_repo_name');
     expect(parsed.client_payload).not.toHaveProperty('issue_title');
-    expect(parsed.client_payload).not.toHaveProperty('installation_token');
+    expect(parsed.client_payload).toHaveProperty('installation_token');
+    expect(parsed.client_payload.installation_token).toBeTruthy();
   });
 
   it('dispatched payload includes originating_repo, pull_number, instructions_file, skip_labeled for pull_request event', async () => {
@@ -443,12 +447,14 @@ describe('repository_dispatch client_payload', () => {
       pull_number: 99,
       instructions_file: '.github/instructions/review.md',
       skip_labeled: true,
+      installation_token: 'mock-installation-token',
     });
     expect(parsed.client_payload).not.toHaveProperty('installation_id');
     expect(parsed.client_payload).not.toHaveProperty('originating_owner');
     expect(parsed.client_payload).not.toHaveProperty('originating_repo_name');
     expect(parsed.client_payload).not.toHaveProperty('pull_title');
-    expect(parsed.client_payload).not.toHaveProperty('installation_token');
+    expect(parsed.client_payload).toHaveProperty('installation_token');
+    expect(parsed.client_payload.installation_token).toBeTruthy();
   });
 
   it('requests dispatch token with short repository name for caller repository', async () => {
@@ -1132,7 +1138,48 @@ describe('error handling', () => {
     const body = JSON.stringify({
       action: 'opened',
       installation: { id: 1 },
-      pull_request: { number: 1, title: 'Test PR' },
+      pull_request: {
+        number: 1,
+        title: 'Test PR',
+        head: { sha: 'a'.repeat(40) },
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(500);
+  });
+
+  it('returns 500 when getScopedToken for review operation fails during dispatch', async () => {
+    const { createAppAuth } = await import('@octokit/auth-app');
+    // biome-ignore lint/suspicious/noExplicitAny: mocking requires casting to any
+    (createAppAuth as any).mockImplementation(() => {
+      const authFn = vi
+        .fn()
+        .mockImplementation(
+          (options: { permissions?: Record<string, string> }) => {
+            if (options.permissions?.pull_requests === 'write') {
+              return Promise.reject(new Error('Failed to mint review token'));
+            }
+            return Promise.resolve({ token: 'mock-token' });
+          }
+        );
+      return authFn;
+    });
+    fetchSpy.mockImplementation(mockEnabledFetch());
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: {
+        number: 1,
+        title: 'Test PR',
+        head: { sha: 'a'.repeat(40) },
+      },
       repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
     });
     const sig = sign(mockEnv.WEBHOOK_SECRET, body);
@@ -1146,9 +1193,14 @@ describe('error handling', () => {
 });
 
 describe('AI configuration and external installations', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const { createAppAuth } = await import('@octokit/auth-app');
+    // biome-ignore lint/suspicious/noExplicitAny: restoring mocked auth factory
+    (createAppAuth as any).mockImplementation(() =>
+      vi.fn().mockResolvedValue({ token: 'mock-installation-token' })
+    );
   });
 
   it('includes ai_provider and ai_model in client_payload for issues.opened when config.ai is present', async () => {
@@ -1171,7 +1223,8 @@ describe('AI configuration and external installations', () => {
     const parsed = JSON.parse(dispatchCall[1].body as string);
     expect(parsed.client_payload).toHaveProperty('ai_provider', 'openai');
     expect(parsed.client_payload).toHaveProperty('ai_model', 'gpt-4o');
-    expect(parsed.client_payload).not.toHaveProperty('installation_token');
+    expect(parsed.client_payload).toHaveProperty('installation_token');
+    expect(parsed.client_payload.installation_token).toBeTruthy();
     expect(parsed.client_payload).toHaveProperty(
       'originating_repo',
       'owner/repo'
@@ -1203,7 +1256,8 @@ describe('AI configuration and external installations', () => {
     const parsed = JSON.parse(dispatchCall[1].body as string);
     expect(parsed.client_payload).toHaveProperty('ai_provider', 'openai');
     expect(parsed.client_payload).toHaveProperty('ai_model', 'gpt-4o');
-    expect(parsed.client_payload).not.toHaveProperty('installation_token');
+    expect(parsed.client_payload).toHaveProperty('installation_token');
+    expect(parsed.client_payload.installation_token).toBeTruthy();
     expect(parsed.client_payload).not.toHaveProperty('installation_id');
     expect(parsed.client_payload).not.toHaveProperty('originating_owner');
     expect(parsed.client_payload).not.toHaveProperty('originating_repo_name');
@@ -1230,7 +1284,8 @@ describe('AI configuration and external installations', () => {
     const parsed = JSON.parse(dispatchCall[1].body as string);
     expect(parsed.client_payload).not.toHaveProperty('ai_provider');
     expect(parsed.client_payload).not.toHaveProperty('ai_model');
-    expect(parsed.client_payload).not.toHaveProperty('installation_token');
+    expect(parsed.client_payload).toHaveProperty('installation_token');
+    expect(parsed.client_payload.installation_token).toBeTruthy();
   });
 });
 
@@ -2279,16 +2334,18 @@ describe('scan dispatch', () => {
       pull_number: 10,
       scan_path: 'src/',
       fail_on: 'critical,high',
+      installation_token: 'mock-installation-token',
     });
     expect(parsed.client_payload).not.toHaveProperty('installation_id');
     expect(parsed.client_payload).not.toHaveProperty('originating_owner');
     expect(parsed.client_payload).not.toHaveProperty('originating_repo_name');
     expect(parsed.client_payload).not.toHaveProperty('ai_provider');
     expect(parsed.client_payload).not.toHaveProperty('ai_model');
-    expect(parsed.client_payload).not.toHaveProperty('installation_token');
+    expect(parsed.client_payload).toHaveProperty('installation_token');
+    expect(parsed.client_payload.installation_token).toBeTruthy();
   });
 
-  it('dispatches aptu-scan-security with exactly 5 keys when config.ai is present', async () => {
+  it('dispatches aptu-scan-security with exactly 6 keys when config.ai is present', async () => {
     mockConfig(
       'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nscan:\n  enabled: true\n  fail-on: critical,high\n  path: src/\nai:\n  provider: openai\n  model: gpt-4o'
     );
@@ -2324,14 +2381,16 @@ describe('scan dispatch', () => {
       pull_number: 10,
       scan_path: 'src/',
       fail_on: 'critical,high',
+      installation_token: 'mock-installation-token',
     });
-    expect(Object.keys(parsed.client_payload).length).toBe(5);
+    expect(Object.keys(parsed.client_payload).length).toBe(6);
     expect(parsed.client_payload).not.toHaveProperty('ai_provider');
     expect(parsed.client_payload).not.toHaveProperty('ai_model');
     expect(parsed.client_payload).not.toHaveProperty('installation_id');
     expect(parsed.client_payload).not.toHaveProperty('originating_owner');
     expect(parsed.client_payload).not.toHaveProperty('originating_repo_name');
-    expect(parsed.client_payload).not.toHaveProperty('installation_token');
+    expect(parsed.client_payload).toHaveProperty('installation_token');
+    expect(parsed.client_payload.installation_token).toBeTruthy();
   });
 
   it('does not dispatch aptu-scan-security when scan.enabled is false', async () => {
@@ -2595,7 +2654,9 @@ describe('operator org quota exemption', () => {
   }
 
   it('dispatches triage for a clouatre-labs repo despite exceeded quota, with no quota DO calls', async () => {
-    mockConfig('version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true');
+    mockConfig(
+      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true'
+    );
 
     const body = JSON.stringify({
       action: 'opened',
@@ -2655,7 +2716,9 @@ describe('operator org quota exemption', () => {
   });
 
   it('still enforces quota for a non-clouatre-labs repo (contrast case)', async () => {
-    mockConfig('version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true');
+    mockConfig(
+      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true'
+    );
 
     const body = JSON.stringify({
       action: 'opened',

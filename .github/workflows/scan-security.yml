@@ -22,11 +22,8 @@ on:
       fail_on:
         required: false
         type: string
-      app_id:
-        required: true
-        type: string
     secrets:
-      app-private-key:
+      installation-token:
         required: true
 
 permissions: {}
@@ -74,30 +71,18 @@ jobs:
           echo "head_sha=${HEAD_SHA}" >> "${GITHUB_OUTPUT}"
           echo "pull_number=${PULL_NUMBER}" >> "${GITHUB_OUTPUT}"
 
-      - name: Generate installation token
-        id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          client-id: ${{ inputs.app_id }}
-          private-key: ${{ secrets.app-private-key }}
-          owner: ${{ steps.validate.outputs.owner }}
-          repositories: ${{ steps.validate.outputs.repo_name }}
-          permission-contents: read
-          permission-security-events: write
-          permission-statuses: write
-
       - name: Checkout caller repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ steps.validate.outputs.originating_repo }}
           ref: ${{ steps.validate.outputs.head_sha }}
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ secrets.installation-token }}
 
       - name: Run Aptu security scan
         id: scan
         uses: clouatre-labs/aptu@5f6571cb58b139159c752eda3085368f7f2fc33c # v0.10.14
         with:
-          github-token: ${{ steps.app-token.outputs.token }}
+          github-token: ${{ secrets.installation-token }}
           scan-path: ${{ inputs.scan_path }}
           fail-on: ${{ inputs.fail_on }}
           sarif-upload: 'false'
@@ -106,7 +91,7 @@ jobs:
         id: upload-sarif
         if: always() && hashFiles('findings.sarif') != ''
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ secrets.installation-token }}
           ORIGINATING_REPO: ${{ steps.validate.outputs.originating_repo }}
           HEAD_SHA: ${{ steps.validate.outputs.head_sha }}
           PULL_NUMBER: ${{ steps.validate.outputs.pull_number }}
@@ -134,18 +119,17 @@ jobs:
       - name: Report status to caller
         if: always()
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ secrets.installation-token }}
           ORIGINATING_REPO: ${{ steps.validate.outputs.originating_repo }}
           HEAD_SHA: ${{ steps.validate.outputs.head_sha }}
           PULL_NUMBER: ${{ steps.validate.outputs.pull_number }}
           VALIDATE_CONCLUSION: ${{ steps.validate.conclusion }}
-          APP_TOKEN_CONCLUSION: ${{ steps.app-token.conclusion }}
           SCAN_CONCLUSION: ${{ steps.scan.conclusion }}
           UPLOAD_STATUS: ${{ steps.upload-sarif.outputs.upload_status }}
           UPLOAD_CONCLUSION: ${{ steps.upload-sarif.conclusion }}
         run: |
-          if [[ -z "${GH_TOKEN}" || "${APP_TOKEN_CONCLUSION}" != "success" ]]; then
-            echo "No installation token available; skipping status report"
+          if [[ -z "${GH_TOKEN}" || "${VALIDATE_CONCLUSION}" != "success" ]]; then
+            echo "Skipping status report (no token or validation failed)"
             exit 0
           fi
 
