@@ -29,4 +29,4 @@ jobs:
         with:
           bun-version: "1.4.0"
       - name: Lint markdown
-        run: bunx markdownlint-cli2@0.23.1 '**/*.md'
+        run: bunx markdownlint-cli2@0.23.1 '**/*.md' '#.worktrees' '#.handoff'

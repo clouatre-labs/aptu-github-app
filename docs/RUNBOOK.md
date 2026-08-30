@@ -8,9 +8,7 @@ for environment variable and binding documentation.
 
 ## 1. Post-Deploy Steps
 
-After deploying a new version that adds or widens repository/organization permissions
-(e.g., `Contents:Write`), GitHub requires each installation to explicitly approve the
-new permissions before they take effect. The following procedure closes that gap.
+After deploying a new version that adds or widens repository/organization permissions (e.g., `Contents:Write`), GitHub requires each installation to explicitly approve the new permissions before they take effect. The following procedure closes that gap.
 
 ### 1.1 Update the GitHub App manifest
 
@@ -22,9 +20,7 @@ new permissions before they take effect. The following procedure closes that gap
 
 ### 1.2 Notify installation owners
 
-After saving the updated permissions, GitHub sends an email notification to every
-organization or user that has installed the App. The notification includes a link to
-review and approve the new permissions.
+After saving the updated permissions, GitHub sends an email notification to every organization or user that has installed the App. The notification includes a link to review and approve the new permissions.
 
 - If you are an owner of the target installation, you will see a banner at
   `https://github.com/settings/installations/<INSTALLATION_ID>` prompting approval.
@@ -33,8 +29,7 @@ review and approve the new permissions.
 
 ### 1.3 Verify via test webhook
 
-Once all installations have approved the new permissions, confirm that
-`repository_dispatch` events are flowing correctly:
+Once all installations have approved the new permissions, confirm that `repository_dispatch` events are flowing correctly:
 
 ```bash
 curl -X POST https://aptu.dev/webhook \
@@ -44,9 +39,7 @@ curl -X POST https://aptu.dev/webhook \
   -d '{"zen":"test"}'
 ```
 
-Expected response: `202 Accepted`. If the response is `401 Unauthorized`, verify that
-the `WEBHOOK_SECRET` value matches between the GitHub App settings and the Wrangler
-secret (see Section 2.1).
+Expected response: `202 Accepted`. If the response is `401 Unauthorized`, verify that the `WEBHOOK_SECRET` value matches between the GitHub App settings and the Wrangler secret (see Section 2.1).
 
 ---
 
@@ -54,8 +47,7 @@ secret (see Section 2.1).
 
 ### 2.1 Rotate WEBHOOK_SECRET
 
-The `WEBHOOK_SECRET` is shared between the GitHub App webhook configuration and the
-Worker's environment. Both sides must be updated within the same maintenance window.
+The `WEBHOOK_SECRET` is shared between the GitHub App webhook configuration and the Worker's environment. Both sides must be updated within the same maintenance window.
 
 1. **Generate a new secret:**
 
@@ -67,8 +59,7 @@ Worker's environment. Both sides must be updated within the same maintenance win
 
 2. **Update the GitHub App webhook secret:**
 
-   Navigate to `https://github.com/settings/apps/aptu-dev` and replace the **Webhook
-   secret** field with the new value. Click **Save changes**.
+   Navigate to `https://github.com/settings/apps/aptu-dev` and replace the **Webhook secret** field with the new value. Click **Save changes**.
 
 3. **Update the Worker secret:**
 
@@ -76,8 +67,7 @@ Worker's environment. Both sides must be updated within the same maintenance win
    bunx wrangler secret put WEBHOOK_SECRET
    ```
 
-   Paste the new secret when prompted. Wrangler updates the value in-place; the Worker
-   picks it up on the next request.
+   Paste the new secret when prompted. Wrangler updates the value in-place; the Worker picks it up on the next request.
 
 4. **Verify the rotation:**
 
@@ -85,21 +75,15 @@ Worker's environment. Both sides must be updated within the same maintenance win
 
 ### 2.2 Rotate APP_PRIVATE_KEY
 
-The `APP_PRIVATE_KEY` authenticates the App's GitHub API requests. Unlike
-`WEBHOOK_SECRET`, two keys must be valid concurrently during rotation so that the
-Worker never loses authentication.
+The `APP_PRIVATE_KEY` authenticates the App's GitHub API requests. Unlike `WEBHOOK_SECRET`, two keys must be valid concurrently during rotation so that the Worker never loses authentication.
 
 1. **Generate a new private key:**
 
-   Navigate to `https://github.com/settings/apps/aptu-dev`, scroll to **Private keys**,
-   and click **Generate a private key**. GitHub downloads a new PKCS#1 PEM file (starts
-   with `-----BEGIN RSA PRIVATE KEY-----`) and adds it to the App's active key list. The
-   old key remains valid.
+   Navigate to `https://github.com/settings/apps/aptu-dev`, scroll to **Private keys**, and click **Generate a private key**. GitHub downloads a new PKCS#1 PEM file (starts with `-----BEGIN RSA PRIVATE KEY-----`) and adds it to the App's active key list. The old key remains valid.
 
 2. **Convert the key to PKCS#8:**
 
-   The Worker's JWT signing uses the WebCrypto API, which only supports PKCS#8. Convert
-   the downloaded file before uploading it:
+   The Worker's JWT signing uses the WebCrypto API, which only supports PKCS#8. Convert the downloaded file before uploading it:
 
    ```bash
    openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt -in downloaded-key.pem -out converted-key.pem
@@ -111,23 +95,17 @@ Worker never loses authentication.
    bunx wrangler secret put APP_PRIVATE_KEY
    ```
 
-   Paste the contents of the converted file (including the `-----BEGIN PRIVATE KEY-----`
-   and `-----END PRIVATE KEY-----` delimiters) when prompted.
+   Paste the contents of the converted file (including the `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` delimiters) when prompted.
 
 4. **Verify authentication:**
 
-   Trigger a `repository_dispatch` event or check the Worker logs for successful
-   GitHub API authentication (e.g., `202 Accepted` on a test webhook). Confirm the
-   Worker can authenticate using the new key.
+   Trigger a `repository_dispatch` event or check the Worker logs for successful GitHub API authentication (e.g., `202 Accepted` on a test webhook). Confirm the Worker can authenticate using the new key.
 
 5. **Delete the old private key:**
 
-   Return to the GitHub App settings page, locate the old key in the **Private keys**
-   list, and click **Delete**. The Worker now uses the new key exclusively.
+   Return to the GitHub App settings page, locate the old key in the **Private keys** list, and click **Delete**. The Worker now uses the new key exclusively.
 
-**Important:** Do not delete the old key before step 3. The two-key overlap window is
-mandatory -- deleting the old key before verification would break production
-authentication if the new key is not yet accepted by the Worker runtime.
+**Important:** Do not delete the old key before step 3. The two-key overlap window is mandatory -- deleting the old key before verification would break production authentication if the new key is not yet accepted by the Worker runtime.
 
 ---
 
@@ -161,8 +139,7 @@ authentication if the new key is not yet accepted by the Worker runtime.
 
 ### 3.3 Rollback Caveat: Durable Object Migration Tag
 
-Wrangler rollback is **blocked** if the Durable Object migration tag has changed between
-the current and target deployment. The `worker/wrangler.toml` currently defines:
+Wrangler rollback is **blocked** if the Durable Object migration tag has changed between the current and target deployment. The `worker/wrangler.toml` currently defines:
 
 ```toml
 [[migrations]]
@@ -170,27 +147,20 @@ tag = "v1"
 new_sqlite_classes = ["InstallationQuota"]
 ```
 
-If a future deployment adds a new migration (tag `v2`), rollback to any deployment
-with tag `v1` will fail with an error similar to:
+If a future deployment adds a new migration (tag `v2`), rollback to any deployment with tag `v1` will fail with an error similar to:
 
 ```text
 Migration tag v2 is not compatible with the target deployment's tag v1.
 ```
 
-In this scenario, the only recovery path is to deploy a new version that directly
-contains the rollback fix, rather than using `wrangler rollback`. Plan for this
-limitation when adding new Durable Objects or SQLite classes.
+In this scenario, the only recovery path is to deploy a new version that directly contains the rollback fix, rather than using `wrangler rollback`. Plan for this limitation when adding new Durable Objects or SQLite classes.
 
 ### 3.4 Inspect Quota State
 
-The `InstallationQuota` Durable Object stores per-installation rate-limit state. To
-inspect current quota usage:
+The `InstallationQuota` Durable Object stores per-installation rate-limit state. To inspect current quota usage:
 
 ```bash
 bunx wrangler tail --format=json
 ```
 
-Look for log lines containing `quota` or `InstallationQuota`. Alternatively, if
-debug logging is enabled, `console.log` output from the Durable Object appears in the
-tail stream. There is no direct SQLite introspection command via Wrangler for Durable
-Objects.
+Look for log lines containing `quota` or `InstallationQuota`. Alternatively, if debug logging is enabled, `console.log` output from the Durable Object appears in the tail stream. There is no direct SQLite introspection command via Wrangler for Durable Objects.

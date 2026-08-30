@@ -43,8 +43,7 @@ Copilot runs in a firewalled GitHub Actions environment. If your project require
 
 ## Enabling Copilot code review
 
-Copilot code review is enforceable via the `copilot_code_review` ruleset rule (added to the
-branch ruleset). Once enabled, Copilot automatically reviews every PR on push.
+Copilot code review is enforceable via the `copilot_code_review` ruleset rule (added to the branch ruleset). Once enabled, Copilot automatically reviews every PR on push.
 
 To request a re-review: re-request review from `Copilot` in the PR sidebar.
 

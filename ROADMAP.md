@@ -7,16 +7,11 @@ Ideas and direction for aptu-github-app. Not a commitment schedule.
 
 ## Core Principle
 
-Provide a stateless Cloudflare Worker that validates GitHub webhook signatures and dispatches
-`repository_dispatch` events to GitHub Actions, enabling aptu-powered issue triage and PR
-review for any repository with the app installed.
+Provide a stateless Cloudflare Worker that validates GitHub webhook signatures and dispatches `repository_dispatch` events to GitHub Actions, enabling aptu-powered issue triage and PR review for any repository with the app installed.
 
 ## Cost Model
 
-External installations use **caller-supplied AI keys** configured in `.github/aptu.yml` and
-`.github/workflows/aptu-{review,triage,scan-security}.yml`. Each installation provides its own AI API key as a repository
-secret in their own repo. Operator (clouatre-labs) bears no AI API cost for external accounts.
-No per-user billing infrastructure required.
+External installations use **caller-supplied AI keys** configured in `.github/aptu.yml` and `.github/workflows/aptu-{review,triage,scan-security}.yml`. Each installation provides its own AI API key as a repository secret in their own repo. Operator (clouatre-labs) bears no AI API cost for external accounts. No per-user billing infrastructure required.
 
 ## Phase 1: Internal Foundation (complete)
 
@@ -32,8 +27,7 @@ No per-user billing infrastructure required.
 
 ## Phase 2: Multi-Account Support (complete)
 
-Enable installation on accounts outside `clouatre-labs` (starting with `clouatre` personal
-account). Milestone: [Phase 2: Multi-Account Support](https://github.com/clouatre-labs/aptu-github-app/milestone/1).
+Enable installation on accounts outside `clouatre-labs` (starting with `clouatre` personal account). Milestone: [Phase 2: Multi-Account Support](https://github.com/clouatre-labs/aptu-github-app/milestone/1).
 
 - [x] Fix dispatch token: use scoped token (repositoryNames) for `repository_dispatch` call, not installation token (#27)
 - [x] Add `ALLOWED_OWNERS` allowlist to worker to gate external installations (#28, removed in #154)
@@ -41,8 +35,7 @@ account). Milestone: [Phase 2: Multi-Account Support](https://github.com/clouatr
 
 ## Phase 3: Public Release
 
-Open the app to any GitHub account. Requires Phase 2 complete.
-Milestone: [Phase 3: Public Release](https://github.com/clouatre-labs/aptu-github-app/milestone/2).
+Open the app to any GitHub account. Requires Phase 2 complete. Milestone: [Phase 3: Public Release](https://github.com/clouatre-labs/aptu-github-app/milestone/2).
 
 - [x] Caller-supplied AI keys: true BYOK via caller-dispatched reusable workflows; each installation provides own AI API key as repository secret (#34, #154)
 - [x] Move `review.paths` into `.github/aptu.yml` (include and `!`-exclude globs); remove
@@ -58,9 +51,7 @@ Milestone: [Phase 3: Public Release](https://github.com/clouatre-labs/aptu-githu
 
 _This phase requires Phase 3 (quota/rate limiting #29) to be complete first._
 
-Implement `@aptu` mention commands triggered by comments on issues and pull requests.
-Without rate limiting, mention commands create a DoS vector -- authenticated or not,
-every `@aptu` mention would consume AI API credits. Phase 3 (#29) must gate deployment.
+Implement `@aptu` mention commands triggered by comments on issues and pull requests. Without rate limiting, mention commands create a DoS vector -- authenticated or not, every `@aptu` mention would consume AI API credits. Phase 3 (#29) must gate deployment.
 
 - [ ] Permission gating: `GET /repos/{owner}/{repo}/collaborators/{username}/permission` to verify commenter can trigger commands
 - [ ] Dispatch payload: include comment context (issue/PR number, comment body, author)

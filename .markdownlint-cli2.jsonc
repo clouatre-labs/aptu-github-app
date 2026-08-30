@@ -1,9 +1,0 @@
-{
-  "config": {
-    "default": false,
-    "MD001": true,
-    "MD009": { "br_spaces": 2 },
-    "MD010": true,
-    "MD035": { "style": "---" }
-  }
-}

@@ -2,9 +2,7 @@
 
 ## Supported Versions
 
-This project is a continuously-deployed Cloudflare Worker. The production endpoint always
-runs the latest commit on `main`; there are no legacy versions in service. Only the current
-release is supported.
+This project is a continuously-deployed Cloudflare Worker. The production endpoint always runs the latest commit on `main`; there are no legacy versions in service. Only the current release is supported.
 
 | Version | Supported |
 | ------- | --------- |
@@ -66,30 +64,21 @@ This project has three primary attack surfaces:
 
 ### WEBHOOK_SECRET Exposure
 
-The `WEBHOOK_SECRET` secret authenticates GitHub webhook requests to the Cloudflare Worker.
-Exposure allows an attacker to forge webhook events and trigger arbitrary `repository_dispatch`
-events, leading to unauthorized issue triage and PR review actions.
+The `WEBHOOK_SECRET` secret authenticates GitHub webhook requests to the Cloudflare Worker. Exposure allows an attacker to forge webhook events and trigger arbitrary `repository_dispatch` events, leading to unauthorized issue triage and PR review actions.
 
-**Mitigations**: Secret stored as a Wrangler secret only; never committed; rotated on any
-suspected exposure; HMAC signature verified on every webhook request before any processing.
+**Mitigations**: Secret stored as a Wrangler secret only; never committed; rotated on any suspected exposure; HMAC signature verified on every webhook request before any processing.
 
 ### X-Hub-Signature-256 Bypass
 
-If HMAC signature validation is skipped or incorrectly implemented, an attacker can send
-forged webhook payloads to the Worker, triggering unauthorized `repository_dispatch` events.
+If HMAC signature validation is skipped or incorrectly implemented, an attacker can send forged webhook payloads to the Worker, triggering unauthorized `repository_dispatch` events.
 
-**Mitigations**: HMAC validation is the first step in the Worker request handler; all paths
-are validated; validation failures return 401 immediately with no further processing.
+**Mitigations**: HMAC validation is the first step in the Worker request handler; all paths are validated; validation failures return 401 immediately with no further processing.
 
 ### CLOUDFLARE_API_TOKEN Scope
 
-The Cloudflare API token used for Worker deployment carries access to manage Workers and
-associated resources. A token with excess scope could modify or exfiltrate Worker configuration
-or environment variables.
+The Cloudflare API token used for Worker deployment carries access to manage Workers and associated resources. A token with excess scope could modify or exfiltrate Worker configuration or environment variables.
 
-**Mitigations**: Token scoped to the minimum required permissions (Workers: Edit, Account
-scope); stored as a GitHub Actions secret; 90-day rotation policy; scope documented and
-audited on each rotation.
+**Mitigations**: Token scoped to the minimum required permissions (Workers: Edit, Account scope); stored as a GitHub Actions secret; 90-day rotation policy; scope documented and audited on each rotation.
 
 **Rotation procedures**: See [RUNBOOK.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/docs/RUNBOOK.md#2-secret-rotation).
 
@@ -97,9 +86,7 @@ audited on each rotation.
 
 ### REUSE/SPDX
 
-License metadata is managed via `REUSE.toml`. TypeScript and YAML files carry inline SPDX
-headers; all other file types (Markdown, JSON, TOML, etc.) are covered by glob annotations
-in `REUSE.toml`. Compliance verified by the REUSE standard.
+License metadata is managed via `REUSE.toml`. TypeScript and YAML files carry inline SPDX headers; all other file types (Markdown, JSON, TOML, etc.) are covered by glob annotations in `REUSE.toml`. Compliance verified by the REUSE standard.
 
 ### Signed Commits
 
@@ -107,10 +94,8 @@ GPG-signed commits are required on all branches.
 
 ### Dependency Scanning
 
-Automated dependency updates via Renovate. GitHub Actions pinned to commit SHAs. TypeScript
-dependencies audited in CI via Bun.
+Automated dependency updates via Renovate. GitHub Actions pinned to commit SHAs. TypeScript dependencies audited in CI via Bun.
 
 ## Contact
 
-For security concerns: hugues+aptu-github-app-security@linux.com
-For general questions: open a GitHub issue
+For security concerns: hugues+aptu-github-app-security@linux.com For general questions: open a GitHub issue
