@@ -92,7 +92,16 @@ export const PERMS = {
   review: { contents: 'read', pull_requests: 'write' },
   scan: { contents: 'read', security_events: 'write', statuses: 'write' },
   dispatch: { contents: 'write' },
+  provision: { contents: 'write', workflows: 'write' },
 } as const;
+
+const APTU_WORKFLOW_FILES = [
+  'aptu-review.yml',
+  'aptu-triage.yml',
+  'aptu-scan-security.yml',
+] as const;
+const APTU_WORKFLOW_SOURCE_BASE_URL =
+  'https://raw.githubusercontent.com/clouatre-labs/aptu-github-app/main/.github/workflows';
 
 /**
  * Returns a scoped installation token for the given operation and permissions.
@@ -116,6 +125,56 @@ export async function getScopedToken(
     repositoryNames: [shortRepoName],
     permissions,
   });
+}
+
+export async function provisionWorkflowFiles(
+  env: Env,
+  repoFullName: string,
+  installationId: number
+): Promise<void> {
+  let token: string;
+  try {
+    token = await getScopedToken(env, installationId, repoFullName, PERMS.provision);
+  } catch (error) {
+    captureException(error, { tags: { eventType: 'provision', repo: repoFullName } });
+    console.error(`Failed to get provisioning token for ${repoFullName}:`, error);
+    return;
+  }
+  for (const file of APTU_WORKFLOW_FILES) {
+    try {
+      const sourceResponse = await fetch(`${APTU_WORKFLOW_SOURCE_BASE_URL}/${file}`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!sourceResponse.ok) throw new Error(`source fetch failed: ${sourceResponse.status}`);
+      const content = await sourceResponse.text();
+      const url = `https://api.github.com/repos/${repoFullName}/contents/.github/workflows/${file}`;
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'aptu-webhook/1.0',
+      };
+      const existing = await fetch(url, { headers });
+      if (existing.status === 200) {
+        console.log(`Provisioning skipped-existing ${repoFullName}/${file}`);
+        continue;
+      }
+      if (existing.status !== 404) throw new Error(`Contents GET failed: ${existing.status}`);
+      const put = await fetch(url, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'ci: add aptu dispatch handler workflows',
+          content: btoa(content),
+        }),
+      });
+      if (!put.ok) throw new Error(`Contents PUT failed: ${put.status}`);
+      console.log(`Provisioning provisioned ${repoFullName}/${file}`);
+    } catch (error) {
+      captureException(error, { tags: { eventType: 'provision', repo: repoFullName, file } });
+      console.error(`Provisioning failed for ${repoFullName}/${file}:`, error);
+    }
+  }
 }
 
 async function getTokenOr500(
@@ -935,6 +994,28 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       }
 
       return new Response(null, { status: 204 });
+    }
+
+    if (event === 'installation' || event === 'installation_repositories') {
+      const repositories =
+        event === 'installation'
+          ? action === 'created'
+            ? payload.repositories
+            : null
+          : action === 'added'
+            ? payload.repositories_added
+            : null;
+      if (repositories === null) return new Response('OK', { status: 200 });
+      if (!installationId || !Array.isArray(repositories))
+        return new Response('Bad Request', { status: 400 });
+      for (const repository of repositories) {
+        if (!repository || typeof repository.full_name !== 'string' || !repository.full_name.includes('/'))
+          return new Response('Bad Request', { status: 400 });
+      }
+      for (const repository of repositories) {
+        await provisionWorkflowFiles(env, repository.full_name, installationId);
+      }
+      return new Response('OK', { status: 200 });
     }
 
     return new Response('Bad Request', { status: 400 });
