@@ -2,15 +2,11 @@
 
 ## Purpose
 
-Cloudflare Worker and GitHub Actions that automate issue triage and PR review for
-repositories in the `clouatre-labs` org, powered by aptu.
+Cloudflare Worker and GitHub Actions that automate issue triage and PR review for repositories in the `clouatre-labs` org, powered by aptu.
 
 ## Architecture
 
-A single Cloudflare Worker validates GitHub webhook HMAC signatures and dispatches
-`repository_dispatch` events. GitHub Actions workflows handle App authentication and
-invoke the aptu CLI for triage and reviews. The Worker is stateless: validate signature,
-dispatch, return 200.
+A single Cloudflare Worker validates GitHub webhook HMAC signatures and dispatches `repository_dispatch` events. GitHub Actions workflows handle App authentication and invoke the aptu CLI for triage and reviews. The Worker is stateless: validate signature, dispatch, return 200.
 
 ## Key Files
 
@@ -54,9 +50,7 @@ All commits must be GPG-signed with DCO sign-off (`git commit -S --signoff`).
 - **Deploy**: Merging to `main` triggers `deploy.yml`, which deploys the Worker to
   Cloudflare via `bunx wrangler deploy`.
 - **Release**: Merging to `main` triggers `release.yml`, which runs
-  `googleapis/release-please-action` to create GitHub Releases from conventional commits.
-  Release Please opens a Release PR on main; merging it auto-bumps the version and creates
-  a GitHub Release with a generated changelog.
+  `googleapis/release-please-action` to create GitHub Releases from conventional commits. Release Please opens a Release PR on main; merging it auto-bumps the version and creates a GitHub Release with a generated changelog.
 
 ## Secrets Model
 
@@ -75,9 +69,7 @@ All commits must be GPG-signed with DCO sign-off (`git commit -S --signoff`).
 
 ## SPDX Headers
 
-REUSE compliance is managed via `REUSE.toml`. Inline headers are required only for
-TypeScript and YAML files. Markdown files are covered by the `**.md` annotation in
-`REUSE.toml` -- do not add `<!-- SPDX-... -->` comments to `.md` files.
+REUSE compliance is managed via `REUSE.toml`. Inline headers are required only for TypeScript and YAML files. Markdown files are covered by the `**.md` annotation in `REUSE.toml` -- do not add `<!-- SPDX-... -->` comments to `.md` files.
 
 **YAML:**
 ```yaml
@@ -93,10 +85,7 @@ TypeScript and YAML files. Markdown files are covered by the `**.md` annotation 
 
 ## Markdown Links
 
-Always use absolute URLs in Markdown files (e.g.,
-`https://github.com/clouatre-labs/aptu-github-app/blob/main/CONTRIBUTING.md#section`).
-Relative links break when files are rendered outside the repository root (GitHub release
-notes, forks, mirrored docs).
+Always use absolute URLs in Markdown files (e.g., `https://github.com/clouatre-labs/aptu-github-app/blob/main/CONTRIBUTING.md#section`). Relative links break when files are rendered outside the repository root (GitHub release notes, forks, mirrored docs).
 
 ## Test Conventions
 

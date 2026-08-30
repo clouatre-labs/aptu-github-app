@@ -1,8 +1,6 @@
 # Audit: Scan Security Status Check, Privacy, and Data Residency
 
-Date: 2026-08-22
-Commit: a7dca25
-Trigger: Broken `aptu-scan-security` status check link on `clouatre-labs/clouatre.ca` PR #1374
+Date: 2026-08-22 Commit: a7dca25 Trigger: Broken `aptu-scan-security` status check link on `clouatre-labs/clouatre.ca` PR #1374
 
 > **Amendment (2026-08-23):** Findings V08 and V09 originally recommended setting
 > `retention-days` as a per-job key in workflow YAML. This is incorrect.
@@ -21,11 +19,7 @@ Trigger: Broken `aptu-scan-security` status check link on `clouatre-labs/clouatr
 
 ## Purpose
 
-Point-in-time audit triggered by a broken status check link observed on
-`clouatre-labs/clouatre.ca` PR #1374. The `aptu-scan-security` check linked to
-`https://github.com/clouatre-labs/aptu-github-app/actions/runs/32604514331`, which returns 404
-for users without access to the private `aptu-github-app` repository. This audit expands beyond
-the link issue to assess privacy and data residency across the full architecture.
+Point-in-time audit triggered by a broken status check link observed on `clouatre-labs/clouatre.ca` PR #1374. The `aptu-scan-security` check linked to `https://github.com/clouatre-labs/aptu-github-app/actions/runs/32604514331`, which returns 404 for users without access to the private `aptu-github-app` repository. This audit expands beyond the link issue to assess privacy and data residency across the full architecture.
 
 Three axes:
 
@@ -45,9 +39,7 @@ Two read-only research delegates analyzed the codebase in parallel:
 - **Guard** (coder-guard, openai/gpt-5.6-luna): assessed privacy implications, installation
   token exposure, AI provider data transmission, data residency, and documentation gaps
 
-Each finding was verified against actual source files, workflow YAML, and the Worker source
-code. Each delegate wrote a structured JSON handoff. This document synthesizes both, with
-cross-checks noted where findings overlap.
+Each finding was verified against actual source files, workflow YAML, and the Worker source code. Each delegate wrote a structured JSON handoff. This document synthesizes both, with cross-checks noted where findings overlap.
 
 No code was modified during this audit.
 
@@ -59,21 +51,15 @@ No code was modified during this audit.
 
 **Severity:** High | **Issue:** [#136](https://github.com/clouatre-labs/aptu-github-app/issues/136)
 
-The "Report status to caller" step in `scan-security.yml` constructs the status check
-`target_url` as:
+The "Report status to caller" step in `scan-security.yml` constructs the status check `target_url` as:
 
 ```yaml
 -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 ```
 
-In a `repository_dispatch` workflow, `github.repository` resolves to the repository that
-**receives** the dispatch event -- `clouatre-labs/aptu-github-app` -- not the originating
-caller's repository. The `actions/checkout` step's `repository` parameter controls only which
-source code is checked out; it does not change the workflow execution context.
+In a `repository_dispatch` workflow, `github.repository` resolves to the repository that **receives** the dispatch event -- `clouatre-labs/aptu-github-app` -- not the originating caller's repository. The `actions/checkout` step's `repository` parameter controls only which source code is checked out; it does not change the workflow execution context.
 
-Since `aptu-github-app` is private, the Actions run URL returns 404 for any user who does not
-have access to that repository. This includes all external collaborators on the caller's PR
-and any automated tooling that follows the link.
+Since `aptu-github-app` is private, the Actions run URL returns 404 for any user who does not have access to that repository. This includes all external collaborators on the caller's PR and any automated tooling that follows the link.
 
 **Observed on** `clouatre-labs/clouatre.ca#1374`:
 
@@ -81,11 +67,7 @@ and any automated tooling that follows the link.
 aptu-scan-security  pass  0  https://github.com/clouatre-labs/aptu-github-app/actions/runs/32604613543  aptu security scan passed
 ```
 
-**Fix:** Set `target_url` to the caller's PR URL:
-`https://github.com/${{ github.event.client_payload.originating_repo }}/pull/${{ github.event.client_payload.pull_number }}`,
-or omit `target_url` entirely. Alternatively, create a check run in the caller's repo via
-`POST /repos/{originating_repo}/check-runs` with caller-visible details (requires
-`checks: write` permission on the App).
+**Fix:** Set `target_url` to the caller's PR URL: `https://github.com/${{ github.event.client_payload.originating_repo }}/pull/${{ github.event.client_payload.pull_number }}`, or omit `target_url` entirely. Alternatively, create a check run in the caller's repo via `POST /repos/{originating_repo}/check-runs` with caller-visible details (requires `checks: write` permission on the App).
 
 ---
 
@@ -93,17 +75,11 @@ or omit `target_url` entirely. Alternatively, create a check run in the caller's
 
 **Severity:** Medium | **Issue:** [#136](https://github.com/clouatre-labs/aptu-github-app/issues/136)
 
-The "Upload SARIF to caller" step in `scan-security.yml` uses `continue-on-error: true`. A
-missing or invalid SARIF file, permission failure, unsupported ref, API rejection, or malformed
-response can leave no code-scanning result in the caller's repository while the workflow
-continues and reports a passing status.
+The "Upload SARIF to caller" step in `scan-security.yml` uses `continue-on-error: true`. A missing or invalid SARIF file, permission failure, unsupported ref, API rejection, or malformed response can leave no code-scanning result in the caller's repository while the workflow continues and reports a passing status.
 
-The step condition `if: always() && hashFiles('findings.sarif') != ''` is appropriate for
-preserving results after a failing scan, but does not make upload success observable. The
-caller sees `aptu-scan-security: pass` regardless of whether SARIF was successfully uploaded.
+The step condition `if: always() && hashFiles('findings.sarif') != ''` is appropriate for preserving results after a failing scan, but does not make upload success observable. The caller sees `aptu-scan-security: pass` regardless of whether SARIF was successfully uploaded.
 
-**Fix:** Remove `continue-on-error: true` or add a separate failure signal. Check the API
-response status code and fail the step (or post a distinct status) when SARIF ingestion fails.
+**Fix:** Remove `continue-on-error: true` or add a separate failure signal. Check the API response status code and fail the step (or post a distinct status) when SARIF ingestion fails.
 
 ---
 
@@ -111,15 +87,9 @@ response status code and fail the step (or post a distinct status) when SARIF in
 
 **Severity:** Medium | **Issue:** [#136](https://github.com/clouatre-labs/aptu-github-app/issues/136)
 
-The "Report status to caller" step maps `steps.scan.conclusion == success` to `success` and
-every other conclusion to `failure`. This does not distinguish scan findings (the aptu action
-failed due to `fail-on` severity match) from operational errors (action failure, timeout,
-cancelled, SARIF upload failure). The status description is either "aptu security scan passed"
-or "aptu security scan found issues" regardless of the actual cause.
+The "Report status to caller" step maps `steps.scan.conclusion == success` to `success` and every other conclusion to `failure`. This does not distinguish scan findings (the aptu action failed due to `fail-on` severity match) from operational errors (action failure, timeout, cancelled, SARIF upload failure). The status description is either "aptu security scan passed" or "aptu security scan found issues" regardless of the actual cause.
 
-**Fix:** Use explicit outcomes for scan, SARIF upload, and status publication. Reserve
-"aptu security scan found issues" for findings; use "aptu security scan encountered an error"
-for operational failures. Ensure the status is always posted even when earlier steps fail.
+**Fix:** Use explicit outcomes for scan, SARIF upload, and status publication. Reserve "aptu security scan found issues" for findings; use "aptu security scan encountered an error" for operational failures. Ensure the status is always posted even when earlier steps fail.
 
 ---
 
@@ -127,13 +97,9 @@ for operational failures. Ensure the status is always posted even when earlier s
 
 **Severity:** Low | **Issue:** [#136](https://github.com/clouatre-labs/aptu-github-app/issues/136)
 
-The workflow uses `POST /repos/{repo}/statuses/{sha}` to create a legacy commit status. GitHub
-check runs provide richer output, annotations, caller-visible details URLs, and summary
-markdown. Check run creation requires `checks: write` permission on the GitHub App.
+The workflow uses `POST /repos/{repo}/statuses/{sha}` to create a legacy commit status. GitHub check runs provide richer output, annotations, caller-visible details URLs, and summary markdown. Check run creation requires `checks: write` permission on the GitHub App.
 
-**Fix:** Consider migrating to check runs via `POST /repos/{originating_repo}/check-runs` if
-richer caller-visible reporting is needed. Optional if the current status check is sufficient
-for branch protection requirements.
+**Fix:** Consider migrating to check runs via `POST /repos/{originating_repo}/check-runs` if richer caller-visible reporting is needed. Optional if the current status check is sufficient for branch protection requirements.
 
 ---
 
@@ -143,24 +109,15 @@ for branch protection requirements.
 
 **Severity:** High | **Issue:** [#137](https://github.com/clouatre-labs/aptu-github-app/issues/137)
 
-The Worker passes the caller's `installation_token` as a field in the `repository_dispatch`
-`client_payload` for all three event types (triage, review, scan). This is event data sent to
-GitHub's dispatch API, not a GitHub Actions secret.
+The Worker passes the caller's `installation_token` as a field in the `repository_dispatch` `client_payload` for all three event types (triage, review, scan). This is event data sent to GitHub's dispatch API, not a GitHub Actions secret.
 
-The workflows use `echo "::add-mask::${{ github.event.client_payload.installation_token }}"` as
-the first step. GitHub Actions `::add-mask::` masks exact matching text in subsequent **log
-output** only. It does not remove the value from the dispatch event payload, event metadata,
-process environment, action inputs, or GitHub API request history. Any code or action executing
-in the workflow can access the token via `github.event.client_payload.installation_token`.
+The workflows use `echo "::add-mask::${{ github.event.client_payload.installation_token }}"` as the first step. GitHub Actions `::add-mask::` masks exact matching text in subsequent **log output** only. It does not remove the value from the dispatch event payload, event metadata, process environment, action inputs, or GitHub API request history. Any code or action executing in the workflow can access the token via `github.event.client_payload.installation_token`.
 
-The token is short-lived (~1 hour, GitHub default) and scoped to the caller's repository with
-minimum permissions, but it remains a bearer credential delivered in dispatch data.
+The token is short-lived (~1 hour, GitHub default) and scoped to the caller's repository with minimum permissions, but it remains a bearer credential delivered in dispatch data.
 
 **Files:** `worker/src/index.ts` (dispatchEvent calls), all three workflow YAML files.
 
-**Fix:** Redesign to avoid placing bearer tokens in event payloads. Mint the installation token
-inside the workflow using `actions/create-github-app-token` with App credentials stored as
-workflow secrets, or use a short-lived token exchange mechanism.
+**Fix:** Redesign to avoid placing bearer tokens in event payloads. Mint the installation token inside the workflow using `actions/create-github-app-token` with App credentials stored as workflow secrets, or use a short-lived token exchange mechanism.
 
 ---
 
@@ -168,11 +125,7 @@ workflow secrets, or use a short-lived token exchange mechanism.
 
 **Severity:** Low | **Issue:** [#137](https://github.com/clouatre-labs/aptu-github-app/issues/137)
 
-The `::add-mask::` command masks exact matching text in workflow log output only. It does not
-encrypt or remove the token from the repository_dispatch payload, event metadata, process
-environment, action inputs, or derived values. It is not sufficient as the sole token-protection
-control. Contributing factor to V05, not an independent issue. The fix for V05 (removing the
-token from client_payload) eliminates this concern entirely.
+The `::add-mask::` command masks exact matching text in workflow log output only. It does not encrypt or remove the token from the repository_dispatch payload, event metadata, process environment, action inputs, or derived values. It is not sufficient as the sole token-protection control. Contributing factor to V05, not an independent issue. The fix for V05 (removing the token from client_payload) eliminates this concern entirely.
 
 ---
 
@@ -180,13 +133,9 @@ token from client_payload) eliminates this concern entirely.
 
 **Severity:** Info | **Issue:** [#137](https://github.com/clouatre-labs/aptu-github-app/issues/137)
 
-The prior pre-public-release audit (S1) identified that `secrets[github.event.client_payload.ai_key_secret]`
-resolves against `aptu-github-app`'s secrets, not the caller's repository. PR #87 corrected most
-documentation. The README "External installation example" section and ARCHITECTURE.md
-"Caller-Supplied AI Keys" section still contain language implying caller-side resolution.
+The prior pre-public-release audit (S1) identified that `secrets[github.event.client_payload.ai_key_secret]` resolves against `aptu-github-app`'s secrets, not the caller's repository. PR #87 corrected most documentation. The README "External installation example" section and ARCHITECTURE.md "Caller-Supplied AI Keys" section still contain language implying caller-side resolution.
 
-**Fix:** Ensure all passages consistently state that `api-key-secret` names a secret in the
-`aptu-github-app` repository.
+**Fix:** Ensure all passages consistently state that `api-key-secret` names a secret in the `aptu-github-app` repository.
 
 ---
 
@@ -194,21 +143,11 @@ documentation. The README "External installation example" section and ARCHITECTU
 
 **Severity:** Medium | **Issue:** [#138](https://github.com/clouatre-labs/aptu-github-app/issues/138)
 
-The `scan-security.yml` workflow checks out the caller's private repository code on a
-GitHub-hosted runner (`ubuntu-24.04-arm`) in the `aptu-github-app` repository. GitHub documents
-that hosted runners run in fresh, isolated VMs that are discarded after the job.
+The `scan-security.yml` workflow checks out the caller's private repository code on a GitHub-hosted runner (`ubuntu-24.04-arm`) in the `aptu-github-app` repository. GitHub documents that hosted runners run in fresh, isolated VMs that are discarded after the job.
 
-However, anyone with Actions read access to `aptu-github-app` can view workflow logs via the
-Actions UI or REST API. Source code can appear in logs if the aptu action, scripts, error
-diagnostics, or commands print it. The workflow does not establish a source-code logging
-prohibition.
+However, anyone with Actions read access to `aptu-github-app` can view workflow logs via the Actions UI or REST API. Source code can appear in logs if the aptu action, scripts, error diagnostics, or commands print it. The workflow does not establish a source-code logging prohibition.
 
-**Fix:** Disable verbose/source-bearing diagnostics, review aptu action logging behavior,
-and restrict Actions read access. Workflow log retention is configured at the GitHub
-organization, repository, or enterprise settings level, not per-job in workflow YAML.
-`retention-days` is a valid input parameter for `actions/upload-artifact` only, not a
-job-level key. Document the intended retention period as an operational policy and enforce
-it via GitHub org/repo settings.
+**Fix:** Disable verbose/source-bearing diagnostics, review aptu action logging behavior, and restrict Actions read access. Workflow log retention is configured at the GitHub organization, repository, or enterprise settings level, not per-job in workflow YAML. `retention-days` is a valid input parameter for `actions/upload-artifact` only, not a job-level key. Document the intended retention period as an operational policy and enforce it via GitHub org/repo settings.
 
 ---
 
@@ -216,18 +155,11 @@ it via GitHub org/repo settings.
 
 **Severity:** Medium | **Issue:** [#138](https://github.com/clouatre-labs/aptu-github-app/issues/138)
 
-No workflow in the repository configures log retention. GitHub's default retention applies (90 days
-for private repos with configurable org/enterprise settings). No documentation specifies the
-intended retention period, access controls, or deletion procedures for workflow logs that may
-contain caller source code or commit metadata.
+No workflow in the repository configures log retention. GitHub's default retention applies (90 days for private repos with configurable org/enterprise settings). No documentation specifies the intended retention period, access controls, or deletion procedures for workflow logs that may contain caller source code or commit metadata.
 
-`retention-days` is not a valid job-level key in GitHub Actions workflow syntax. It is a valid
-input parameter for the `actions/upload-artifact` action only. Workflow log retention is
-configured at the GitHub organization, repository, or enterprise settings level.
+`retention-days` is not a valid job-level key in GitHub Actions workflow syntax. It is a valid input parameter for the `actions/upload-artifact` action only. Workflow log retention is configured at the GitHub organization, repository, or enterprise settings level.
 
-**Fix:** Document the intended retention period as an operational policy. Enforce it via GitHub
-org/repo settings, not workflow YAML. Document access controls and deletion procedures for
-workflow logs that may contain caller source code or commit metadata.
+**Fix:** Document the intended retention period as an operational policy. Enforce it via GitHub org/repo settings, not workflow YAML. Document access controls and deletion procedures for workflow logs that may contain caller source code or commit metadata.
 
 ---
 
@@ -235,16 +167,11 @@ workflow logs that may contain caller source code or commit metadata.
 
 **Severity:** Medium | **Issue:** [#138](https://github.com/clouatre-labs/aptu-github-app/issues/138)
 
-The scan workflow uploads `findings.sarif` to the caller's code scanning API. SARIF files
-normally contain tool metadata, rules, results, messages, severity levels, and artifact
-locations (file paths and line/region coordinates). A result message may include a code snippet
-as region context, depending on the SARIF generator's configuration.
+The scan workflow uploads `findings.sarif` to the caller's code scanning API. SARIF files normally contain tool metadata, rules, results, messages, severity levels, and artifact locations (file paths and line/region coordinates). A result message may include a code snippet as region context, depending on the SARIF generator's configuration.
 
-The aptu action's SARIF generation behavior (whether snippets are included) is not documented
-in this repository.
+The aptu action's SARIF generation behavior (whether snippets are included) is not documented in this repository.
 
-**Fix:** Inspect aptu's SARIF generator output, document whether code snippets are included,
-and define a policy on permitted SARIF content.
+**Fix:** Inspect aptu's SARIF generator output, document whether code snippets are included, and define a policy on permitted SARIF content.
 
 ---
 
@@ -252,8 +179,7 @@ and define a policy on permitted SARIF content.
 
 **Severity:** High | **Issue:** [#138](https://github.com/clouatre-labs/aptu-github-app/issues/138)
 
-The repository has `SECURITY.md` (attack surface), `AI_POLICY.md` (contributor AI usage), and
-`ARCHITECTURE.md` (system design). None constitute a privacy policy. The following are absent:
+The repository has `SECURITY.md` (attack surface), `AI_POLICY.md` (contributor AI usage), and `ARCHITECTURE.md` (system design). None constitute a privacy policy. The following are absent:
 
 - Privacy policy or privacy notice
 - Data processing agreement (DPA) or reference
@@ -262,13 +188,9 @@ The repository has `SECURITY.md` (attack surface), `AI_POLICY.md` (contributor A
 - Data-subject rights process
 - Breach notification process
 
-The architecture processes personal data when GitHub event content includes commit author
-names, usernames, email addresses, issue authors, commenters, reviewer identities, IP/technical
-metadata, or personal data embedded in source, diffs, issue text, or instructions.
+The architecture processes personal data when GitHub event content includes commit author names, usernames, email addresses, issue authors, commenters, reviewer identities, IP/technical metadata, or personal data embedded in source, diffs, issue text, or instructions.
 
-**Fix:** Create `docs/PRIVACY.md` covering data collected, processing purposes, recipients,
-retention schedules, data-subject rights, breach process, and contact point. Create
-`docs/DATA_FLOW.md` with a data-flow diagram showing all processing locations and transfers.
+**Fix:** Create `docs/PRIVACY.md` covering data collected, processing purposes, recipients, retention schedules, data-subject rights, breach process, and contact point. Create `docs/DATA_FLOW.md` with a data-flow diagram showing all processing locations and transfers.
 
 ---
 
@@ -278,8 +200,7 @@ retention schedules, data-subject rights, breach process, and contact point. Cre
 
 **Severity:** Medium | **Issue:** [#138](https://github.com/clouatre-labs/aptu-github-app/issues/138)
 
-No repository documentation defines data residency, processing locations, cross-border
-transfers, regional controls, or provider subprocessors.
+No repository documentation defines data residency, processing locations, cross-border transfers, regional controls, or provider subprocessors.
 
 | Component | Processing Location | Region Control | Documented |
 | --- | --- | --- | --- |
@@ -289,11 +210,9 @@ transfers, regional controls, or provider subprocessors.
 | OpenRouter | Multi-provider routing; EU/US in-region available for enterprise | No routing control; fallback to OpenRouter on provider failure | No |
 | SARIF storage | Caller's GitHub repo (code scanning) | Follows caller's GitHub data residency | Correct target |
 
-For a Canadian organization, PIPEDA does not prohibit cross-border processing but requires
-accountability, notice, safeguards, contractual oversight, and transfer transparency.
+For a Canadian organization, PIPEDA does not prohibit cross-border processing but requires accountability, notice, safeguards, contractual oversight, and transfer transparency.
 
-**Fix:** Publish a data residency statement documenting processing locations, cross-border
-transfers, regional controls (or lack thereof), and provider subprocessors.
+**Fix:** Publish a data residency statement documenting processing locations, cross-border transfers, regional controls (or lack thereof), and provider subprocessors.
 
 ---
 
@@ -307,11 +226,7 @@ transfers, regional controls (or lack thereof), and provider subprocessors.
 | Privacy | 7 findings | 2 High, 3 Medium, 1 Low, 1 Info |
 | Data residency | 1 finding | 1 Medium |
 
-**Three issues opened.** The scan workflow's `target_url` is broken for all external viewers.
-The installation token in `client_payload` is a bearer credential with masking that protects log
-text only. No privacy policy, data-flow inventory, or residency documentation exists despite the
-architecture processing caller source code, commit metadata, and issue text across GitHub-hosted
-runners, Cloudflare's global edge, and third-party AI providers.
+**Three issues opened.** The scan workflow's `target_url` is broken for all external viewers. The installation token in `client_payload` is a bearer credential with masking that protects log text only. No privacy policy, data-flow inventory, or residency documentation exists despite the architecture processing caller source code, commit metadata, and issue text across GitHub-hosted runners, Cloudflare's global edge, and third-party AI providers.
 
 ---
 

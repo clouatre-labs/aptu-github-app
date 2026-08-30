@@ -12,8 +12,7 @@ When reviewing `.github/workflows/` changes:
 - Flag `${{ expression }}` interpolation directly inside `run:` scripts as an injection risk;
   inputs should be passed via `env:` blocks.
 - Verify action pins and reusable workflow `uses:` refs (e.g.,
-  `clouatre-labs/aptu-github-app/.github/workflows/pr-review.yml@SHA`) use commit SHAs, not
-  mutable tags.
+  `clouatre-labs/aptu-github-app/.github/workflows/pr-review.yml@SHA`) use commit SHAs, not mutable tags.
 - Flag switching FROM SHA pins TO mutable tags (like `@v1` or `@main`) as a security
   regression (see CVE-2025-30066).
 - Flag duplicated workflow YAML in Markdown files; SHA pins in Markdown go stale because
@@ -31,8 +30,7 @@ When reviewing `.github/workflows/` changes:
   primary security boundary.
 - Flag hardcoded secrets or credentials; all secrets must use Wrangler bindings.
 - Flag missing error handling: the Worker must return appropriate HTTP status codes for
-  validation failures (401 for bad signatures, 400 for malformed payloads, 500 for unexpected
-  errors).
+  validation failures (401 for bad signatures, 400 for malformed payloads, 500 for unexpected errors).
 - The package manager is `bun`; flag any use of `npm` or `yarn`.
 - Dependency changes in `package.json` must have a clear justification; flag additions
   without explanation.
@@ -45,15 +43,11 @@ When reviewing `.github/workflows/` changes:
 
 ## SPDX Headers
 
-REUSE compliance is managed via `REUSE.toml`. Inline SPDX headers are required only for
-TypeScript (`.ts`) and YAML (`.yml`, `.yaml`) files. Do not flag missing SPDX headers on
-Markdown (`.md`) files; they are covered by the `**.md` annotation in `REUSE.toml`.
+REUSE compliance is managed via `REUSE.toml`. Inline SPDX headers are required only for TypeScript (`.ts`) and YAML (`.yml`, `.yaml`) files. Do not flag missing SPDX headers on Markdown (`.md`) files; they are covered by the `**.md` annotation in `REUSE.toml`.
 
 ## Markdown Links
 
-Flag relative links in Markdown files (e.g., `[text](CONTRIBUTING.md)` or
-`[text](../docs/foo.md)`). All links must be absolute URLs so they resolve correctly in
-GitHub release notes, forks, and mirrored docs.
+Flag relative links in Markdown files (e.g., `[text](CONTRIBUTING.md)` or `[text](../docs/foo.md)`). All links must be absolute URLs so they resolve correctly in GitHub release notes, forks, and mirrored docs.
 
 ## General
 

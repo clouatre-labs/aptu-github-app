@@ -1,10 +1,6 @@
 # aptu-github-app
 
-A Cloudflare Worker and GitHub Actions that automate issue triage and PR review for any
-repository with the aptu GitHub App installed, powered by [aptu](https://aptu.dev). The Worker
-validates GitHub webhook signatures, reads each repository's `.github/aptu.yml` opt-in config,
-and dispatches `repository_dispatch` events to the originating repository to trigger
-aptu-powered triage, review, and security scan workflows via reusable workflows.
+A Cloudflare Worker and GitHub Actions that automate issue triage and PR review for any repository with the aptu GitHub App installed, powered by [aptu](https://aptu.dev). The Worker validates GitHub webhook signatures, reads each repository's `.github/aptu.yml` opt-in config, and dispatches `repository_dispatch` events to the originating repository to trigger aptu-powered triage, review, and security scan workflows via reusable workflows.
 
 ## Architecture
 
@@ -27,19 +23,15 @@ GitHub event (issues.opened / pull_request.opened|synchronize|reopened|ready_for
   -> GitHub Reviews API (inline comments as github-actions[bot])
 ```
 
-The Worker uses two Durable Objects: `InstallationQuota` for per-installation rate limiting
-(50 events per event type per 24h rolling window, enforced for all installations), and
-`ReplayGuard` for webhook deduplication. No external database is required.
+The Worker uses two Durable Objects: `InstallationQuota` for per-installation rate limiting (50 events per event type per 24h rolling window, enforced for all installations), and `ReplayGuard` for webhook deduplication. No external database is required.
 
 ### Mention commands
 
-Commenting `@aptu` on an issue or PR review comment triggers triage or review respectively.
-The commenter must be a collaborator with at least read permission on the repository.
+Commenting `@aptu` on an issue or PR review comment triggers triage or review respectively. The commenter must be a collaborator with at least read permission on the repository.
 
 ## Repository configuration
 
-Each repository opts in by adding a `.github/aptu.yml` file. The Worker fetches this file on
-every webhook event; if the file is absent or invalid, no dispatch occurs.
+Each repository opts in by adding a `.github/aptu.yml` file. The Worker fetches this file on every webhook event; if the file is absent or invalid, no dispatch occurs.
 
 ### Schema
 
@@ -69,11 +61,7 @@ ai:
 
 ### Scan configuration
 
-The `scan` block enables aptu's local pattern-based security scanning. Scan runs without an AI
-provider -- no `ai` block is required. Results are uploaded as SARIF code scanning alerts to the
-originating repository. `fail-on` takes a comma-separated list of severities (`critical`, `high`,
-`medium`, `low`); the scan fails only if a finding matches one of the listed severities. Omitting
-`fail-on` reports findings without failing the check.
+The `scan` block enables aptu's local pattern-based security scanning. Scan runs without an AI provider -- no `ai` block is required. Results are uploaded as SARIF code scanning alerts to the originating repository. `fail-on` takes a comma-separated list of severities (`critical`, `high`, `medium`, `low`); the scan fails only if a finding matches one of the listed severities. Omitting `fail-on` reports findings without failing the check.
 
 ### Field reference
 
@@ -91,10 +79,7 @@ originating repository. `fail-on` takes a comma-separated list of severities (`c
 | `scan.fail-on` | string | -- | Comma-separated severities that fail the scan (`critical`, `high`, `medium`, `low`). Omit to report findings without failing the check. |
 | `scan.path` | string | `.` | Root directory to scan. |
 
-All fields under `triage`, `review`, `scan`, and `ai` are validated strictly: unknown keys are
-ignored, but a missing `enabled` boolean causes the entire config to be rejected (no dispatch).
-Both `ai` fields (`provider` and `model`) are required if the `ai` block is present; a partial
-or empty-string block is rejected.
+All fields under `triage`, `review`, `scan`, and `ai` are validated strictly: unknown keys are ignored, but a missing `enabled` boolean causes the entire config to be rejected (no dispatch). Both `ai` fields (`provider` and `model`) are required if the `ai` block is present; a partial or empty-string block is rejected.
 
 ### Minimal opt-in example
 
@@ -108,13 +93,7 @@ review:
 
 ### External installation example
 
-Each installation provides its own AI API key via a GitHub repository secret in the caller's
-repo. The caller installs the dispatch handler workflows (see [Installation](#installation))
-which receive `repository_dispatch` events and call reusable workflows from the
-`clouatre-labs/aptu-github-app` repository. The reusable workflow runs in the caller's context,
-using the caller's `GITHUB_TOKEN` for repository operations and the caller's AI API key secret
-for AI provider calls. This is the BYOK (bring your own key) model: the operator's AI keys are
-never exposed to any installation.
+Each installation provides its own AI API key via a GitHub repository secret in the caller's repo. The caller installs the dispatch handler workflows (see [Installation](#installation)) which receive `repository_dispatch` events and call reusable workflows from the `clouatre-labs/aptu-github-app` repository. The reusable workflow runs in the caller's context, using the caller's `GITHUB_TOKEN` for repository operations and the caller's AI API key secret for AI provider calls. This is the BYOK (bring your own key) model: the operator's AI keys are never exposed to any installation.
 
 ```yaml
 version: 1
@@ -136,27 +115,15 @@ Each repository that uses the aptu GitHub App must have these files:
 3. `.github/workflows/aptu-triage.yml` -- dispatch handler for issue triage
 4. `.github/workflows/aptu-scan-security.yml` -- dispatch handler for security scans
 
-When a repository is added to an installation, the Worker automatically provisions the three
-workflow files above. You only need to add `.github/aptu.yml` and configure an AI provider API
-key secret (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`) in your repository.
-The GitHub App must have the **Workflows** permission enabled for automatic provisioning.
+When a repository is added to an installation, the Worker automatically provisions the three workflow files above. You only need to add `.github/aptu.yml` and configure an AI provider API key secret (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`) in your repository. The GitHub App must have the **Workflows** permission enabled for automatic provisioning.
 
-Each dispatch handler receives its own `repository_dispatch` event type from the Worker and
-calls the appropriate reusable workflow hosted in `clouatre-labs/aptu-github-app`. The Worker
-mints an operation-scoped installation token and forwards it via `client_payload.installation_token`,
-which the dispatch handler passes into the reusable workflow's `secrets:` block. Installers do
-not need `APP_ID` or `APP_PRIVATE_KEY` secrets in their repository. The caller's AI API key
-secret is also passed to the reusable workflow via the `secrets:` block. Each handler resolves
-the key named after the `ai.provider` in `.github/aptu.yml` (`OPENROUTER_API_KEY`,
-`ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`). Create that secret in your own repository or rely
-on an org-visible secret of the same name.
+Each dispatch handler receives its own `repository_dispatch` event type from the Worker and calls the appropriate reusable workflow hosted in `clouatre-labs/aptu-github-app`. The Worker mints an operation-scoped installation token and forwards it via `client_payload.installation_token`, which the dispatch handler passes into the reusable workflow's `secrets:` block. Installers do not need `APP_ID` or `APP_PRIVATE_KEY` secrets in their repository. The caller's AI API key secret is also passed to the reusable workflow via the `secrets:` block. Each handler resolves the key named after the `ai.provider` in `.github/aptu.yml` (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`). Create that secret in your own repository or rely on an org-visible secret of the same name.
 
 ## Deployment
 
 ### Worker deployment
 
-Merging to `main` triggers `deploy.yml`, which deploys the Worker to Cloudflare via
-`bunx wrangler deploy`.
+Merging to `main` triggers `deploy.yml`, which deploys the Worker to Cloudflare via `bunx wrangler deploy`.
 
 GitHub secrets and variables:
 
@@ -165,10 +132,7 @@ GitHub secrets and variables:
 - `APP_ID` -- GitHub App ID (repository variable, required for Worker to mint installation tokens)
 - `APP_PRIVATE_KEY` -- GitHub App private key in PKCS#8 PEM format (repository secret, required for Worker)
 
-AI API keys are configured per installation in the caller's repository, not in `aptu-github-app`.
-Each caller creates a repository secret named after the provider they select via `ai.provider`
-in their own `.github/aptu.yml` (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, or
-`GEMINI_API_KEY`) -- never in the (static, unedited) dispatch handler.
+AI API keys are configured per installation in the caller's repository, not in `aptu-github-app`. Each caller creates a repository secret named after the provider they select via `ai.provider` in their own `.github/aptu.yml` (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`) -- never in the (static, unedited) dispatch handler.
 
 Wrangler secrets (set via `bunx wrangler secret put`):
 
@@ -183,32 +147,25 @@ Wrangler variables (in `wrangler.toml` `[vars]`):
 
 ### DNS prerequisite
 
-The Worker is bound to the route `aptu.dev/webhook` via `wrangler.toml`. Cloudflare route
-bindings require a proxied DNS record for the zone root:
+The Worker is bound to the route `aptu.dev/webhook` via `wrangler.toml`. Cloudflare route bindings require a proxied DNS record for the zone root:
 
 | Type | Name | Content | Proxied |
 | --- | --- | --- | --- |
 | AAAA | aptu.dev | `100::` | Yes |
 
-`100::` is the [Cloudflare-documented placeholder](https://developers.cloudflare.com/workers/configuration/routing/routes/)
-for route-based Workers with no real origin.
+`100::` is the [Cloudflare-documented placeholder](https://developers.cloudflare.com/workers/configuration/routing/routes/) for route-based Workers with no real origin.
 
 ### App credentials
 
-See [clouatre-labs/aptu#94](https://github.com/clouatre-labs/aptu/issues/94) for GitHub App
-registration and credential setup.
+See [clouatre-labs/aptu#94](https://github.com/clouatre-labs/aptu/issues/94) for GitHub App registration and credential setup.
 
 ### Operator procedures
 
-See [RUNBOOK.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/docs/RUNBOOK.md)
-for post-deploy steps, secret rotation, and incident response.
+See [RUNBOOK.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/docs/RUNBOOK.md) for post-deploy steps, secret rotation, and incident response.
 
 ## Releases
 
-Merging to `main` triggers [Release Please](https://github.com/googleapis/release-please-action)
-to create GitHub Releases automatically from [Conventional Commits](https://www.conventionalcommits.org/).
-See [CONTRIBUTING.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/CONTRIBUTING.md#releases--versioning)
-for details.
+Merging to `main` triggers [Release Please](https://github.com/googleapis/release-please-action) to create GitHub Releases automatically from [Conventional Commits](https://www.conventionalcommits.org/). See [CONTRIBUTING.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/CONTRIBUTING.md#releases--versioning) for details.
 
 ## Development
 

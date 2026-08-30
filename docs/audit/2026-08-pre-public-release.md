@@ -2,10 +2,7 @@
 
 Audit date: 2026-08-04
 
-Status: Resolved. All blocking and pre-release findings closed as of 2026-08-04. Hardening
-findings deferred with documented decisions below. Fixes verified against `origin/main` at
-commit `586a34f`; PRs #87-#95 apply all remediations. Two post-audit fixes (PR #96 and PR #97)
-were applied on 2026-08-05; see the Post-Audit Fixes section.
+Status: Resolved. All blocking and pre-release findings closed as of 2026-08-04. Hardening findings deferred with documented decisions below. Fixes verified against `origin/main` at commit `586a34f`; PRs #87-#95 apply all remediations. Two post-audit fixes (PR #96 and PR #97) were applied on 2026-08-05; see the Post-Audit Fixes section.
 
 ## See Also
 
@@ -15,9 +12,7 @@ were applied on 2026-08-05; see the Post-Audit Fixes section.
 
 ## Purpose
 
-Point-in-time audit of `aptu-github-app` against three axes before the GitHub App is made
-publicly installable. The owner must be certain external installs cannot cost a penny and
-cannot violate trust boundaries.
+Point-in-time audit of `aptu-github-app` against three axes before the GitHub App is made publicly installable. The owner must be certain external installs cannot cost a penny and cannot violate trust boundaries.
 
 1. **Security** -- HMAC validation, secret scoping, token handling, error responses, quota
    ordering, supply chain
@@ -30,9 +25,7 @@ cannot violate trust boundaries.
 
 ## Methodology
 
-Three independent read-only scout delegates analyzed the codebase in parallel against dedicated
-checklists. Each claim was verified against actual source line numbers. Severity levels follow
-CVSS-inspired conventions: Critical, High, Medium, Low, Info.
+Three independent read-only scout delegates analyzed the codebase in parallel against dedicated checklists. Each claim was verified against actual source line numbers. Severity levels follow CVSS-inspired conventions: Critical, High, Medium, Low, Info.
 
 ---
 
@@ -68,9 +61,7 @@ CVSS-inspired conventions: Critical, High, Medium, Low, Info.
 
 **Verdict: RESOLVED. S1, S2, and C3 fixes are in PR #87 and PR #88. All pre-release findings are closed. Hardening findings are deferred with documented decisions. The App may be made public after PRs #87-#95 are merged.**
 
-S1 alone is sufficient to block: a single external installer who knows any of the owner's org
-secret names can cause the owner's AI-provider account to be billed for attacker-controlled
-content, indefinitely, within the 50-events/24h-per-event-type quota.
+S1 alone is sufficient to block: a single external installer who knows any of the owner's org secret names can cause the owner's AI-provider account to be billed for attacker-controlled content, indefinitely, within the 50-events/24h-per-event-type quota.
 
 ---
 
@@ -80,25 +71,13 @@ content, indefinitely, within the 50-events/24h-per-event-type quota.
 
 **Severity:** Critical | **Confirmed:** Yes | **Blocks public release:** Yes
 
-**Description:**
-`README.md:86-88` claims `ai.api-key-secret` resolves against a secret in the caller's own
-repository. This is false. Both `issue-triage.yml` and `pr-review.yml` run in
-`clouatre-labs/aptu-github-app` itself (confirmed: `docs/ARCHITECTURE.md:44`). GitHub Actions
-`secrets[x]` always resolves against the repository where the workflow executes -- the owner's
-own repo -- never the external caller's.
+**Description:** `README.md:86-88` claims `ai.api-key-secret` resolves against a secret in the caller's own repository. This is false. Both `issue-triage.yml` and `pr-review.yml` run in `clouatre-labs/aptu-github-app` itself (confirmed: `docs/ARCHITECTURE.md:44`). GitHub Actions `secrets[x]` always resolves against the repository where the workflow executes -- the owner's own repo -- never the external caller's.
 
-The `ai_key_secret` value is fully attacker-controlled: any external installer sets
-`ai.api-key-secret` in their `.github/aptu.yml`, validated only against `/^[A-Z0-9_]+$/`
-(`config.ts:27`), with no ownership check or allowlist. If that name matches any of the owner's
-org secrets (`GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `ORG_APP_PRIVATE_KEY`,
-`CLOUDFLARE_API_TOKEN`, `GITLEAKS_LICENSE`), the workflow silently injects the owner's real
-credential into an API call driven by attacker-controlled repo, issue, and PR content.
+The `ai_key_secret` value is fully attacker-controlled: any external installer sets `ai.api-key-secret` in their `.github/aptu.yml`, validated only against `/^[A-Z0-9_]+$/` (`config.ts:27`), with no ownership check or allowlist. If that name matches any of the owner's org secrets (`GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `ORG_APP_PRIVATE_KEY`, `CLOUDFLARE_API_TOKEN`, `GITLEAKS_LICENSE`), the workflow silently injects the owner's real credential into an API call driven by attacker-controlled repo, issue, and PR content.
 
-This is simultaneously a secret-scoping violation and the primary cost-exposure vector. It
-renders the documented cost-isolation model non-functional for any public install.
+This is simultaneously a secret-scoping violation and the primary cost-exposure vector. It renders the documented cost-isolation model non-functional for any public install.
 
-**Files:** `docs/ARCHITECTURE.md:44`, `issue-triage.yml:31`, `pr-review.yml:32-34`,
-`worker/src/config.ts:27,104-124`, `worker/src/index.ts:394-399,487-493`
+**Files:** `docs/ARCHITECTURE.md:44`, `issue-triage.yml:31`, `pr-review.yml:32-34`, `worker/src/config.ts:27,104-124`, `worker/src/index.ts:394-399,487-493`
 
 **Fix (choose one):**
 
@@ -117,29 +96,15 @@ renders the documented cost-isolation model non-functional for any public instal
 
 **Severity:** High | **Confirmed:** Yes | **Blocks public release:** Yes
 
-**Description:**
-Commit `8b327ad` (`chore(worker): remove ALLOWED_OWNERS gate, quota enforcement is sufficient
-(#59)`) removed 47 lines from `worker/src/index.ts`, the `ALLOWED_OWNERS` wrangler var, and
-191 lines of tests. The current `Env` interface (`index.ts:15-23`) has no `ALLOWED_OWNERS`
-field; `rg ALLOWED_OWNERS` across `worker/src/*.ts` and `wrangler.toml` returns zero matches.
-`shouldDispatch` (`config.ts:143-151`) checks only `config[feature]?.enabled`; it never checks
-repo owner or requires an `ai` block.
+**Description:** Commit `8b327ad` (`chore(worker): remove ALLOWED_OWNERS gate, quota enforcement is sufficient (#59)`) removed 47 lines from `worker/src/index.ts`, the `ALLOWED_OWNERS` wrangler var, and 191 lines of tests. The current `Env` interface (`index.ts:15-23`) has no `ALLOWED_OWNERS` field; `rg ALLOWED_OWNERS` across `worker/src/*.ts` and `wrangler.toml` returns zero matches. `shouldDispatch` (`config.ts:143-151`) checks only `config[feature]?.enabled`; it never checks repo owner or requires an `ai` block.
 
-Yet `README.md:16,86,118` and `docs/ARCHITECTURE.md:26,134` still describe an active
-`ALLOWED_OWNERS` gate requiring external installs to supply an `ai` block. Any repository can
-now enable triage/review with zero `ai` block: `client_payload.ai_key_secret` is undefined,
-`secrets[undefined]` resolves to empty string in the workflow, and behavior downstream in the
-`aptu` CLI was not verified.
+Yet `README.md:16,86,118` and `docs/ARCHITECTURE.md:26,134` still describe an active `ALLOWED_OWNERS` gate requiring external installs to supply an `ai` block. Any repository can now enable triage/review with zero `ai` block: `client_payload.ai_key_secret` is undefined, `secrets[undefined]` resolves to empty string in the workflow, and behavior downstream in the `aptu` CLI was not verified.
 
-Combined with S1, this means the primary intended safeguard for public installs no longer exists
-and is not documented as removed.
+Combined with S1, this means the primary intended safeguard for public installs no longer exists and is not documented as removed.
 
-**Files:** `worker/src/index.ts:15-23`, `config.ts:143-151`, `README.md:16,86,118`,
-`docs/ARCHITECTURE.md:26,134`
+**Files:** `worker/src/index.ts:15-23`, `config.ts:143-151`, `README.md:16,86,118`, `docs/ARCHITECTURE.md:26,134`
 
-**Fix:** Either reinstate an owner/org allowlist as a hard boundary, or update `README.md` and
-`docs/ARCHITECTURE.md` to remove all references to `ALLOWED_OWNERS` and document the actual
-current behavior accurately. Given S1, reinstatement is the correct path.
+**Fix:** Either reinstate an owner/org allowlist as a hard boundary, or update `README.md` and `docs/ARCHITECTURE.md` to remove all references to `ALLOWED_OWNERS` and document the actual current behavior accurately. Given S1, reinstatement is the correct path.
 
 **Resolved:** PR #87 -- Reinstated `isOwnerAllowed()` pure function and single `ALLOWED_OWNERS` gate after signature validation; `README.md` and `docs/ARCHITECTURE.md` updated.
 
@@ -149,24 +114,13 @@ current behavior accurately. Given S1, reinstatement is the correct path.
 
 **Severity:** High | **Confirmed:** Yes | **Blocks public release:** Yes
 
-**Description:**
-`QUOTA_LIMIT = 50` and `QUOTA_WINDOW_MS = 24h` (`quota.ts:9-10`) are enforced per
-`installationId` per `eventType` only (key: `quota:{installationId}:{eventType}`). Each
-installation can generate up to 100 dispatches per day (50 triage + 50 review). At 1,000
-external installs the aggregate ceiling is 100,000 dispatches per day with no upper bound tied
-to install count.
+**Description:** `QUOTA_LIMIT = 50` and `QUOTA_WINDOW_MS = 24h` (`quota.ts:9-10`) are enforced per `installationId` per `eventType` only (key: `quota:{installationId}:{eventType}`). Each installation can generate up to 100 dispatches per day (50 triage + 50 review). At 1,000 external installs the aggregate ceiling is 100,000 dispatches per day with no upper bound tied to install count.
 
-Each dispatch triggers a GitHub Actions job on `ubuntu-24.04-arm` (10-minute timeout,
-`issue-triage.yml:19-20`, `pr-review.yml:19-20`) running in `clouatre-labs/aptu-github-app`,
-which is a **private** repository. Private-repository Actions minutes are billed once the org
-exceeds its included allocation. There is no mechanism in this codebase that scales the
-per-installation quota down as install count grows, nor a total daily or monthly ceiling.
+Each dispatch triggers a GitHub Actions job on `ubuntu-24.04-arm` (10-minute timeout, `issue-triage.yml:19-20`, `pr-review.yml:19-20`) running in `clouatre-labs/aptu-github-app`, which is a **private** repository. Private-repository Actions minutes are billed once the org exceeds its included allocation. There is no mechanism in this codebase that scales the per-installation quota down as install count grows, nor a total daily or monthly ceiling.
 
 **Files:** `worker/src/quota.ts:9-10,42`, `issue-triage.yml:19-20`, `pr-review.yml:19-20`
 
-**Fix:** Add a global aggregate quota -- a single well-known Durable Object ID tracking total
-dispatches org-wide per day -- alongside the existing per-installation counter. Set an explicit
-hard ceiling with alerting and a kill-switch when approached.
+**Fix:** Add a global aggregate quota -- a single well-known Durable Object ID tracking total dispatches org-wide per day -- alongside the existing per-installation counter. Set an explicit hard ceiling with alerting and a kill-switch when approached.
 
 **Resolved:** PR #88 -- Added `GlobalQuota` Durable Object class with `idFromName('global')` singleton, `GLOBAL_QUOTA_LIMIT` Wrangler var (default 500/day), and `checkGlobalQuota()` composing into `enforceQuota()` before the per-installation check. Returns `429` with `Retry-After` when the org-wide ceiling is hit.
 
@@ -178,18 +132,11 @@ hard ceiling with alerting and a kill-switch when approached.
 
 **Severity:** Medium | **Confirmed:** Yes
 
-The `issues.opened` (`index.ts:346`) and `pull_request` (`index.ts:428`) flows correctly call
-`enforceQuota` before any outbound API call. `handleMentionCommand` (`index.ts:249-305`) does
-not: `getInstallationToken` (`line 265`) and `checkCollaboratorPermission` (`line 272`, which
-performs a `fetch` to `api.github.com`) both execute before `enforceQuota` (`line 281`). Only
-`dispatchEvent` (`line 291`) is gated.
+The `issues.opened` (`index.ts:346`) and `pull_request` (`index.ts:428`) flows correctly call `enforceQuota` before any outbound API call. `handleMentionCommand` (`index.ts:249-305`) does not: `getInstallationToken` (`line 265`) and `checkCollaboratorPermission` (`line 272`, which performs a `fetch` to `api.github.com`) both execute before `enforceQuota` (`line 281`). Only `dispatchEvent` (`line 291`) is gated.
 
-Every `@aptu` mention that passes the self-mention guard generates two GitHub API calls,
-regardless of quota status.
+Every `@aptu` mention that passes the self-mention guard generates two GitHub API calls, regardless of quota status.
 
-**Fix:** Move `enforceQuota(env, installationId, eventType)` to immediately after the
-self-mention-guard check (after `line 261`), before `getInstallationToken`, mirroring the other
-two flows.
+**Fix:** Move `enforceQuota(env, installationId, eventType)` to immediately after the self-mention-guard check (after `line 261`), before `getInstallationToken`, mirroring the other two flows.
 
 **Resolved:** PR #94 -- Reordered `handleMentionCommand`: `enforceQuota` is now called first (after self-mention guard), before `getInstallationToken` and `checkCollaboratorPermission`.
 
@@ -207,13 +154,9 @@ Same root as C3: per-installation quota has no global ceiling. See C3 fix.
 
 **Severity:** Medium | **Confirmed:** Yes
 
-`InstallationQuota.fetch` (`quota.ts:64`) calls `storage.put(key, {timestamps: recent})` on
-both the exceeded path and the allowed path. On the exceeded path, the write re-persists an
-already-pruned list on every request, generating DO write operations with no state change.
-Durable Object storage operations are billed above the free-tier inclusion.
+`InstallationQuota.fetch` (`quota.ts:64`) calls `storage.put(key, {timestamps: recent})` on both the exceeded path and the allowed path. On the exceeded path, the write re-persists an already-pruned list on every request, generating DO write operations with no state change. Durable Object storage operations are billed above the free-tier inclusion.
 
-**Fix:** Skip `storage.put` on the exceeded path when the pruned list is unchanged from the
-stored list, or write only when the set of timestamps actually changes.
+**Fix:** Skip `storage.put` on the exceeded path when the pruned list is unchanged from the stored list, or write only when the set of timestamps actually changes.
 
 **Resolved:** PR #93 -- Added conditional guard to `InstallationQuota`: `storage.put` on the exceeded path is skipped when `recent.length === stored.timestamps.length` (no pruning occurred). PR #97 (post-audit) -- Applied the identical guard to `GlobalQuota`, which the original fix missed.
 
@@ -223,15 +166,9 @@ stored list, or write only when the set of timestamps actually changes.
 
 **Severity:** Medium | **Confirmed:** Yes
 
-`bun audit` reports 8 vulnerabilities: 2 high (`postcss` path traversal via `vitest`,
-`undici` response desync via `wrangler`), 5 moderate, 1 low. All are in devDependency
-transitive chains (`vitest`, `wrangler`); none are in the deployed runtime bundle
-(`@octokit/auth-app`, `@octokit/request`, `@sentry/cloudflare`, `picomatch`, `yaml` show zero
-advisories). The runtime Worker is not at risk, but no CI step fails the build on new advisories;
-Renovate's reactive update cadence is the only mitigation.
+`bun audit` reports 8 vulnerabilities: 2 high (`postcss` path traversal via `vitest`, `undici` response desync via `wrangler`), 5 moderate, 1 low. All are in devDependency transitive chains (`vitest`, `wrangler`); none are in the deployed runtime bundle (`@octokit/auth-app`, `@octokit/request`, `@sentry/cloudflare`, `picomatch`, `yaml` show zero advisories). The runtime Worker is not at risk, but no CI step fails the build on new advisories; Renovate's reactive update cadence is the only mitigation.
 
-**Fix:** Add a `bun audit --audit-level high` step to `ci.yml` to block merges on new
-high/critical advisories.
+**Fix:** Add a `bun audit --audit-level high` step to `ci.yml` to block merges on new high/critical advisories.
 
 **Resolved:** PR #95 -- Added `bun audit --audit-level high` step to the `lint` job in `ci.yml`. Also fixed stale `bun.lockb` path filter to `bun.lock`.
 
@@ -241,11 +178,9 @@ high/critical advisories.
 
 **Severity:** Medium | **Confirmed:** Yes
 
-Three jobs in `ci.yml` use `bun-version: latest`, which silently changes the toolchain on each
-run. A Bun major bump can break builds without any code change.
+Three jobs in `ci.yml` use `bun-version: latest`, which silently changes the toolchain on each run. A Bun major bump can break builds without any code change.
 
-**Fix:** Pin to a specific version (e.g. `bun-version: "1.2.19"`) and let Renovate manage
-updates.
+**Fix:** Pin to a specific version (e.g. `bun-version: "1.2.19"`) and let Renovate manage updates.
 
 **Resolved:** PR #90 -- Pinned `bun-version` to `"1.3.14"` in all three jobs (lint, typecheck, test).
 
@@ -255,13 +190,9 @@ updates.
 
 **Severity:** Medium | **Confirmed:** Yes
 
-`renovate.json` automerges patch, minor, digest, and pin updates with a 3-day
-`minimumReleaseAge` delay. The `github-actions` package rule also automerges, with no major
-version exclusion. A major action bump (e.g. `actions/checkout@v4` -> `v5`) could introduce
-breaking changes silently.
+`renovate.json` automerges patch, minor, digest, and pin updates with a 3-day `minimumReleaseAge` delay. The `github-actions` package rule also automerges, with no major version exclusion. A major action bump (e.g. `actions/checkout@v4` -> `v5`) could introduce breaking changes silently.
 
-**Fix:** Add `"matchUpdateTypes": ["major"]` with `"automerge": false` to the github-actions
-package rule.
+**Fix:** Add `"matchUpdateTypes": ["major"]` with `"automerge": false` to the github-actions package rule.
 
 **Resolved:** PR #89 -- Added `matchUpdateTypes: ["major"]` + `automerge: false` rule to the `github-actions` package rule in `renovate.json`.
 
@@ -271,11 +202,9 @@ package rule.
 
 **Severity:** Medium | **Confirmed:** Yes
 
-No `bun audit`, `npm audit`, or equivalent runs in any workflow. New advisories are surfaced
-only when Renovate opens a PR, not when a PR is merged. See S10.
+No `bun audit`, `npm audit`, or equivalent runs in any workflow. New advisories are surfaced only when Renovate opens a PR, not when a PR is merged. See S10.
 
-**Fix:** Add `bun audit --audit-level high` to the `lint` or a dedicated `audit` job in
-`ci.yml`.
+**Fix:** Add `bun audit --audit-level high` to the `lint` or a dedicated `audit` job in `ci.yml`.
 
 **Resolved:** PR #95 -- See CI-F13 above (combined fix).
 
@@ -285,12 +214,9 @@ only when Renovate opens a PR, not when a PR is merged. See S10.
 
 **Severity:** Low | **Confirmed:** Yes
 
-`AI_KEY_SECRET_PATTERN` (`config.ts:27`) validates `ai.api-key-secret` against `/^[A-Z0-9_]+$/`
-only. Any uppercase/underscore name is accepted, including names that match the owner's org
-secrets. This is a contributing factor to S1, not an independent issue.
+`AI_KEY_SECRET_PATTERN` (`config.ts:27`) validates `ai.api-key-secret` against `/^[A-Z0-9_]+$/` only. Any uppercase/underscore name is accepted, including names that match the owner's org secrets. This is a contributing factor to S1, not an independent issue.
 
-**Fix:** Depends on S1 resolution. If an allowlist model is adopted, the pattern check becomes
-redundant.
+**Fix:** Depends on S1 resolution. If an allowlist model is adopted, the pattern check becomes redundant.
 
 **Deferred:** With `ALLOWED_OWNERS` allowlist (PR #87) blocking all external installs, the regex validation is now a secondary gate with no security impact. Removal or tightening deferred until the per-caller credential model is revisited.
 
@@ -300,17 +226,11 @@ redundant.
 
 **Severity:** Low | **Confirmed:** Yes
 
-`getInstallationToken` and `getDispatchToken` return raw bearer tokens passed into
-`client_payload.installation_token` (`index.ts:292,390,481`). The token is referenced as
-`github.event.client_payload.installation_token` in both workflow files. GitHub Actions
-auto-masks registered secrets but does not automatically mask values arriving via
-`client_payload`. No `::add-mask::` call was found in either workflow.
+`getInstallationToken` and `getDispatchToken` return raw bearer tokens passed into `client_payload.installation_token` (`index.ts:292,390,481`). The token is referenced as `github.event.client_payload.installation_token` in both workflow files. GitHub Actions auto-masks registered secrets but does not automatically mask values arriving via `client_payload`. No `::add-mask::` call was found in either workflow.
 
-The token is short-lived (~1 hour) and visible in webhook delivery logs and GitHub audit trails
-during that window.
+The token is short-lived (~1 hour) and visible in webhook delivery logs and GitHub audit trails during that window.
 
-**Fix:** Add `echo "::add-mask::${{ github.event.client_payload.installation_token }}"` as the
-first step in both workflow jobs before the token is used.
+**Fix:** Add `echo "::add-mask::${{ github.event.client_payload.installation_token }}"` as the first step in both workflow jobs before the token is used.
 
 **Resolved:** PR #92 -- Added "Mask installation token" step as first step in both `triage` and `review` jobs.
 
@@ -320,13 +240,9 @@ first step in both workflow jobs before the token is used.
 
 **Severity:** Low | **Confirmed:** Yes
 
-`deploy.yml` uses `secrets.CLOUDFLARE_API_TOKEN` -- a static, long-lived credential stored as
-a GitHub Actions secret. Cloudflare does not yet offer a first-class OIDC provider integration
-for `wrangler-action` equivalent to AWS/Azure/GCP, making this a common and acceptable pattern
-for now, but a lesser-security posture than short-lived OIDC credentials.
+`deploy.yml` uses `secrets.CLOUDFLARE_API_TOKEN` -- a static, long-lived credential stored as a GitHub Actions secret. Cloudflare does not yet offer a first-class OIDC provider integration for `wrangler-action` equivalent to AWS/Azure/GCP, making this a common and acceptable pattern for now, but a lesser-security posture than short-lived OIDC credentials.
 
-**Fix:** Track as a low-priority hardening item. Revisit when Cloudflare adds OIDC support for
-`wrangler-action`.
+**Fix:** Track as a low-priority hardening item. Revisit when Cloudflare adds OIDC support for `wrangler-action`.
 
 **Deferred:** No Cloudflare OIDC support for `wrangler-action` is available as of 2026-08-04. Accepted as-is; revisit when Cloudflare adds OIDC integration.
 
@@ -336,14 +252,9 @@ for now, but a lesser-security posture than short-lived OIDC credentials.
 
 **Severity:** Low | **Confirmed:** Yes
 
-`wrangler.toml` defines no Cloudflare Rate Limiting Rules or WAF configuration. Any request
-with a valid HMAC signature reaches the handler; the application-level per-installation quota is
-the only volume control. A single installation generating rapid-fire valid webhook deliveries
-(e.g. via comment spam) can approach Cloudflare Worker free-tier limits (100,000
-requests/day).
+`wrangler.toml` defines no Cloudflare Rate Limiting Rules or WAF configuration. Any request with a valid HMAC signature reaches the handler; the application-level per-installation quota is the only volume control. A single installation generating rapid-fire valid webhook deliveries (e.g. via comment spam) can approach Cloudflare Worker free-tier limits (100,000 requests/day).
 
-**Fix:** Add Cloudflare Rate Limiting Rules on `aptu.dev/webhook` as a backstop, independent of
-application-level quota.
+**Fix:** Add Cloudflare Rate Limiting Rules on `aptu.dev/webhook` as a backstop, independent of application-level quota.
 
 **Deferred:** Cloudflare dashboard configuration, not in-repo. Tracked as a hardening item to configure post-release.
 
@@ -353,13 +264,9 @@ application-level quota.
 
 **Severity:** Low | **Confirmed:** Yes
 
-The branch ruleset on `main` (`ruleset 18072797`) requires passing CI and a signed commit but
-sets `required_approving_review_count: 0`. Merges require no human approval. For an internal
-solo project this is expected; for a publicly-facing app it is worth documenting as an accepted
-risk.
+The branch ruleset on `main` (`ruleset 18072797`) requires passing CI and a signed commit but sets `required_approving_review_count: 0`. Merges require no human approval. For an internal solo project this is expected; for a publicly-facing app it is worth documenting as an accepted risk.
 
-**Fix:** Accept as-is for current team size, or require 1 approver for changes to
-`.github/workflows/` specifically.
+**Fix:** Accept as-is for current team size, or require 1 approver for changes to `.github/workflows/` specifically.
 
 **Deferred:** Accepted for current team size. Branch ruleset update deferred.
 
@@ -369,11 +276,9 @@ risk.
 
 **Severity:** Info | **Confirmed:** Yes
 
-`bun.lock` has no REUSE annotation in `REUSE.toml` and no inline SPDX header. 36 of 37 files
-are compliant. No `LICENSES/Apache-2.0.txt` file is present in the repo root.
+`bun.lock` has no REUSE annotation in `REUSE.toml` and no inline SPDX header. 36 of 37 files are compliant. No `LICENSES/Apache-2.0.txt` file is present in the repo root.
 
-**Fix:** Add `bun.lock` to `REUSE.toml` under the appropriate annotation, and add
-`LICENSES/Apache-2.0.txt`.
+**Fix:** Add `bun.lock` to `REUSE.toml` under the appropriate annotation, and add `LICENSES/Apache-2.0.txt`.
 
 **Resolved:** PR #91 -- Added `bun.lock` annotation to `REUSE.toml` and created `LICENSES/Apache-2.0.txt`.
 
@@ -383,9 +288,7 @@ are compliant. No `LICENSES/Apache-2.0.txt` file is present in the repo root.
 
 **Severity:** Info | **Confirmed:** Yes
 
-`renovate.json` does not explicitly configure `vulnerabilityAlerts`, relying on Renovate
-defaults. This means security-advisory-triggered PRs may not be prioritized or auto-merged
-on a faster cadence than regular updates.
+`renovate.json` does not explicitly configure `vulnerabilityAlerts`, relying on Renovate defaults. This means security-advisory-triggered PRs may not be prioritized or auto-merged on a faster cadence than regular updates.
 
 **Fix:** Add `"vulnerabilityAlerts": {"enabled": true, "automerge": true}` to `renovate.json`.
 
@@ -397,19 +300,13 @@ on a faster cadence than regular updates.
 
 ### S3 -- HMAC signature validation
 
-Every request passes through `validateSignature` (`index.ts:33-52`) before `JSON.parse` or
-any event-type branching (`index.ts:312-321`). The implementation uses
-`crypto.subtle.verify` (Web Crypto), which performs constant-time HMAC comparison. Headers
-without the `sha256=` prefix are rejected immediately. No bypass path was found. Test coverage
-confirms missing-header (401), mismatched-signature (401), and valid-signature cases.
+Every request passes through `validateSignature` (`index.ts:33-52`) before `JSON.parse` or any event-type branching (`index.ts:312-321`). The implementation uses `crypto.subtle.verify` (Web Crypto), which performs constant-time HMAC comparison. Headers without the `sha256=` prefix are rejected immediately. No bypass path was found. Test coverage confirms missing-header (401), mismatched-signature (401), and valid-signature cases.
 
 ---
 
 ### S5 -- Token scoping
 
-Per-operation scoped tokens replace the previous broad installation token. A `PERMS`
-lookup table defines five permission sets, and a single `getScopedToken` helper issues
-tokens with minimum required permissions:
+Per-operation scoped tokens replace the previous broad installation token. A `PERMS` lookup table defines five permission sets, and a single `getScopedToken` helper issues tokens with minimum required permissions:
 
 - `PERMS.config`: `contents:read`, `pull_requests:read` -- for config fetch, PR file
   listing, and collaborator permission checks
@@ -420,45 +317,31 @@ tokens with minimum required permissions:
 - `PERMS.dispatch`: `contents:write` -- scoped to `TARGET_REPO` only for
   `repository_dispatch`
 
-All tokens are created fresh per request via `createAppAuth` with `repositoryNames` and
-`permissions` passed to `auth({ type: 'installation', ... })`. A `getTokenOr500` helper
-DRYs up the try/catch pattern in the fetch handler. No module-level token storage exists.
+All tokens are created fresh per request via `createAppAuth` with `repositoryNames` and `permissions` passed to `auth({ type: 'installation', ... })`. A `getTokenOr500` helper DRYs up the try/catch pattern in the fetch handler. No module-level token storage exists.
 
 ---
 
 ### S8 -- Error response leakage
 
-All error responses use fixed literals (`Unauthorized`, `Bad Request`, `Forbidden`,
-`Internal Server Error`, `Method Not Allowed`). No response body interpolates `error.message`,
-stack traces, secret values, or internal state. `console.error` calls log only `Error` objects,
-repo names, and numeric IDs -- never token values.
+All error responses use fixed literals (`Unauthorized`, `Bad Request`, `Forbidden`, `Internal Server Error`, `Method Not Allowed`). No response body interpolates `error.message`, stack traces, secret values, or internal state. `console.error` calls log only `Error` objects, repo names, and numeric IDs -- never token values.
 
 ---
 
 ### S11 -- `TARGET_REPO` is not attacker-influenceable
 
-`TARGET_REPO` is a hardcoded Wrangler var (`wrangler.toml:7`, value
-`clouatre-labs/aptu-github-app`). All three dispatch flows derive `targetRepo` and
-`targetRepoName` from `env.TARGET_REPO`, never from webhook payload fields. Repository dispatch
-cannot be redirected by a crafted payload.
+`TARGET_REPO` is a hardcoded Wrangler var (`wrangler.toml:7`, value `clouatre-labs/aptu-github-app`). All three dispatch flows derive `targetRepo` and `targetRepoName` from `env.TARGET_REPO`, never from webhook payload fields. Repository dispatch cannot be redirected by a crafted payload.
 
 ---
 
 ### C7 -- GitHub API calls isolated per-installation
 
-`fetchRepoConfig` (`config.ts:29-51`) and the PR-files fetch (`index.ts:113-153`) authenticate
-with the calling installation's own scoped token. GitHub tracks rate limits per-installation for
-installation-token-authenticated calls. External installs cannot exhaust a shared owner-wide
-GitHub API budget via these paths.
+`fetchRepoConfig` (`config.ts:29-51`) and the PR-files fetch (`index.ts:113-153`) authenticate with the calling installation's own scoped token. GitHub tracks rate limits per-installation for installation-token-authenticated calls. External installs cannot exhaust a shared owner-wide GitHub API budget via these paths.
 
 ---
 
 ### C9 -- Sentry event volume bounded by quota
 
-All `captureException` calls in the `issues.opened` and `pull_request` flows occur after
-`enforceQuota` has passed (`index.ts:346,428`). Sentry event volume inherits the same
-per-installation 50/24h ceiling as dispatches. Sentry is not independently amplifiable beyond
-the quota gap identified in C3.
+All `captureException` calls in the `issues.opened` and `pull_request` flows occur after `enforceQuota` has passed (`index.ts:346,428`). Sentry event volume inherits the same per-installation 50/24h ceiling as dispatches. Sentry is not independently amplifiable beyond the quota gap identified in C3.
 
 ---
 
@@ -466,27 +349,17 @@ the quota gap identified in C3.
 
 ### C8 -- GitHub App JWT rate-limit pool (unconfirmed)
 
-`getInstallationToken` and `getDispatchToken` both use `createAppAuth` JWT-authenticated
-calls to GitHub's token-exchange endpoint. App-level JWT rate limits may be shared across all
-installations rather than isolated per-installation. If shared, a large volume of external
-installs could approach the App-level ceiling and degrade availability for all installs. This
-was not independently verified against live GitHub documentation in this session.
+`getInstallationToken` and `getDispatchToken` both use `createAppAuth` JWT-authenticated calls to GitHub's token-exchange endpoint. App-level JWT rate limits may be shared across all installations rather than isolated per-installation. If shared, a large volume of external installs could approach the App-level ceiling and degrade availability for all installs. This was not independently verified against live GitHub documentation in this session.
 
-**Follow-up:** Verify GitHub's current rate-limit model for App JWT-authenticated endpoints and,
-if shared, consider caching installation tokens within their ~1h validity window to reduce
-token-exchange call volume.
+**Follow-up:** Verify GitHub's current rate-limit model for App JWT-authenticated endpoints and, if shared, consider caching installation tokens within their ~1h validity window to reduce token-exchange call volume.
 
 ---
 
 ### C10 -- Durable Object concurrency safety (not load-tested)
 
-`InstallationQuota` relies on Cloudflare's default input-gate concurrency model to serialize
-concurrent requests to the same DO instance, preventing race conditions in the quota counter. No
-load test was performed to confirm that concurrent requests for the same `installationId` and
-`eventType` cannot exceed `QUOTA_LIMIT`.
+`InstallationQuota` relies on Cloudflare's default input-gate concurrency model to serialize concurrent requests to the same DO instance, preventing race conditions in the quota counter. No load test was performed to confirm that concurrent requests for the same `installationId` and `eventType` cannot exceed `QUOTA_LIMIT`.
 
-**Follow-up:** Run a load test firing N concurrent requests for the same installation and confirm
-the counter never exceeds `QUOTA_LIMIT`. No code change indicated by static analysis.
+**Follow-up:** Run a load test firing N concurrent requests for the same installation and confirm the counter never exceeds `QUOTA_LIMIT`. No code change indicated by static analysis.
 
 ---
 
@@ -510,15 +383,11 @@ the counter never exceeds `QUOTA_LIMIT`. No code change indicated by static anal
 
 ## Post-Audit Fixes (2026-08-05)
 
-A post-merge verification pass identified two issues not covered by PRs #87-#95. Both were
-fixed and merged on 2026-08-05.
+A post-merge verification pass identified two issues not covered by PRs #87-#95. Both were fixed and merged on 2026-08-05.
 
 ### PR #96 -- Biome formatting error in `index.ts` (CI blocker)
 
-**Finding:** A spurious blank line at `worker/src/index.ts:10` -- between the
-`export { GlobalQuota, InstallationQuota }` re-export block introduced by PR #88 and the
-`@sentry/cloudflare` import -- caused `biome check` to fail. The current `HEAD` after merging
-PRs #87-#95 would fail CI on any new PR touching that file.
+**Finding:** A spurious blank line at `worker/src/index.ts:10` -- between the `export { GlobalQuota, InstallationQuota }` re-export block introduced by PR #88 and the `@sentry/cloudflare` import -- caused `biome check` to fail. The current `HEAD` after merging PRs #87-#95 would fail CI on any new PR touching that file.
 
 **Fix:** Removed the blank line. One line deleted, no logic change.
 
@@ -528,24 +397,17 @@ PRs #87-#95 would fail CI on any new PR touching that file.
 
 ### PR #97 -- `GlobalQuota` missing conditional `storage.put` guard (C5 incomplete)
 
-**Finding:** PR #93 applied the conditional `storage.put` guard to `InstallationQuota` but not
-to `GlobalQuota`. The `GlobalQuota.fetch()` exceeded path (introduced by PR #88) called
-`storage.put` unconditionally on every request, even when no timestamps were pruned and the
-stored state was unchanged -- the identical C5 pattern in `InstallationQuota` before PR #93.
+**Finding:** PR #93 applied the conditional `storage.put` guard to `InstallationQuota` but not to `GlobalQuota`. The `GlobalQuota.fetch()` exceeded path (introduced by PR #88) called `storage.put` unconditionally on every request, even when no timestamps were pruned and the stored state was unchanged -- the identical C5 pattern in `InstallationQuota` before PR #93.
 
-**Fix:** Wrapped the exceeded-path `storage.put` in `GlobalQuota` with the same conditional
-guard used in `InstallationQuota`: skip the write when `recent.length` equals the stored
-timestamps length. Added two tests covering the skip and write scenarios.
+**Fix:** Wrapped the exceeded-path `storage.put` in `GlobalQuota` with the same conditional guard used in `InstallationQuota`: skip the write when `recent.length` equals the stored timestamps length. Added two tests covering the skip and write scenarios.
 
-**Verified:** `bun test` 101/101 pass (2 new tests), `bun run biome check` 0 errors on changed
-files.
+**Verified:** `bun test` 101/101 pass (2 new tests), `bun run biome check` 0 errors on changed files.
 
 ---
 
 ## Deferred Items Reference
 
-The following findings were accepted as deferred during the original audit. They are tracked
-here as the canonical record; no separate issues were opened.
+The following findings were accepted as deferred during the original audit. They are tracked here as the canonical record; no separate issues were opened.
 
 | Finding | Decision | Condition for revisit |
 | --- | --- | --- |

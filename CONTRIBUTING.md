@@ -68,8 +68,7 @@ All checks must pass before merge.
 
 ## Releases & Versioning
 
-This project uses [Release Please](https://github.com/googleapis/release-please-action) to
-automate version management and changelog generation from [Conventional Commits](https://www.conventionalcommits.org/).
+This project uses [Release Please](https://github.com/googleapis/release-please-action) to automate version management and changelog generation from [Conventional Commits](https://www.conventionalcommits.org/).
 
 ### How It Works
 
@@ -80,13 +79,9 @@ automate version management and changelog generation from [Conventional Commits]
 
 ### Important: GITHUB_TOKEN Limitation
 
-Release Please runs using the default `GITHUB_TOKEN`. GitHub Actions workflows triggered by
-`GITHUB_TOKEN` do **not** trigger other workflows (this prevents recursive CI loops). This means
-CI checks (lint, typecheck, test) do **not** run on Release Please PRs.
+Release Please runs using the default `GITHUB_TOKEN`. GitHub Actions workflows triggered by `GITHUB_TOKEN` do **not** trigger other workflows (this prevents recursive CI loops). This means CI checks (lint, typecheck, test) do **not** run on Release Please PRs.
 
-This is expected behaviour. Contributors should never bump versions manually or merge Release
-PRs with failing status checks (the check is a formality and will always be pending, not
-failing).
+This is expected behaviour. Contributors should never bump versions manually or merge Release PRs with failing status checks (the check is a formality and will always be pending, not failing).
 
 ### What Contributors Need to Know
 
@@ -141,16 +136,12 @@ docs/             # Architecture and design documentation
 
 ## Tagging Convention
 
-Reusable workflow files (`pr-review.yml`, `issue-triage.yml`, `scan-security.yml`) are consumed
-by dispatcher workflows via SHA-pinned `uses:` references. Keeping those pins current requires a
-tag-and-bump convention:
+Reusable workflow files (`pr-review.yml`, `issue-triage.yml`, `scan-security.yml`) are consumed by dispatcher workflows via SHA-pinned `uses:` references. Keeping those pins current requires a tag-and-bump convention:
 
 - Cut an annotated semver tag (e.g. `git tag -a v0.2.0 -m "v0.2.0"`) on any merge to main that
-  touches a reusable workflow file referenced by a dispatcher (`pr-review.yml`, `issue-triage.yml`,
-  `scan-security.yml`).
+  touches a reusable workflow file referenced by a dispatcher (`pr-review.yml`, `issue-triage.yml`, `scan-security.yml`).
 - In the same or a prompt follow-up PR, bump the affected dispatcher workflow's (`aptu-review.yml`,
-  `aptu-triage.yml`, `aptu-scan-security.yml`) `uses:` pin to `@<new-tag-SHA> # <new-tag>` -- both
-  the SHA and comment must change together so the comment stays truthful.
+  `aptu-triage.yml`, `aptu-scan-security.yml`) `uses:` pin to `@<new-tag-SHA> # <new-tag>` -- both the SHA and comment must change together so the comment stays truthful.
 - Tags matching `v*.*.*` are protected by a repository ruleset: creation, deletion, and
   re-pointing (force-move) are restricted to repository admins.
 - This lets Renovate's github-actions manager track and bump the pin automatically when a newer
@@ -177,5 +168,4 @@ tag-and-bump convention:
 
 ## Code of Conduct
 
-This project adheres to the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md).
-Report unacceptable behavior to hugues+aptu-github-app-coc@linux.com.
+This project adheres to the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). Report unacceptable behavior to hugues+aptu-github-app-coc@linux.com.
