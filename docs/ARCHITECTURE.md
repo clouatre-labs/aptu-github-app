@@ -86,6 +86,7 @@ this is an accepted gap at the current scale, mitigated by the Cloudflare accoun
 Alert dashboard setting (no API exists to configure this programmatically) rather than
 application logic. Revisit both the exemption and the spend gap before `aptu-dev` is ever
 installed on an org other than `clouatre-labs`.
+
 ### Config Parser (`worker/src/config.ts`)
 
 `fetchRepoConfig` fetches `.github/aptu.yml` from the originating repository via the GitHub
