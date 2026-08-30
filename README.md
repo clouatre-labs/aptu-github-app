@@ -129,29 +129,27 @@ ai:
 
 ## Installation
 
-Each repository that uses the aptu GitHub App must install four files:
+Each repository that uses the aptu GitHub App must have these files:
 
 1. `.github/aptu.yml` -- opt-in configuration (see [Repository configuration](#repository-configuration) above)
 2. `.github/workflows/aptu-review.yml` -- dispatch handler for PR review
 3. `.github/workflows/aptu-triage.yml` -- dispatch handler for issue triage
 4. `.github/workflows/aptu-scan-security.yml` -- dispatch handler for security scans
 
+When a repository is added to an installation, the Worker automatically provisions the three
+workflow files above. You only need to add `.github/aptu.yml` and configure an AI provider API
+key secret (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`) in your repository.
+The GitHub App must have the **Workflows** permission enabled for automatic provisioning.
+
 Each dispatch handler receives its own `repository_dispatch` event type from the Worker and
 calls the appropriate reusable workflow hosted in `clouatre-labs/aptu-github-app`. The Worker
 mints an operation-scoped installation token and forwards it via `client_payload.installation_token`,
 which the dispatch handler passes into the reusable workflow's `secrets:` block. Installers do
 not need `APP_ID` or `APP_PRIVATE_KEY` secrets in their repository. The caller's AI API key
-secret is also passed to the reusable workflow via the `secrets:` block.
-
-Copy the dispatch handlers from
-[`.github/workflows/aptu-review.yml`](https://github.com/clouatre-labs/aptu-github-app/blob/main/.github/workflows/aptu-review.yml),
-[`.github/workflows/aptu-triage.yml`](https://github.com/clouatre-labs/aptu-github-app/blob/main/.github/workflows/aptu-triage.yml), and
-[`.github/workflows/aptu-scan-security.yml`](https://github.com/clouatre-labs/aptu-github-app/blob/main/.github/workflows/aptu-scan-security.yml)
-into your repo verbatim. They are identical for every installation and never need hand-editing.
-Each handler resolves your AI provider's API key from a repository secret named after the
-`ai.provider` in your `.github/aptu.yml` (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, or
-`GEMINI_API_KEY`). Create that secret in your own repository or rely on an org-visible secret
-of the same name.
+secret is also passed to the reusable workflow via the `secrets:` block. Each handler resolves
+the key named after the `ai.provider` in `.github/aptu.yml` (`OPENROUTER_API_KEY`,
+`ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`). Create that secret in your own repository or rely
+on an org-visible secret of the same name.
 
 ## Deployment
 

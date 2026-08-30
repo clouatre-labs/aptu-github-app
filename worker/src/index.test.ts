@@ -3086,3 +3086,101 @@ describe('IP validation', () => {
     expect(response.status).toBe(204);
   });
 });
+
+describe('workflow provisioning', () => {
+  const rawPrefix = 'https://raw.githubusercontent.com/clouatre-labs/aptu-github-app/main/.github/workflows/';
+  function setup(): void { vi.clearAllMocks(); fetchSpy = vi.spyOn(globalThis, 'fetch'); }
+  function payload(event: string, action: string, repos: unknown[], id = 7): string { return JSON.stringify({ action, installation: { id }, ...(event === 'installation' ? { repositories: repos } : { repositories_added: repos }) }); }
+  function signed(event: string, body: string): Record<string, string> { return { 'X-GitHub-Event': event, 'X-Hub-Signature-256': sign(mockEnv.WEBHOOK_SECRET, body), 'Content-Type': 'application/json' }; }
+  beforeEach(async () => { setup(); const { createAppAuth } = await import('@octokit/auth-app'); (createAppAuth as ReturnType<typeof vi.fn>).mockImplementation(() => vi.fn().mockResolvedValue({ token: 'provision-token' })); });
+
+  it('creates all three missing files with base64 content, message, scoped permissions, and headers', async () => {
+    fetchSpy.mockImplementation((url, init) => { const value = String(url); if (value.startsWith(rawPrefix)) return Promise.resolve(new Response(`source-${value.split('/').pop()}`)); if (!init?.method) return Promise.resolve(new Response(null, { status: 404 })); return Promise.resolve(new Response(null, { status: 201 })); });
+    const { provisionWorkflowFiles } = await import('./index.js'); await provisionWorkflowFiles(mockEnv, 'owner/repo', 7);
+    const puts = fetchSpy.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT'); expect(puts).toHaveLength(3);
+    for (const [url, init] of puts) { const name = String(url).split('/').pop(); const request = init as RequestInit; expect(JSON.parse(request.body as string)).toEqual({ message: 'ci: add aptu dispatch handler workflows', content: b64(`source-${name}`) }); expect(request.headers).toEqual({ Authorization: 'Bearer provision-token', Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'aptu-webhook/1.0', 'Content-Type': 'application/json' }); }
+    const { createAppAuth } = await import('@octokit/auth-app'); const auth = (createAppAuth as ReturnType<typeof vi.fn>).mock.results[0]?.value; expect(auth).toHaveBeenCalledWith(expect.objectContaining({ installationId: 7, repositoryNames: ['repo'], permissions: { contents: 'write', workflows: 'write' } }));
+  });
+  it('skips existing files without PUT and continues', async () => { let n = 0; fetchSpy.mockImplementation((url, init) => { if (String(url).startsWith(rawPrefix)) return Promise.resolve(new Response('source')); if (!init?.method) return Promise.resolve(new Response(null, { status: ++n === 1 ? 200 : 404 })); return Promise.resolve(new Response(null, { status: 201 })); }); const { provisionWorkflowFiles } = await import('./index.js'); await provisionWorkflowFiles(mockEnv, 'owner/repo', 7); expect(fetchSpy.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')).toHaveLength(2); });
+  it('continues after PUT 403', async () => {
+    let puts = 0;
+    fetchSpy.mockImplementation((url, init) => {
+      if (String(url).startsWith(rawPrefix)) return Promise.resolve(new Response('source'));
+      if (!init?.method) return Promise.resolve(new Response(null, { status: 404 }));
+      return Promise.resolve(new Response(null, { status: ++puts === 1 ? 403 : 201 }));
+    });
+    const body = payload('installation', 'created', [{ full_name: 'owner/repo' }]);
+    expect((await callHandler(body, signed('installation', body))).status).toBe(200);
+  });
+  it('continues after GET 409', async () => {
+    let gets = 0;
+    fetchSpy.mockImplementation((url, init) => {
+      if (String(url).startsWith(rawPrefix)) return Promise.resolve(new Response('source'));
+      if (!init?.method) return Promise.resolve(new Response(null, { status: ++gets === 1 ? 409 : 404 }));
+      return Promise.resolve(new Response(null, { status: 201 }));
+    });
+    const body = payload('installation', 'created', [{ full_name: 'owner/repo' }]);
+    expect((await callHandler(body, signed('installation', body))).status).toBe(200);
+  });
+  it('continues provisioning after the first repository rejects', async () => {
+    const value = payload('installation', 'created', [
+      { full_name: 'owner/first' },
+      { full_name: 'owner/second' },
+    ]);
+    fetchSpy.mockImplementation((url, init) => {
+      const target = String(url);
+      if (target.startsWith(rawPrefix)) return Promise.resolve(new Response('source'));
+      if (target.includes('/owner/first/')) return Promise.reject(new Error('failure'));
+      return Promise.resolve(new Response(null, { status: init?.method ? 201 : 404 }));
+    });
+    const response = await callHandler(value, signed('installation', value));
+    expect(response.status).toBe(200);
+    expect(fetchSpy.mock.calls.filter(([url]) => String(url).includes('/owner/second/contents/'))).toHaveLength(6);
+  });
+
+  it('routes installation.created to provisioning', async () => {
+    fetchSpy.mockImplementation((url, init) => {
+      const target = String(url);
+      if (target.startsWith(rawPrefix)) return Promise.resolve(new Response('source'));
+      return Promise.resolve(new Response(null, { status: init?.method ? 204 : 200 }));
+    });
+    const value = payload('installation', 'created', [{ full_name: 'owner/repo' }]);
+    expect((await callHandler(value, signed('installation', value))).status).toBe(200);
+    expect(fetchSpy).toHaveBeenCalled();
+  });
+
+  it('routes installation_repositories.added to provisioning', async () => {
+    fetchSpy.mockImplementation((url, init) => {
+      const target = String(url);
+      if (target.startsWith(rawPrefix)) return Promise.resolve(new Response('source'));
+      return Promise.resolve(new Response(null, { status: init?.method ? 204 : 200 }));
+    });
+    const value = payload('installation_repositories', 'added', [{ full_name: 'owner/repo' }]);
+    expect((await callHandler(value, signed('installation_repositories', value))).status).toBe(200);
+    expect(fetchSpy).toHaveBeenCalled();
+  });
+
+  it('does not provision after installation.deleted', async () => {
+    const value = payload('installation', 'deleted', []);
+    expect((await callHandler(value, signed('installation', value))).status).toBe(200);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not provision after installation_repositories.removed', async () => {
+    const value = payload('installation_repositories', 'removed', []);
+    expect((await callHandler(value, signed('installation_repositories', value))).status).toBe(200);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects a payload missing installation.id', async () => {
+    const value = JSON.stringify({ action: 'created', repositories: [{ full_name: 'owner/repo' }] });
+    expect((await callHandler(value, signed('installation', value))).status).toBe(400);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects a repository entry missing full_name', async () => {
+    const value = payload('installation', 'created', [{}]);
+    expect((await callHandler(value, signed('installation', value))).status).toBe(400);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});

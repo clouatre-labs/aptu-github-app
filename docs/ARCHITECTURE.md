@@ -33,6 +33,9 @@ installation. Responsibilities:
 - Evaluate `review.paths` globs (picomatch) against PR file lists; suppress dispatch if no
   file qualifies
 - Obtain a scoped dispatch token for the originating repository
+- Provision the standard dispatch handler workflows on `installation.created` and
+  `installation_repositories.added` events when the App has Contents and Workflows write
+  permissions; existing workflow files are never overwritten
 - POST a `repository_dispatch` event to the originating repository, carrying all context in
   `client_payload`
 - Return 200/204 to GitHub immediately; all processing is fire-and-forget after dispatch
@@ -116,6 +119,13 @@ graph TD
     O --> P["aptu CLI<br/>triage or review"]
     P --> Q["GitHub API<br/>post labels / review comments<br/>as aptu-dev[bot]"]
 ```
+
+### Workflow provisioning (installation trigger)
+
+When a GitHub App installation is created or repositories are added, the Worker obtains a
+scoped Contents and Workflows write token, checks each standard dispatch handler path, and
+creates only missing workflow files from the canonical sources. Deleted or removed events are
+no-ops, and individual repository or file failures do not prevent the remaining batch.
 
 ### Mention command trigger (`@aptu` in comments)
 
