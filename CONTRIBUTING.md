@@ -30,7 +30,7 @@ git push -u origin feat/your-feature-name
 
 Use [Conventional Commits](https://www.conventionalcommits.org/):
 
-```
+```text
 <type>: <description>
 ```
 
@@ -133,11 +133,28 @@ All new source files require SPDX license headers for REUSE compliance:
 
 ## Project Structure
 
-```
+```text
 worker/           # Cloudflare Worker source (webhook proxy)
 docs/             # Architecture and design documentation
 .github/          # GitHub Actions workflows, templates, instructions
 ```
+
+## Tagging Convention
+
+Reusable workflow files (`pr-review.yml`, `issue-triage.yml`, `scan-security.yml`) are consumed
+by dispatcher workflows via SHA-pinned `uses:` references. Keeping those pins current requires a
+tag-and-bump convention:
+
+- Cut an annotated semver tag (e.g. `git tag -a v0.2.0 -m "v0.2.0"`) on any merge to main that
+  touches a reusable workflow file referenced by a dispatcher (`pr-review.yml`, `issue-triage.yml`,
+  `scan-security.yml`).
+- In the same or a prompt follow-up PR, bump the affected dispatcher workflow's (`aptu-review.yml`,
+  `aptu-triage.yml`, `aptu-scan-security.yml`) `uses:` pin to `@<new-tag-SHA> # <new-tag>` -- both
+  the SHA and comment must change together so the comment stays truthful.
+- Tags matching `v*.*.*` are protected by a repository ruleset: creation, deletion, and
+  re-pointing (force-move) are restricted to repository admins.
+- This lets Renovate's github-actions manager track and bump the pin automatically when a newer
+  tag is cut (requires the SHA+comment form -- a bare SHA is not tracked).
 
 ## Contribution Checklist
 
