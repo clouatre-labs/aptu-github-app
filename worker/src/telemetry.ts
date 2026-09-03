@@ -58,6 +58,15 @@ export class TelemetryRateLimit {
   }
 }
 
+// Cap on distinct keys per count map (budget_drop_reason_counts,
+// finish_reasons_counts, model_tier_counts). These keys are legitimately
+// dynamic -- e.g. aptu's budget_drops includes `patch:<filename>` /
+// `file_content:<filename>` entries and model_tier_counts keys are
+// user-configured model strings -- so a fixed allowlist isn't viable here.
+// Existing keys keep accumulating past the cap; new keys are dropped once
+// it's reached, bounding the Durable Object's stored state.
+const MAX_COUNT_MAP_KEYS = 256;
+
 const ALLOWED_KEYS = new Set([
   'reviews_total',
   'truncation_events_total',
@@ -97,11 +106,15 @@ interface TelemetryAggregate {
   prompt_budget_pct_histogram: TelemetryHistogram;
 }
 
+function isValidCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
 function isCountMap(value: unknown): value is Record<string, number> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return false;
   }
-  return Object.values(value).every((v) => typeof v === 'number');
+  return Object.values(value).every(isValidCount);
 }
 
 function isFixedNumberArray(value: unknown, expected: number[]): boolean {
@@ -126,7 +139,7 @@ function isHistogram(value: unknown): value is TelemetryHistogram {
   if (obj.bucket_counts.length !== HISTOGRAM_BUCKET_COUNT) {
     return false;
   }
-  return obj.bucket_counts.every((v) => typeof v === 'number');
+  return obj.bucket_counts.every(isValidCount);
 }
 
 export function validateTelemetryPayload(
@@ -145,9 +158,9 @@ export function validateTelemetryPayload(
   }
 
   if (
-    typeof obj.reviews_total !== 'number' ||
-    typeof obj.truncation_events_total !== 'number' ||
-    typeof obj.files_truncated_total !== 'number' ||
+    !isValidCount(obj.reviews_total) ||
+    !isValidCount(obj.truncation_events_total) ||
+    !isValidCount(obj.files_truncated_total) ||
     typeof obj.run_id !== 'string' ||
     typeof obj.timestamp !== 'string'
   ) {
@@ -191,7 +204,11 @@ function mergeCountMap(
 ): Record<string, number> {
   const merged: Record<string, number> = { ...a };
   for (const [key, value] of Object.entries(b)) {
-    merged[key] = (merged[key] ?? 0) + value;
+    if (key in merged) {
+      merged[key] = (merged[key] as number) + value;
+    } else if (Object.keys(merged).length < MAX_COUNT_MAP_KEYS) {
+      merged[key] = value;
+    }
   }
   return merged;
 }

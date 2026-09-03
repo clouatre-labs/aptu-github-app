@@ -69,6 +69,88 @@ describe('validateTelemetryPayload', () => {
     delete payload.run_id;
     expect(validateTelemetryPayload(payload)).toBeNull();
   });
+
+  it.each([
+    ['reviews_total', Number.POSITIVE_INFINITY],
+    ['reviews_total', -1],
+    ['reviews_total', Number.NaN],
+    ['truncation_events_total', 1e400],
+    ['files_truncated_total', -5],
+  ])('returns null when %s is %p', async (field, value) => {
+    const { validateTelemetryPayload } = await import('./telemetry.js');
+    const payload = makeValidPayload({ [field]: value } as Partial<
+      Record<string, unknown>
+    > as Partial<TelemetryCounters>);
+    expect(validateTelemetryPayload(payload)).toBeNull();
+  });
+
+  it('returns null when a count-map value is non-finite or negative', async () => {
+    const { validateTelemetryPayload } = await import('./telemetry.js');
+    const payload = makeValidPayload({
+      budget_drop_reason_counts: { size_limit: -1 },
+    });
+    expect(validateTelemetryPayload(payload)).toBeNull();
+  });
+
+  it('returns null when a histogram bucket count is non-finite or negative', async () => {
+    const { validateTelemetryPayload } = await import('./telemetry.js');
+    const payload = makeValidPayload({
+      prompt_budget_pct_histogram: {
+        explicit_bounds: [25, 50, 75, 90],
+        bucket_counts: [0, 0, Number.POSITIVE_INFINITY, 0, 0],
+      },
+    });
+    expect(validateTelemetryPayload(payload)).toBeNull();
+  });
+});
+
+describe('mergeCountMap cardinality cap', () => {
+  it('drops new keys once the cap is reached but keeps accumulating existing ones', async () => {
+    // mergeCountMap isn't exported; exercise the cap via the DO it's used from.
+    const { TelemetryRollup } = await import('./telemetry.js');
+    const data = new Map<string, unknown>();
+    const ctx = {
+      storage: {
+        get: vi.fn((key: string) => Promise.resolve(data.get(key))),
+        put: vi.fn((key: string, value: unknown) => {
+          data.set(key, value);
+          return Promise.resolve();
+        }),
+      },
+    };
+    const rollup = new TelemetryRollup(ctx as unknown as DurableObjectState);
+
+    const seedCounts: Record<string, number> = {};
+    for (let i = 0; i < 256; i++) {
+      seedCounts[`reason-${i}`] = 1;
+    }
+    await rollup.fetch(
+      new Request('https://telemetry/rollup', {
+        method: 'POST',
+        body: JSON.stringify(
+          makeValidPayload({ budget_drop_reason_counts: seedCounts })
+        ),
+      })
+    );
+
+    await rollup.fetch(
+      new Request('https://telemetry/rollup', {
+        method: 'POST',
+        body: JSON.stringify(
+          makeValidPayload({
+            budget_drop_reason_counts: { 'reason-0': 1, 'brand-new-reason': 1 },
+          })
+        ),
+      })
+    );
+
+    const stored = data.get('aggregate') as {
+      budget_drop_reason_counts: Record<string, number>;
+    };
+    expect(Object.keys(stored.budget_drop_reason_counts)).toHaveLength(256);
+    expect(stored.budget_drop_reason_counts['reason-0']).toBe(2);
+    expect(stored.budget_drop_reason_counts['brand-new-reason']).toBeUndefined();
+  });
 });
 
 describe('handleTelemetryRollup', () => {
