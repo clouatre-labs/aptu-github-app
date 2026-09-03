@@ -78,8 +78,13 @@ The `scan` block enables aptu's local pattern-based security scanning. Scan runs
 | `scan.enabled` | boolean | `false` | Enable aptu scan-security on pull requests. Runs local pattern-based secret scanning and uploads SARIF results to GitHub Code Scanning. No `ai` block required. |
 | `scan.fail-on` | string | -- | Comma-separated severities that fail the scan (`critical`, `high`, `medium`, `low`). Omit to report findings without failing the check. |
 | `scan.path` | string | `.` | Root directory to scan. |
+| `telemetry.enabled` | boolean | `false` | Opt in to POST anonymized review-context counters (`reviews_total`, `truncation_events_total`, `files_truncated_total`, `budget_drop_reason_counts`, `finish_reasons_counts`, `model_tier_counts`, `prompt_budget_pct_histogram`) to the hosted Worker for aggregate product analytics. No repo, PR, or actor identifiers are ever included; a failed or unreachable POST never fails the PR review job. Off by default. |
 
-All fields under `triage`, `review`, `scan`, and `ai` are validated strictly: unknown keys are ignored, but a missing `enabled` boolean causes the entire config to be rejected (no dispatch). Both `ai` fields (`provider` and `model`) are required if the `ai` block is present; a partial or empty-string block is rejected.
+All fields under `triage`, `review`, `scan`, `ai`, and `telemetry` are validated strictly: unknown keys are ignored, but a missing `enabled` boolean causes the entire config to be rejected (no dispatch). Both `ai` fields (`provider` and `model`) are required if the `ai` block is present; a partial or empty-string block is rejected.
+
+### Telemetry rollup
+
+When `telemetry.enabled: true`, the `pr-review.yml` workflow passes `telemetry-rollup: true` to the `clouatre-labs/aptu` action, which writes anonymized counters to `.aptu/telemetry-rollup.jsonl`. The workflow then POSTs the last JSONL line to the hosted Worker's `POST /telemetry/rollup` endpoint, which validates the payload against a strict key allowlist and merges it into a single global aggregate. The endpoint never returns anything but `202 Accepted`, and the POST step uses `continue-on-error: true` plus shell-level `|| true`, so a missing file, malformed payload, or network failure never fails the PR review job. See [`clouatre-labs/aptu`'s docs/GITHUB_ACTION.md](https://github.com/clouatre-labs/aptu/blob/main/docs/GITHUB_ACTION.md) for the exact per-field counter semantics.
 
 ### Minimal opt-in example
 

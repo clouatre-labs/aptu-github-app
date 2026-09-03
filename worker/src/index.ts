@@ -6,6 +6,7 @@ import { createAppAuth } from '@octokit/auth-app';
 // Re-exported for Cloudflare Worker binding: wrangler requires Durable Object
 // classes to be exported from the entry point (this file) to register them.
 export { InstallationQuota } from './quota';
+export { TelemetryRateLimit, TelemetryRollup } from './telemetry';
 
 import { captureException, withSentry } from '@sentry/cloudflare';
 import {
@@ -15,6 +16,7 @@ import {
   shouldDispatch,
   shouldSkipByPathFilters,
 } from './config';
+import { handleTelemetryRollup } from './telemetry';
 
 export interface Env {
   WEBHOOK_SECRET: string;
@@ -25,6 +27,8 @@ export interface Env {
   OPERATOR_ORG: string;
   QUOTA: DurableObjectNamespace;
   REPLAY_GUARD: DurableObjectNamespace;
+  TELEMETRY: DurableObjectNamespace;
+  TELEMETRY_RATE_LIMIT: DurableObjectNamespace;
 }
 
 export function hexToBytes(hex: string): Uint8Array {
@@ -507,6 +511,7 @@ export async function handleMentionCommand(
             pull_number: number,
             instructions_file: config?.review?.['instructions-file'] ?? null,
             skip_labeled: config?.review?.['skip-labeled'] ?? false,
+            telemetry_enabled: config?.telemetry?.enabled ?? false,
             ...(config?.ai
               ? {
                   ai_provider: config.ai.provider,
@@ -665,6 +670,11 @@ export class ReplayGuard {
 
 export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    if (request.method === 'POST' && url.pathname === '/telemetry/rollup') {
+      return handleTelemetryRollup(request, env);
+    }
+
     if (request.method !== 'POST')
       return new Response('Method Not Allowed', { status: 405 });
 
@@ -910,6 +920,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
               instructions_file: config?.review?.['instructions-file'] ?? null,
               skip_labeled: config?.review?.['skip-labeled'] ?? false,
               installation_token: reviewToken,
+              telemetry_enabled: config?.telemetry?.enabled ?? false,
               ...(config?.ai
                 ? {
                     ai_provider: config.ai.provider,

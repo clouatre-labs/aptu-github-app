@@ -7,6 +7,10 @@ main = "src/index.ts"
 pattern = "aptu.dev/webhook"
 zone_name = "aptu.dev"
 
+[[routes]]
+pattern = "aptu.dev/telemetry/rollup"
+zone_name = "aptu.dev"
+
 [[durable_objects.bindings]]
 name = "QUOTA"
 class_name = "InstallationQuota"
@@ -14,6 +18,14 @@ class_name = "InstallationQuota"
 [[durable_objects.bindings]]
 name = "REPLAY_GUARD"
 class_name = "ReplayGuard"
+
+[[durable_objects.bindings]]
+name = "TELEMETRY"
+class_name = "TelemetryRollup"
+
+[[durable_objects.bindings]]
+name = "TELEMETRY_RATE_LIMIT"
+class_name = "TelemetryRateLimit"
 
 [[migrations]]
 tag = "v1"
@@ -26,6 +38,14 @@ new_sqlite_classes = ["ReplayGuard"]
 [[migrations]]
 tag = "v4"
 deleted_classes = ["GlobalQuota"]
+
+[[migrations]]
+tag = "v5"
+new_sqlite_classes = ["TelemetryRollup"]
+
+[[migrations]]
+tag = "v6"
+new_sqlite_classes = ["TelemetryRateLimit"]
 
 [vars]
 # SENTRY_DSN = ""  # Set via: bunx wrangler secret put SENTRY_DSN

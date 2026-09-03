@@ -28,6 +28,7 @@ export interface AptuConfig {
   };
   scan?: ScanConfig;
   ai?: AiConfig;
+  telemetry?: { enabled: boolean };
 }
 
 export async function fetchRepoConfig(
@@ -148,6 +149,19 @@ export function parseConfig(raw: string): AptuConfig | null {
       config.ai = {
         provider: aiObj.provider,
         model: aiObj.model,
+      };
+    }
+
+    if (parsed.telemetry !== undefined) {
+      if (typeof parsed.telemetry !== 'object' || parsed.telemetry === null) {
+        return null;
+      }
+      const telemetryObj = parsed.telemetry as Record<string, unknown>;
+      if (typeof telemetryObj.enabled !== 'boolean') {
+        return null;
+      }
+      config.telemetry = {
+        enabled: telemetryObj.enabled,
       };
     }
 

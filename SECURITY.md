@@ -60,7 +60,7 @@ Include:
 
 ## Attack Surface
 
-This project has three primary attack surfaces:
+This project has four primary attack surfaces:
 
 ### WEBHOOK_SECRET Exposure
 
@@ -72,7 +72,9 @@ The `WEBHOOK_SECRET` secret authenticates GitHub webhook requests to the Cloudfl
 
 If HMAC signature validation is skipped or incorrectly implemented, an attacker can send forged webhook payloads to the Worker, triggering unauthorized `repository_dispatch` events.
 
-**Mitigations**: HMAC validation is the first step in the Worker request handler; all paths are validated; validation failures return 401 immediately with no further processing.
+**Mitigations**: HMAC validation is the first step in the Worker request handler for all GitHub webhook paths; validation failures return 401 immediately with no further processing.
+
+**Explicit exception**: `POST /telemetry/rollup` is routed before HMAC validation and does not require a signature. This is intentional, not an oversight: it receives POSTs from the `aptu` GitHub Action running in consuming repositories' CI, not from GitHub's webhook infrastructure, so a shared webhook secret does not apply to it. The endpoint is opt-in, accepts only an aggregate-only, anonymized counters payload (no repo, PR, or actor identifiers -- see `worker/src/telemetry.ts`), and bounds its own risk instead of relying on HMAC: a strict key allowlist rejects any unrecognized field, numeric fields are bounds-checked (finite, non-negative), count-map cardinality is capped, `run_id` is deduplicated, and a per-IP rolling-window rate limit (`TelemetryRateLimit` Durable Object) bounds how much an unauthenticated caller can write. It always returns 202 regardless of payload validity so a telemetry POST never fails the caller's CI job.
 
 ### CLOUDFLARE_API_TOKEN Scope
 

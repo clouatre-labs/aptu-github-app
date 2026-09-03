@@ -28,6 +28,10 @@ on:
         required: false
         type: string
         default: 'google/gemma-4-26b-a4b-it'
+      telemetry_enabled:
+        required: false
+        type: boolean
+        default: false
     secrets:
       ai-api-key:
         required: false
@@ -67,3 +71,13 @@ jobs:
           pull-number: ${{ inputs.pull_number }}
           max-prompt-chars: '200000'
           max-full-content-files: '0'
+          telemetry-rollup: ${{ inputs.telemetry_enabled }}
+
+      - name: Report telemetry rollup
+        if: inputs.telemetry_enabled
+        continue-on-error: true
+        run: |
+          (tail -n 1 .aptu/telemetry-rollup.jsonl 2>/dev/null || true) | \
+            curl -sf -X POST https://aptu.dev/telemetry/rollup \
+              -H 'Content-Type: application/json' \
+              --data-binary @- >/dev/null 2>&1 || true
