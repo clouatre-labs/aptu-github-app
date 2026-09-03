@@ -258,6 +258,24 @@ function mergeAggregate(
   };
 }
 
+interface SeenRunId {
+  runId: string;
+  ts: number;
+}
+
+// Bounds for the recently-seen run_id list used to dedup retried/re-run CI
+// jobs. Mirrors InstallationQuota's rolling-window + prune pattern.
+const RUN_ID_DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000;
+const RUN_ID_DEDUP_MAX_ENTRIES = 2000;
+
+function pruneSeenRunIds(entries: SeenRunId[], now: number): SeenRunId[] {
+  const cutoff = now - RUN_ID_DEDUP_WINDOW_MS;
+  const recent = entries.filter((entry) => entry.ts > cutoff);
+  return recent.length > RUN_ID_DEDUP_MAX_ENTRIES
+    ? recent.slice(recent.length - RUN_ID_DEDUP_MAX_ENTRIES)
+    : recent;
+}
+
 export class TelemetryRollup {
   private ctx: DurableObjectState;
 
@@ -268,12 +286,23 @@ export class TelemetryRollup {
   async fetch(request: Request): Promise<Response> {
     try {
       const counters = (await request.json()) as TelemetryCounters;
-      const key = 'aggregate';
-      const stored = await this.ctx.storage.get<TelemetryAggregate>(key);
-      const merged = mergeAggregate(stored, counters);
-      await this.ctx.storage.put(key, merged);
-    } catch {
-      // Fire-and-forget: never surface a failure to the caller.
+      const now = Date.now();
+      const seenKey = 'seen_run_ids';
+      const storedSeen = await this.ctx.storage.get<SeenRunId[]>(seenKey);
+      const seen = pruneSeenRunIds(storedSeen ?? [], now);
+
+      if (!seen.some((entry) => entry.runId === counters.run_id)) {
+        const key = 'aggregate';
+        const stored = await this.ctx.storage.get<TelemetryAggregate>(key);
+        const merged = mergeAggregate(stored, counters);
+        await this.ctx.storage.put(key, merged);
+        seen.push({ runId: counters.run_id, ts: now });
+      }
+
+      await this.ctx.storage.put(seenKey, seen);
+    } catch (error) {
+      // Fire-and-forget: never surface a failure to the caller, only log it.
+      captureException(error, { tags: { component: 'telemetry-rollup-do' } });
     }
     return new Response(null, { status: 202 });
   }
@@ -307,7 +336,8 @@ export async function handleTelemetryRollup(
   let body: unknown;
   try {
     body = await request.json();
-  } catch {
+  } catch (error) {
+    captureException(error, { tags: { component: 'telemetry-rollup' } });
     return new Response(null, { status: 202 });
   }
 
@@ -324,8 +354,9 @@ export async function handleTelemetryRollup(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(counters),
     });
-  } catch {
-    // Fire-and-forget: DO errors never surface to the caller.
+  } catch (error) {
+    // Fire-and-forget: DO errors never surface to the caller, only logged.
+    captureException(error, { tags: { component: 'telemetry-rollup' } });
   }
 
   return new Response(null, { status: 202 });

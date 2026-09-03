@@ -128,7 +128,10 @@ describe('mergeCountMap cardinality cap', () => {
       new Request('https://telemetry/rollup', {
         method: 'POST',
         body: JSON.stringify(
-          makeValidPayload({ budget_drop_reason_counts: seedCounts })
+          makeValidPayload({
+            run_id: 'seed-run',
+            budget_drop_reason_counts: seedCounts,
+          })
         ),
       })
     );
@@ -138,6 +141,7 @@ describe('mergeCountMap cardinality cap', () => {
         method: 'POST',
         body: JSON.stringify(
           makeValidPayload({
+            run_id: 'second-run',
             budget_drop_reason_counts: { 'reason-0': 1, 'brand-new-reason': 1 },
           })
         ),
@@ -189,8 +193,10 @@ describe('handleTelemetryRollup', () => {
     vi.clearAllMocks();
   });
 
-  it('returns 202 without calling the DO on malformed JSON body', async () => {
+  it('returns 202, logs to Sentry, and skips the DO on malformed JSON body', async () => {
     const { handleTelemetryRollup } = await import('./telemetry.js');
+    const { captureException } = await import('@sentry/cloudflare');
+    vi.mocked(captureException).mockClear();
     const { env, stubFetch } = makeMockEnv();
     const request = new Request('https://aptu.dev/telemetry/rollup', {
       method: 'POST',
@@ -200,6 +206,26 @@ describe('handleTelemetryRollup', () => {
     const response = await handleTelemetryRollup(request, env as any);
     expect(response.status).toBe(202);
     expect(stubFetch).not.toHaveBeenCalled();
+    expect(captureException).toHaveBeenCalled();
+  });
+
+  it('returns 202 and logs to Sentry when the TELEMETRY DO fetch fails', async () => {
+    const { handleTelemetryRollup } = await import('./telemetry.js');
+    const { captureException } = await import('@sentry/cloudflare');
+    vi.mocked(captureException).mockClear();
+    const { env } = makeMockEnv();
+    // biome-ignore lint/suspicious/noExplicitAny: minimal Env stub for this test
+    (env as any).TELEMETRY.get = vi.fn(() => ({
+      fetch: vi.fn(() => Promise.reject(new Error('DO unavailable'))),
+    }));
+    const request = new Request('https://aptu.dev/telemetry/rollup', {
+      method: 'POST',
+      body: JSON.stringify(makeValidPayload()),
+    });
+    // biome-ignore lint/suspicious/noExplicitAny: minimal Env stub for this test
+    const response = await handleTelemetryRollup(request, env as any);
+    expect(response.status).toBe(202);
+    expect(captureException).toHaveBeenCalled();
   });
 
   it('forwards a valid payload to the TELEMETRY DO and returns 202', async () => {
@@ -352,6 +378,7 @@ describe('TelemetryRollup Durable Object', () => {
     );
 
     const first = makeValidPayload({
+      run_id: 'run-1',
       reviews_total: 2,
       budget_drop_reason_counts: { size_limit: 1 },
       prompt_budget_pct_histogram: {
@@ -360,6 +387,7 @@ describe('TelemetryRollup Durable Object', () => {
       },
     });
     const second = makeValidPayload({
+      run_id: 'run-2',
       reviews_total: 3,
       budget_drop_reason_counts: { size_limit: 2, token_limit: 1 },
       prompt_budget_pct_histogram: {
@@ -381,7 +409,10 @@ describe('TelemetryRollup Durable Object', () => {
       })
     );
 
-    const stored = ctx.storage.put.mock.calls.at(-1)?.[1] as {
+    const aggregatePuts = ctx.storage.put.mock.calls.filter(
+      ([key]) => key === 'aggregate'
+    );
+    const stored = aggregatePuts.at(-1)?.[1] as {
       reviews_total: number;
       budget_drop_reason_counts: Record<string, number>;
       prompt_budget_pct_histogram: { bucket_counts: number[] };
@@ -394,5 +425,51 @@ describe('TelemetryRollup Durable Object', () => {
     expect(stored.prompt_budget_pct_histogram.bucket_counts).toEqual([
       1, 1, 0, 0, 0,
     ]);
+  });
+
+  it('skips the merge when the same run_id is posted twice', async () => {
+    const { TelemetryRollup } = await import('./telemetry.js');
+    const ctx = makeMockCtx();
+    const rollup = new TelemetryRollup(ctx as unknown as DurableObjectState);
+
+    const payload = makeValidPayload({ run_id: 'dup-run', reviews_total: 2 });
+
+    await rollup.fetch(
+      new Request('https://telemetry/rollup', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+    );
+    await rollup.fetch(
+      new Request('https://telemetry/rollup', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+    );
+
+    const aggregatePuts = ctx.storage.put.mock.calls.filter(
+      ([key]) => key === 'aggregate'
+    );
+    expect(aggregatePuts).toHaveLength(1);
+    const stored = aggregatePuts[0]?.[1] as { reviews_total: number };
+    expect(stored.reviews_total).toBe(2);
+  });
+
+  it('logs to Sentry instead of silently swallowing an internal failure', async () => {
+    const { TelemetryRollup } = await import('./telemetry.js');
+    const { captureException } = await import('@sentry/cloudflare');
+    vi.mocked(captureException).mockClear();
+    const ctx = makeMockCtx();
+    const rollup = new TelemetryRollup(ctx as unknown as DurableObjectState);
+
+    const response = await rollup.fetch(
+      new Request('https://telemetry/rollup', {
+        method: 'POST',
+        body: 'not json',
+      })
+    );
+
+    expect(response.status).toBe(202);
+    expect(captureException).toHaveBeenCalled();
   });
 });
