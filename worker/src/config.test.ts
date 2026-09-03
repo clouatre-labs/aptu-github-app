@@ -68,6 +68,28 @@ describe('parseConfig', () => {
     );
     expect(parseConfig(raw)).toBeNull();
   });
+
+  it('parses telemetry.enabled: true', () => {
+    const raw = btoa('version: 1\ntelemetry:\n  enabled: true');
+    const config = parseConfig(raw);
+    expect(config?.telemetry?.enabled).toBe(true);
+  });
+
+  it('parses telemetry.enabled: false', () => {
+    const raw = btoa('version: 1\ntelemetry:\n  enabled: false');
+    const config = parseConfig(raw);
+    expect(config?.telemetry?.enabled).toBe(false);
+  });
+
+  it('returns null when telemetry.enabled is a non-boolean', () => {
+    const raw = btoa('version: 1\ntelemetry:\n  enabled: "yes"');
+    expect(parseConfig(raw)).toBeNull();
+  });
+
+  it('returns null when telemetry block is missing enabled field', () => {
+    const raw = btoa('version: 1\ntelemetry:\n  other: true');
+    expect(parseConfig(raw)).toBeNull();
+  });
 });
 
 describe('shouldDispatch', () => {

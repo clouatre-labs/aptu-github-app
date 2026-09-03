@@ -22,6 +22,7 @@ jobs:
       skip_labeled: ${{ github.event.client_payload.skip_labeled || false }}
       ai_provider: ${{ github.event.client_payload.ai_provider || 'openrouter' }}
       ai_model: ${{ github.event.client_payload.ai_model || 'google/gemma-4-26b-a4b-it' }}
+      telemetry_enabled: ${{ github.event.client_payload.telemetry_enabled || false }}
     secrets:
       ai-api-key: >-
         ${{ (github.event.client_payload.ai_provider == 'anthropic' && secrets.ANTHROPIC_API_KEY)

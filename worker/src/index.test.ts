@@ -49,6 +49,16 @@ function makeMockQuotaNamespace(): DurableObjectNamespace {
   } as unknown as DurableObjectNamespace;
 }
 
+function makeTelemetryMockNamespace(): DurableObjectNamespace {
+  const stub = {
+    fetch: vi.fn(() => Promise.resolve(new Response(null, { status: 202 }))),
+  };
+  return {
+    idFromName: vi.fn(() => 'mock-id' as unknown as DurableObjectId),
+    get: vi.fn(() => stub as unknown as DurableObjectStub),
+  } as unknown as DurableObjectNamespace;
+}
+
 function makeReplayGuardMockNamespace(): DurableObjectNamespace {
   const stored = new Set<string>();
   const stub = {
@@ -156,6 +166,35 @@ function mockEnabledWithAiFetch(): (
   };
 }
 
+function mockEnabledWithTelemetryFetch(): (
+  input: string | URL | Request,
+  init?: RequestInit
+) => Promise<Response> {
+  return (url: string | URL | Request) => {
+    const urlStr =
+      typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+    if (urlStr.includes('/contents/.github/aptu.yml')) {
+      return Promise.resolve(
+        makeConfigResponse(
+          'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\ntelemetry:\n  enabled: true'
+        )
+      );
+    }
+    if (urlStr.includes('/collaborators/')) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            user: { permissions: { pull: true } },
+            role_name: 'read',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+    }
+    return Promise.resolve(new Response(null, { status: 204 }));
+  };
+}
+
 const mockEnv = {
   WEBHOOK_SECRET: 'test-secret',
   APP_PRIVATE_KEY: 'fake-key',
@@ -165,6 +204,7 @@ const mockEnv = {
   OPERATOR_ORG: 'clouatre-labs',
   QUOTA: makeMockQuotaNamespace(),
   REPLAY_GUARD: makeReplayGuardMockNamespace(),
+  TELEMETRY: makeTelemetryMockNamespace(),
 };
 
 async function callHandler(
@@ -492,6 +532,102 @@ describe('repository_dispatch client_payload', () => {
         permissions: { contents: 'write' },
       })
     );
+  });
+
+  it('includes telemetry_enabled: true in aptu-review dispatch payload for pull_request event when config enables telemetry', async () => {
+    fetchSpy.mockImplementation(mockEnabledWithTelemetryFetch());
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 20 },
+      pull_request: { number: 99, title: 'Telemetry test' },
+      repository: { full_name: 'myorg/myrepo', owner: { login: 'myorg' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    const dispatchCall = fetchSpy.mock.calls.find((call) =>
+      String(call[0]).includes('/dispatches')
+    ) as [string, RequestInit];
+    const parsed = JSON.parse(dispatchCall[1].body as string);
+    expect(parsed.client_payload.telemetry_enabled).toBe(true);
+  });
+
+  it('includes telemetry_enabled: true in aptu-review dispatch payload for mention-command dispatch when config enables telemetry', async () => {
+    fetchSpy.mockImplementation(mockEnabledWithTelemetryFetch());
+    const body = JSON.stringify({
+      action: 'created',
+      installation: { id: 1 },
+      pull_request: { number: 99 },
+      comment: {
+        user: { id: 100, login: 'user1' },
+        id: 99,
+        body: '@aptu review this',
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    await callHandler(body, {
+      'X-GitHub-Event': 'pull_request_review_comment',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    const dispatchCall = fetchSpy.mock.calls.find((call) =>
+      String(call[0]).includes('/dispatches')
+    ) as [string, RequestInit];
+    const parsed = JSON.parse(dispatchCall[1].body as string);
+    expect(parsed.client_payload.telemetry_enabled).toBe(true);
+  });
+
+  it('defaults telemetry_enabled to false when the config has no telemetry block', async () => {
+    fetchSpy.mockImplementation(mockEnabledFetch());
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 20 },
+      pull_request: { number: 99, title: 'No telemetry block' },
+      repository: { full_name: 'myorg/myrepo', owner: { login: 'myorg' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+    const dispatchCall = fetchSpy.mock.calls.find((call) =>
+      String(call[0]).includes('/dispatches')
+    ) as [string, RequestInit];
+    const parsed = JSON.parse(dispatchCall[1].body as string);
+    expect(parsed.client_payload.telemetry_enabled).toBe(false);
+  });
+});
+
+describe('POST /telemetry/rollup routing', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockImplementation(mockEnabledFetch());
+  });
+
+  it('returns 202 without an X-Hub-Signature-256 header, bypassing HMAC validation', async () => {
+    const { default: handler } = await import('./index.js');
+    const request = new Request('https://aptu.dev/telemetry/rollup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reviews_total: 1 }),
+    });
+    const response = await handler.fetch(request, mockEnv);
+    expect(response.status).toBe(202);
+  });
+
+  it('does not affect existing POST /webhook behavior (still requires a valid signature)', async () => {
+    const body = JSON.stringify({ action: 'opened' });
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(401);
   });
 });
 
