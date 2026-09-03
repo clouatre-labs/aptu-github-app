@@ -4,8 +4,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TelemetryCounters } from './telemetry.js';
 
+// Provide the same full shape as index.test.ts's mock of this module --
+// bun's test runner shares a single module mock registry across test
+// files, so a partial mock here would clobber withSentry/addBreadcrumb
+// for whichever file's mock factory registers last.
 vi.mock('@sentry/cloudflare', () => ({
+  withSentry: vi.fn((_optionsCallback: unknown, handler: unknown) => handler),
   captureException: vi.fn(),
+  addBreadcrumb: vi.fn(),
 }));
 
 function makeValidPayload(
@@ -196,7 +202,6 @@ describe('handleTelemetryRollup', () => {
   it('returns 202, logs to Sentry, and skips the DO on malformed JSON body', async () => {
     const { handleTelemetryRollup } = await import('./telemetry.js');
     const { captureException } = await import('@sentry/cloudflare');
-    vi.mocked(captureException).mockClear();
     const { env, stubFetch } = makeMockEnv();
     const request = new Request('https://aptu.dev/telemetry/rollup', {
       method: 'POST',
@@ -212,7 +217,6 @@ describe('handleTelemetryRollup', () => {
   it('returns 202 and logs to Sentry when the TELEMETRY DO fetch fails', async () => {
     const { handleTelemetryRollup } = await import('./telemetry.js');
     const { captureException } = await import('@sentry/cloudflare');
-    vi.mocked(captureException).mockClear();
     const { env } = makeMockEnv();
     // biome-ignore lint/suspicious/noExplicitAny: minimal Env stub for this test
     (env as any).TELEMETRY.get = vi.fn(() => ({
@@ -352,6 +356,10 @@ describe('TelemetryRateLimit Durable Object', () => {
 });
 
 describe('TelemetryRollup Durable Object', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   interface MockStorage {
     get: ReturnType<typeof vi.fn>;
     put: ReturnType<typeof vi.fn>;
@@ -458,7 +466,6 @@ describe('TelemetryRollup Durable Object', () => {
   it('logs to Sentry instead of silently swallowing an internal failure', async () => {
     const { TelemetryRollup } = await import('./telemetry.js');
     const { captureException } = await import('@sentry/cloudflare');
-    vi.mocked(captureException).mockClear();
     const ctx = makeMockCtx();
     const rollup = new TelemetryRollup(ctx as unknown as DurableObjectState);
 
