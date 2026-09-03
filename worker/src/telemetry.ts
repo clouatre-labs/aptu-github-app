@@ -96,15 +96,7 @@ export interface TelemetryCounters {
   timestamp: string;
 }
 
-interface TelemetryAggregate {
-  reviews_total: number;
-  truncation_events_total: number;
-  files_truncated_total: number;
-  budget_drop_reason_counts: Record<string, number>;
-  finish_reasons_counts: Record<string, number>;
-  model_tier_counts: Record<string, number>;
-  prompt_budget_pct_histogram: TelemetryHistogram;
-}
+type TelemetryAggregate = Omit<TelemetryCounters, 'run_id' | 'timestamp'>;
 
 function isValidCount(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;

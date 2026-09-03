@@ -77,7 +77,12 @@ jobs:
         if: inputs.telemetry_enabled
         continue-on-error: true
         run: |
-          (tail -n 1 .aptu/telemetry-rollup.jsonl 2>/dev/null || true) | \
-            curl -sf -X POST https://aptu.dev/telemetry/rollup \
-              -H 'Content-Type: application/json' \
-              --data-binary @- >/dev/null 2>&1 || true
+          line="$(tail -n 1 .aptu/telemetry-rollup.jsonl 2>/dev/null || true)"
+          if [ -z "$line" ] || ! printf '%s' "$line" | jq -e . >/dev/null 2>&1; then
+            echo "::warning::Skipping telemetry rollup POST: last line of .aptu/telemetry-rollup.jsonl is missing or not valid JSON (likely truncated)"
+          else
+            printf '%s' "$line" | \
+              curl -sf -X POST https://aptu.dev/telemetry/rollup \
+                -H 'Content-Type: application/json' \
+                --data-binary @- >/dev/null 2>&1 || true
+          fi
