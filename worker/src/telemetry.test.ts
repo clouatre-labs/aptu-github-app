@@ -4,6 +4,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TelemetryCounters } from './telemetry.js';
 
+vi.mock('@sentry/cloudflare', () => ({
+  captureException: vi.fn(),
+}));
+
 function makeValidPayload(
   overrides: Partial<TelemetryCounters> = {}
 ): TelemetryCounters {
@@ -68,21 +72,35 @@ describe('validateTelemetryPayload', () => {
 });
 
 describe('handleTelemetryRollup', () => {
-  function makeMockEnv(): {
-    env: { TELEMETRY: DurableObjectNamespace };
+  function makeMockEnv(options: { rateLimitExceeded?: boolean } = {}): {
+    env: {
+      TELEMETRY: DurableObjectNamespace;
+      TELEMETRY_RATE_LIMIT: DurableObjectNamespace;
+    };
     stubFetch: ReturnType<typeof vi.fn>;
+    rateLimitFetch: ReturnType<typeof vi.fn>;
   } {
     const stubFetch = vi.fn(() =>
       Promise.resolve(new Response(null, { status: 202 }))
     );
     const stub = { fetch: stubFetch };
+    const rateLimitFetch = vi.fn(() =>
+      Promise.resolve(
+        Response.json({ exceeded: options.rateLimitExceeded ?? false })
+      )
+    );
+    const rateLimitStub = { fetch: rateLimitFetch };
     const env = {
       TELEMETRY: {
         idFromName: vi.fn(() => 'mock-id' as unknown as DurableObjectId),
         get: vi.fn(() => stub as unknown as DurableObjectStub),
       } as unknown as DurableObjectNamespace,
+      TELEMETRY_RATE_LIMIT: {
+        idFromName: vi.fn(() => 'mock-id' as unknown as DurableObjectId),
+        get: vi.fn(() => rateLimitStub as unknown as DurableObjectStub),
+      } as unknown as DurableObjectNamespace,
     };
-    return { env, stubFetch };
+    return { env, stubFetch, rateLimitFetch };
   }
 
   beforeEach(() => {
@@ -126,6 +144,102 @@ describe('handleTelemetryRollup', () => {
     const response = await handleTelemetryRollup(request, env as any);
     expect(response.status).toBe(202);
     expect(stubFetch).not.toHaveBeenCalled();
+  });
+
+  it('checks the rate limiter when CF-Connecting-IP is present and still forwards a valid payload', async () => {
+    const { handleTelemetryRollup } = await import('./telemetry.js');
+    const { env, stubFetch, rateLimitFetch } = makeMockEnv();
+    const request = new Request('https://aptu.dev/telemetry/rollup', {
+      method: 'POST',
+      headers: { 'CF-Connecting-IP': '203.0.113.5' },
+      body: JSON.stringify(makeValidPayload()),
+    });
+    // biome-ignore lint/suspicious/noExplicitAny: minimal Env stub for this test
+    const response = await handleTelemetryRollup(request, env as any);
+    expect(response.status).toBe(202);
+    expect(rateLimitFetch).toHaveBeenCalledTimes(1);
+    expect(stubFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns 202 without calling the TELEMETRY DO when the rate limit is exceeded', async () => {
+    const { handleTelemetryRollup } = await import('./telemetry.js');
+    const { env, stubFetch } = makeMockEnv({ rateLimitExceeded: true });
+    const request = new Request('https://aptu.dev/telemetry/rollup', {
+      method: 'POST',
+      headers: { 'CF-Connecting-IP': '203.0.113.5' },
+      body: JSON.stringify(makeValidPayload()),
+    });
+    // biome-ignore lint/suspicious/noExplicitAny: minimal Env stub for this test
+    const response = await handleTelemetryRollup(request, env as any);
+    expect(response.status).toBe(202);
+    expect(stubFetch).not.toHaveBeenCalled();
+  });
+
+  it('fails open and still forwards a valid payload when the rate limiter DO throws', async () => {
+    const { handleTelemetryRollup } = await import('./telemetry.js');
+    const { env, stubFetch } = makeMockEnv();
+    // biome-ignore lint/suspicious/noExplicitAny: minimal Env stub for this test
+    (env as any).TELEMETRY_RATE_LIMIT.get = vi.fn(() => ({
+      fetch: vi.fn(() => Promise.reject(new Error('DO unavailable'))),
+    }));
+    const request = new Request('https://aptu.dev/telemetry/rollup', {
+      method: 'POST',
+      headers: { 'CF-Connecting-IP': '203.0.113.5' },
+      body: JSON.stringify(makeValidPayload()),
+    });
+    // biome-ignore lint/suspicious/noExplicitAny: minimal Env stub for this test
+    const response = await handleTelemetryRollup(request, env as any);
+    expect(response.status).toBe(202);
+    expect(stubFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('TelemetryRateLimit Durable Object', () => {
+  interface MockStorage {
+    get: ReturnType<typeof vi.fn>;
+    put: ReturnType<typeof vi.fn>;
+  }
+
+  function makeMockCtx(): { storage: MockStorage } {
+    const data = new Map<string, unknown>();
+    return {
+      storage: {
+        get: vi.fn((key: string) => Promise.resolve(data.get(key))),
+        put: vi.fn((key: string, value: unknown) => {
+          data.set(key, value);
+          return Promise.resolve();
+        }),
+      },
+    };
+  }
+
+  it('allows requests under the cap within the window', async () => {
+    const { TelemetryRateLimit } = await import('./telemetry.js');
+    const ctx = makeMockCtx();
+    const limiter = new TelemetryRateLimit(
+      ctx as unknown as DurableObjectState
+    );
+
+    for (let i = 0; i < 30; i++) {
+      const response = await limiter.fetch();
+      const body = (await response.json()) as { exceeded: boolean };
+      expect(body.exceeded).toBe(false);
+    }
+  });
+
+  it('rejects once the cap is reached within the window', async () => {
+    const { TelemetryRateLimit } = await import('./telemetry.js');
+    const ctx = makeMockCtx();
+    const limiter = new TelemetryRateLimit(
+      ctx as unknown as DurableObjectState
+    );
+
+    for (let i = 0; i < 30; i++) {
+      await limiter.fetch();
+    }
+    const response = await limiter.fetch();
+    const body = (await response.json()) as { exceeded: boolean };
+    expect(body.exceeded).toBe(true);
   });
 });
 

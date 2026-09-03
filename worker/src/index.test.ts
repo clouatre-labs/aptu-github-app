@@ -59,6 +59,18 @@ function makeTelemetryMockNamespace(): DurableObjectNamespace {
   } as unknown as DurableObjectNamespace;
 }
 
+function makeTelemetryRateLimitMockNamespace(): DurableObjectNamespace {
+  const stub = {
+    fetch: vi.fn(() =>
+      Promise.resolve(Response.json({ exceeded: false }))
+    ),
+  };
+  return {
+    idFromName: vi.fn(() => 'mock-id' as unknown as DurableObjectId),
+    get: vi.fn(() => stub as unknown as DurableObjectStub),
+  } as unknown as DurableObjectNamespace;
+}
+
 function makeReplayGuardMockNamespace(): DurableObjectNamespace {
   const stored = new Set<string>();
   const stub = {
@@ -205,6 +217,7 @@ const mockEnv = {
   QUOTA: makeMockQuotaNamespace(),
   REPLAY_GUARD: makeReplayGuardMockNamespace(),
   TELEMETRY: makeTelemetryMockNamespace(),
+  TELEMETRY_RATE_LIMIT: makeTelemetryRateLimitMockNamespace(),
 };
 
 async function callHandler(
@@ -628,6 +641,20 @@ describe('POST /telemetry/rollup routing', () => {
       'Content-Type': 'application/json',
     });
     expect(response.status).toBe(401);
+  });
+
+  it('still processes the payload when CF-Connecting-IP is present and under the rate limit', async () => {
+    const { default: handler } = await import('./index.js');
+    const request = new Request('https://aptu.dev/telemetry/rollup', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'CF-Connecting-IP': '203.0.113.5',
+      },
+      body: JSON.stringify({ reviews_total: 1 }),
+    });
+    const response = await handler.fetch(request, mockEnv);
+    expect(response.status).toBe(202);
   });
 });
 

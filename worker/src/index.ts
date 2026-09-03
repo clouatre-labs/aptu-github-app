@@ -6,7 +6,7 @@ import { createAppAuth } from '@octokit/auth-app';
 // Re-exported for Cloudflare Worker binding: wrangler requires Durable Object
 // classes to be exported from the entry point (this file) to register them.
 export { InstallationQuota } from './quota';
-export { TelemetryRollup } from './telemetry';
+export { TelemetryRateLimit, TelemetryRollup } from './telemetry';
 
 import { captureException, withSentry } from '@sentry/cloudflare';
 import {
@@ -28,6 +28,7 @@ export interface Env {
   QUOTA: DurableObjectNamespace;
   REPLAY_GUARD: DurableObjectNamespace;
   TELEMETRY: DurableObjectNamespace;
+  TELEMETRY_RATE_LIMIT: DurableObjectNamespace;
 }
 
 export function hexToBytes(hex: string): Uint8Array {

@@ -23,6 +23,10 @@ class_name = "ReplayGuard"
 name = "TELEMETRY"
 class_name = "TelemetryRollup"
 
+[[durable_objects.bindings]]
+name = "TELEMETRY_RATE_LIMIT"
+class_name = "TelemetryRateLimit"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["InstallationQuota"]
@@ -38,6 +42,10 @@ deleted_classes = ["GlobalQuota"]
 [[migrations]]
 tag = "v5"
 new_sqlite_classes = ["TelemetryRollup"]
+
+[[migrations]]
+tag = "v6"
+new_sqlite_classes = ["TelemetryRateLimit"]
 
 [vars]
 # SENTRY_DSN = ""  # Set via: bunx wrangler secret put SENTRY_DSN

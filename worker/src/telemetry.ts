@@ -12,10 +12,51 @@
 // payload is valid, malformed, or the Durable Object write fails, so a
 // telemetry POST never fails the caller's PR review job.
 
+import { captureException } from '@sentry/cloudflare';
 import type { Env } from './index';
 
 const HISTOGRAM_BOUNDS = [25, 50, 75, 90];
 const HISTOGRAM_BUCKET_COUNT = HISTOGRAM_BOUNDS.length + 1;
+
+// Per-IP rate limit for the unauthenticated /telemetry/rollup endpoint -- see
+// SECURITY.md for why this endpoint intentionally bypasses HMAC validation.
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_REQUESTS = 30;
+
+interface RateLimitState {
+  windowStart: number;
+  count: number;
+}
+
+/**
+ * TelemetryRateLimit Durable Object: one instance per CF-Connecting-IP
+ * (idFromName), tracking a rolling 60s request count. Bounds how much an
+ * unauthenticated caller can write into the shared TelemetryRollup aggregate.
+ */
+export class TelemetryRateLimit {
+  private ctx: DurableObjectState;
+
+  constructor(ctx: DurableObjectState) {
+    this.ctx = ctx;
+  }
+
+  async fetch(): Promise<Response> {
+    const now = Date.now();
+    const stored = await this.ctx.storage.get<RateLimitState>('state');
+    const state =
+      stored && now - stored.windowStart < RATE_LIMIT_WINDOW_MS
+        ? stored
+        : { windowStart: now, count: 0 };
+
+    if (state.count >= RATE_LIMIT_MAX_REQUESTS) {
+      return Response.json({ exceeded: true });
+    }
+
+    state.count += 1;
+    await this.ctx.storage.put('state', state);
+    return Response.json({ exceeded: false });
+  }
+}
 
 const ALLOWED_KEYS = new Set([
   'reviews_total',
@@ -225,6 +266,27 @@ export async function handleTelemetryRollup(
   request: Request,
   env: Env
 ): Promise<Response> {
+  const ip = request.headers.get('CF-Connecting-IP');
+  if (ip) {
+    try {
+      const rateLimitId = env.TELEMETRY_RATE_LIMIT.idFromName(ip);
+      const rateLimitStub = env.TELEMETRY_RATE_LIMIT.get(rateLimitId);
+      const rateLimitResponse = await rateLimitStub.fetch(
+        'https://telemetry/rate-limit',
+        { method: 'POST' }
+      );
+      const { exceeded } = (await rateLimitResponse.json()) as {
+        exceeded: boolean;
+      };
+      if (exceeded) {
+        return new Response(null, { status: 202 });
+      }
+    } catch (error) {
+      // Fail open: a broken rate limiter must never block telemetry ingestion.
+      captureException(error, { tags: { component: 'telemetry-rate-limit' } });
+    }
+  }
+
   let body: unknown;
   try {
     body = await request.json();
