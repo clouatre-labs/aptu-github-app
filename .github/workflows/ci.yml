@@ -122,30 +122,6 @@ jobs:
       - name: Validate commit messages
         run: bunx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
 
-  check-base:
-    name: Check Branch Base
-    runs-on: ubuntu-24.04-arm
-    if: github.event_name == 'pull_request'
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - name: Verify branch is up-to-date with main
-        run: |
-          git fetch origin main
-          base_commit=$(git merge-base origin/main HEAD)
-          main_head=$(git rev-parse origin/main)
-          if [ "$base_commit" != "$main_head" ]; then
-            behind=$(git rev-list --count "$base_commit".."$main_head")
-            echo "::error::Branch is $behind commit(s) behind main. Please update your branch with the latest main."
-            echo "Run: git fetch origin && git rebase origin/main  # or merge: git fetch origin && git merge origin/main"
-            exit 1
-          fi
-
   verify-dispatcher-pins:
     name: Verify Dispatcher Pins
     runs-on: ubuntu-24.04-arm
@@ -180,7 +156,7 @@ jobs:
     name: CI Result
     runs-on: ubuntu-24.04-arm
     if: always()
-    needs: [lint, typecheck, test, commitlint, check-base, verify-dispatcher-pins]
+    needs: [lint, typecheck, test, commitlint, verify-dispatcher-pins]
     permissions: {}
     steps:
       - name: Verify all jobs passed or were skipped
