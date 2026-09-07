@@ -4,3 +4,7 @@ dist/
 .dev.vars
 *.local
 .DS_Store
+
+# Coder skill handoff artifacts (clouatre/dotfiles#797)
+.handoff/
+.worktrees/
