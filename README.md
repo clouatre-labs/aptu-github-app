@@ -168,6 +168,8 @@ See [clouatre-labs/aptu#94](https://github.com/clouatre-labs/aptu/issues/94) for
 
 See [RUNBOOK.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/docs/RUNBOOK.md) for post-deploy steps, secret rotation, and incident response.
 
+See [PRIVACY.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/docs/PRIVACY.md) for data categories, subprocessors, retention, and data residency.
+
 ## Releases
 
 Merging to `main` triggers [Release Please](https://github.com/googleapis/release-please-action) to create GitHub Releases automatically from [Conventional Commits](https://www.conventionalcommits.org/). See [CONTRIBUTING.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/CONTRIBUTING.md#releases--versioning) for details.
