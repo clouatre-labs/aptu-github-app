@@ -108,6 +108,18 @@ graph TD
     M --> N["204 No Content"]
 ```
 
+### Processing Locations
+
+| Component / Stage | Processing Location | Notes |
+| --- | --- | --- |
+| GitHub-hosted Actions runners | GitHub/Microsoft-managed infrastructure | `ubuntu-24.04-arm`; runner region is not selectable or guaranteed |
+| Cloudflare Worker edge | Cloudflare global edge network | No Regional Services or Data Localization Suite configured; no region pinning |
+| AI providers (OpenRouter, Anthropic, Gemini) | Provider-specific, per caller's BYOK `ai.provider` selection | No regional endpoint pinning; routing follows each provider's own infrastructure |
+| Sentry (Worker exception capture) | Undocumented | `SENTRY_DSN` not yet provisioned in `worker/wrangler.toml`; integration is wired in code but inactive in production |
+
+See [PRIVACY.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/docs/PRIVACY.md#data-residency)
+for the full data residency statement.
+
 ## Token Model
 
 Every webhook event uses per-operation scoped installation tokens issued by the GitHub App via `@octokit/auth-app`. Each token is scoped to the originating repository with the minimum permissions required for its operation.
