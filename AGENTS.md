@@ -87,6 +87,11 @@ REUSE compliance is managed via `REUSE.toml`. Inline headers are required only f
 
 Always use absolute URLs in Markdown files (e.g., `https://github.com/clouatre-labs/aptu-github-app/blob/main/CONTRIBUTING.md#section`). Relative links break when files are rendered outside the repository root (GitHub release notes, forks, mirrored docs).
 
+## Diagrams
+
+- Mermaid diagrams use `graph TD` only, no `classDef`/`linkStyle`, node labels 1-3 words, no `<br/>`
+- Load-bearing detail (event names, endpoints, field names) belongs in edge labels or prose, not multi-line node labels
+
 ## Test Conventions
 
 - Vitest test runner via `bun test`

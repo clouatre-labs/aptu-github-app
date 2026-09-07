@@ -65,23 +65,23 @@ There is still no org-wide aggregate *spend* ceiling (Durable Objects usage-base
 
 ```mermaid
 graph TD
-    A["External repo<br/>issues.opened / pull_request.opened"] -->|"webhook POST /webhook"| B["Cloudflare Worker<br/>aptu.dev/webhook"]
-    B --> C{"HMAC valid?"}
+    A["External repo"] -->|"issue/PR opened"| B["Cloudflare Worker"]
+    B -->|"POST /webhook"| C{"HMAC valid?"}
     C -->|No| D["401 Unauthorized"]
-    C -->|Yes| E{"Quota check<br/>InstallationQuota DO"}
-    E -->|Exceeded| F["429 Too Many Requests<br/>Retry-After header"]
-    E -->|OK| G["Get installation token<br/>octokit/auth-app"]
-    G --> H["Fetch .github/aptu.yml<br/>GitHub Contents API"]
-    H --> I{"Config valid<br/>and feature enabled?"}
-    I -->|No| J["200 OK / no dispatch"]
-    I -->|Yes| K{"review.paths: any file qualifies?"}
+    C -->|Yes| E{"Quota OK?"}
+    E -->|No| F["429 Too Many"]
+    E -->|Yes| G["Get install token"]
+    G --> H["Fetch config"]
+    H --> I{"Config valid?"}
+    I -->|No| J["200 OK"]
+    I -->|Yes| K{"Path matches?"}
     K -->|No| J
-    K -->|Yes| L["Get dispatch token<br/>scoped to originating repo"]
-    L --> M["POST repository_dispatch<br/>to originating repo"]
+    K -->|Yes| L["Get dispatch token"]
+    L --> M["POST dispatch"]
     M --> N["204 No Content"]
-    M --> O["Caller's aptu.yml workflow<br/>calls reusable workflow"]
-    O --> P["aptu CLI<br/>triage or review"]
-    P --> Q["GitHub API<br/>post labels / review comments<br/>as aptu-dev[bot]"]
+    M --> O["Caller workflow"]
+    O --> P["aptu CLI"]
+    P --> Q["Post results"]
 ```
 
 ### Workflow provisioning (installation trigger)
@@ -92,19 +92,19 @@ When a GitHub App installation is created or repositories are added, the Worker 
 
 ```mermaid
 graph TD
-    A["External repo<br/>issue_comment.created<br/>pull_request_review_comment.created"] -->|"webhook POST /webhook"| B["Cloudflare Worker"]
-    B --> C{"HMAC valid?"}
+    A["External repo"] -->|"comment created"| B["Cloudflare Worker"]
+    B -->|"POST /webhook"| C{"HMAC valid?"}
     C -->|No| D["401 Unauthorized"]
-    C -->|Yes| E{"Comment contains<br/>@aptu mention?"}
+    C -->|Yes| E{"Mentions aptu?"}
     E -->|No| F["200 OK"]
-    E -->|Yes| G{"Comment author<br/>is aptu bot?<br/>APTU_BOT_ID check"}
+    E -->|Yes| G{"Author is bot?"}
     G -->|Yes| F
-    G -->|No| H["Get installation token"]
-    H --> I{"Commenter is<br/>collaborator?"}
+    G -->|No| H["Get install token"]
+    H --> I{"Is collaborator?"}
     I -->|No| J["403 Forbidden"]
-    I -->|Yes| K{"Quota check"}
-    K -->|Exceeded| L["429 Too Many Requests"]
-    K -->|OK| M["POST repository_dispatch<br/>aptu-triage or aptu-review"]
+    I -->|Yes| K{"Quota OK?"}
+    K -->|No| L["429 Too Many"]
+    K -->|Yes| M["POST dispatch"]
     M --> N["204 No Content"]
 ```
 
