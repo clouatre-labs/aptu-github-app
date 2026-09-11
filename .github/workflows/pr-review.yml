@@ -53,6 +53,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Review PR
+        id: review
         uses: clouatre-labs/aptu@1be4790e946729a892623577b0f18b3be28d1d72 # v0.10.18
         continue-on-error: true
         with:
@@ -72,6 +73,13 @@ jobs:
           max-prompt-chars: '200000'
           max-full-content-files: '0'
           telemetry-rollup: ${{ inputs.telemetry_enabled }}
+
+      - name: Warn on review failure
+        if: always() && steps.review.outcome == 'failure'
+        run: |
+          echo "::warning::AI review step failed (continue-on-error kept the job green) - check the Review PR step logs"
+          echo "### :warning: AI review failed" >> "$GITHUB_STEP_SUMMARY"
+          echo "The Review PR step failed but did not block this job (continue-on-error: true). See the Review PR step logs for details." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report telemetry rollup
         if: inputs.telemetry_enabled
