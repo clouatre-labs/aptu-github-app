@@ -14,12 +14,11 @@ A single Cloudflare Worker validates GitHub webhook HMAC signatures and dispatch
 - `worker/src/worker.ts` -- Webhook handler (HMAC validation, dispatch)
 - `worker/src/worker.test.ts` -- Worker test suite
 - `worker/wrangler.jsonc` -- Worker configuration (secrets, routes)
-- `.github/workflows/` -- CI, deploy, issue-triage, pr-review, release workflows
+- `.github/workflows/` -- CI, deploy, issue-triage, pr-review workflows
 - `.github/workflows/ci.yml` -- Lint, typecheck, test, ci-result
 - `.github/workflows/deploy.yml` -- Deploy Worker to Cloudflare
 - `.github/workflows/issue-triage.yml` -- aptu-powered issue triage
 - `.github/workflows/pr-review.yml` -- aptu-powered PR review
-- `.github/workflows/release.yml` -- Release Please automation
 - `.github/workflows/scan-security.yml` -- Security scanning workflow
 - `.github/workflows/aptu-review.yml` -- aptu review dispatch handler
 - `.github/workflows/aptu-triage.yml` -- aptu triage dispatch handler
@@ -49,8 +48,9 @@ All commits must be GPG-signed with DCO sign-off (`git commit -S --signoff`).
 
 - **Deploy**: Merging to `main` triggers `deploy.yml`, which deploys the Worker to
   Cloudflare via `bunx wrangler deploy`.
-- **Release**: Merging to `main` triggers `release.yml`, which runs
-  `googleapis/release-please-action` to create GitHub Releases from conventional commits. Release Please opens a Release PR on main; merging it auto-bumps the version and creates a GitHub Release with a generated changelog.
+- **Release**: No release automation. Releases are cut manually: `git tag -s vX.Y.Z <sha> -m "vX.Y.Z"`,
+  `git push origin vX.Y.Z`, then `gh release create vX.Y.Z --target <sha> --generate-notes`. Bump
+  version per conventional-commit types accumulated since the last tag (`feat` -> minor, `fix`/`chore`/`docs` -> patch, breaking change -> major).
 
 ## Secrets Model
 
