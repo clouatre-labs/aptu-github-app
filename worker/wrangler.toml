@@ -36,10 +36,6 @@ tag = "v3"
 new_sqlite_classes = ["ReplayGuard"]
 
 [[migrations]]
-tag = "v4"
-deleted_classes = ["GlobalQuota"]
-
-[[migrations]]
 tag = "v5"
 new_sqlite_classes = ["TelemetryRollup"]
 
