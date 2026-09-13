@@ -54,7 +54,7 @@ jobs:
 
       - name: Review PR
         id: review
-        uses: clouatre-labs/aptu@1be4790e946729a892623577b0f18b3be28d1d72 # v0.10.18
+        uses: clouatre-labs/aptu@1ee6f4fb2d1df192663d245c54173a0e6b14acb1 # v0.10.19
         continue-on-error: true
         with:
           github-token: ${{ secrets.installation-token }}
