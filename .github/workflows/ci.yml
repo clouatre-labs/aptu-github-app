@@ -134,19 +134,28 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - name: Verify dispatcher pins are updated alongside reusable workflow changes
+      - name: Verify dispatcher pins resolve to a tagged commit
         run: |
-          changed=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}")
-          declare -A dispatcher_for=(
-            [".github/workflows/pr-review.yml"]=".github/workflows/aptu-review.yml"
-            [".github/workflows/issue-triage.yml"]=".github/workflows/aptu-triage.yml"
-            [".github/workflows/scan-security.yml"]=".github/workflows/aptu-scan-security.yml"
+          dispatchers=(
+            ".github/workflows/aptu-review.yml"
+            ".github/workflows/aptu-triage.yml"
+            ".github/workflows/aptu-scan-security.yml"
           )
           fail=0
-          for target in "${!dispatcher_for[@]}"; do
-            dispatcher="${dispatcher_for[$target]}"
-            if grep -qxF "$target" <<< "$changed" && ! grep -qxF "$dispatcher" <<< "$changed"; then
-              echo "::error file=$dispatcher::$target changed but $dispatcher was not updated -- bump its SHA pin in this PR or the next dispatch will fail with startup_failure"
+          for dispatcher in "${dispatchers[@]}"; do
+            pin=$(grep -oP '(?<=@)[0-9a-f]{40}(?=\s)' "$dispatcher" || true)
+            if [ -z "$pin" ]; then
+              echo "::error file=$dispatcher::could not find a 40-character SHA pin in $dispatcher"
+              fail=1
+              continue
+            fi
+            if ! git cat-file -e "${pin}^{commit}" 2>/dev/null; then
+              echo "::error file=$dispatcher::pinned commit $pin does not exist in this repository -- unreleased/placeholder pins are not allowed"
+              fail=1
+              continue
+            fi
+            if ! git tag --contains "$pin" | grep -q .; then
+              echo "::error file=$dispatcher::pinned commit $pin in $dispatcher is not reachable from any existing tag -- unreleased/placeholder pins are not allowed"
               fail=1
             fi
           done
