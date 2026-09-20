@@ -176,13 +176,12 @@ jobs:
             | sed 's/#.*//' \
             | grep -o 'clouatre-labs/aptu@[0-9a-f]\{40\}' \
             | cut -d@ -f2 \
-            | sort -u)
-          count=$(printf '%s\n' "$shas" | grep -c . || true)
-          if [ "$count" -eq 0 ]; then
+            | sort -u || true)
+          if [ -z "$shas" ]; then
             echo "::error::No clouatre-labs/aptu pins found across workflows"
             exit 1
           fi
-          if [ "$count" -gt 1 ]; then
+          if [ "$(printf '%s\n' "$shas" | wc -l)" -gt 1 ]; then
             echo "::error::Multiple distinct clouatre-labs/aptu SHAs found across workflows:"
             printf '%s\n' "$shas"
             exit 1
