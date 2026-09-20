@@ -9,22 +9,8 @@ on:
       - aptu-scan-security
 
 jobs:
-  mask-token:
-    name: Mask Installation Token
-    runs-on: ubuntu-24.04-arm
-    permissions: {}
-    steps:
-      - name: Mask installation token
-        env:
-          INSTALLATION_TOKEN: ${{ github.event.client_payload.installation_token }}
-        run: |
-          if [ -n "$INSTALLATION_TOKEN" ]; then
-            echo "::add-mask::$INSTALLATION_TOKEN"
-          fi
-
   scan:
     name: Scan Security
-    needs: mask-token
     permissions:
       contents: read
       security-events: write

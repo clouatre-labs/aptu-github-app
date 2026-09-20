@@ -49,6 +49,14 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      - name: Mask installation token
+        env:
+          INSTALLATION_TOKEN: ${{ secrets.installation-token }}
+        run: |
+          if [ -n "$INSTALLATION_TOKEN" ]; then
+            echo "::add-mask::$INSTALLATION_TOKEN"
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

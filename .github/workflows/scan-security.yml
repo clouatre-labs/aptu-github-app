@@ -38,6 +38,14 @@ jobs:
       security-events: write
       statuses: write
     steps:
+      - name: Mask installation token
+        env:
+          INSTALLATION_TOKEN: ${{ secrets.installation-token }}
+        run: |
+          if [ -n "$INSTALLATION_TOKEN" ]; then
+            echo "::add-mask::$INSTALLATION_TOKEN"
+          fi
+
       - name: Validate payload
         id: validate
         env:
