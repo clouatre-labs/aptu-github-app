@@ -49,6 +49,14 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      - name: Mask installation token
+        env:
+          INSTALLATION_TOKEN: ${{ secrets.installation-token }}
+        run: |
+          if [ -n "$INSTALLATION_TOKEN" ]; then
+            echo "::add-mask::$INSTALLATION_TOKEN"
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -74,23 +82,24 @@ jobs:
           max-full-content-files: '0'
           telemetry-rollup: ${{ inputs.telemetry_enabled }}
 
-      - name: Warn on review failure
-        if: always() && steps.review.outputs.pr-review-outcome == 'failure'
+      - name: Summarize review outcome
+        if: always() && steps.review.outputs.pr-review-outcome != 'success'
+        env:
+          PR_REVIEW_OUTCOME: ${{ steps.review.outputs.pr-review-outcome }}
         run: |
-          echo "::warning::AI review step failed (continue-on-error kept the job green) - check the Review PR step logs"
-          echo "### :warning: AI review failed" >> "$GITHUB_STEP_SUMMARY"
-          echo "The Review PR step failed but did not block this job (continue-on-error: true). See the Review PR step logs for details." >> "$GITHUB_STEP_SUMMARY"
+          echo "::warning::AI review step did not succeed (outcome: ${PR_REVIEW_OUTCOME:-unknown}; continue-on-error kept the job green) - check the Review PR step logs"
+          echo "### :warning: AI review ${PR_REVIEW_OUTCOME:-unknown}" >> "$GITHUB_STEP_SUMMARY"
+          echo "The Review PR step did not succeed but did not block this job (continue-on-error: true). See the Review PR step logs for details." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report telemetry rollup
         if: inputs.telemetry_enabled
-        continue-on-error: true
         run: |
           line="$(tail -n 1 .aptu/telemetry-rollup.jsonl 2>/dev/null || true)"
           if [ -z "$line" ] || ! printf '%s' "$line" | jq -e . >/dev/null 2>&1; then
             echo "::warning::Skipping telemetry rollup POST: last line of .aptu/telemetry-rollup.jsonl is missing or not valid JSON (likely truncated)"
-          else
-            printf '%s' "$line" | \
-              curl -sf -X POST https://aptu.dev/telemetry/rollup \
-                -H 'Content-Type: application/json' \
-                --data-binary @- >/dev/null 2>&1 || true
+            exit 0
           fi
+          printf '%s' "$line" | \
+            curl -sf -X POST https://aptu.dev/telemetry/rollup \
+              -H 'Content-Type: application/json' \
+              --data-binary @- >/dev/null
