@@ -172,7 +172,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Verify a single clouatre-labs/aptu SHA across workflows
         run: |
-          bad=$(grep -h 'uses:' .github/workflows/*.yml \
+          bad=$(grep -h 'uses:' .github/workflows/*.yml .github/workflows/*.yaml \
             | sed 's/#.*//' \
             | grep -o 'clouatre-labs/aptu@[^ "]*' \
             | grep -v 'clouatre-labs/aptu@[0-9a-f]\{40\}$' || true)
@@ -181,7 +181,7 @@ jobs:
             printf '%s\n' "$bad"
             exit 1
           fi
-          shas=$(grep -h 'uses:' .github/workflows/*.yml \
+          shas=$(grep -h 'uses:' .github/workflows/*.yml .github/workflows/*.yaml \
             | sed 's/#.*//' \
             | grep -o 'clouatre-labs/aptu@[0-9a-f]\{40\}' \
             | cut -d@ -f2 \
