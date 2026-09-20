@@ -172,6 +172,15 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Verify a single clouatre-labs/aptu SHA across workflows
         run: |
+          bad=$(grep -h 'uses:' .github/workflows/*.yml \
+            | sed 's/#.*//' \
+            | grep -o 'clouatre-labs/aptu@[^ "]*' \
+            | grep -v 'clouatre-labs/aptu@[0-9a-f]\{40\}$' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::clouatre-labs/aptu pins must be full 40-char commit SHAs:"
+            printf '%s\n' "$bad"
+            exit 1
+          fi
           shas=$(grep -h 'uses:' .github/workflows/*.yml \
             | sed 's/#.*//' \
             | grep -o 'clouatre-labs/aptu@[0-9a-f]\{40\}' \
