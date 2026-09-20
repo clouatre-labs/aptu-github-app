@@ -161,11 +161,35 @@ jobs:
           done
           exit $fail
 
+  verify-aptu-pin-alignment:
+    name: Verify Aptu Pin Alignment
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify a single clouatre-labs/aptu SHA across workflows
+        run: |
+          shas=$(grep -h 'uses:' .github/workflows/*.yml \
+            | sed 's/#.*//' \
+            | grep -o 'clouatre-labs/aptu@[0-9a-f]\{40\}' \
+            | cut -d@ -f2 \
+            | sort -u)
+          count=$(printf '%s\n' "$shas" | grep -c . || true)
+          if [ "$count" -gt 1 ]; then
+            echo "::error::Multiple distinct clouatre-labs/aptu SHAs found across workflows:"
+            printf '%s\n' "$shas"
+            exit 1
+          fi
+          echo "All clouatre-labs/aptu pins use a single SHA."
+
   ci-result:
     name: CI Result
     runs-on: ubuntu-24.04-arm
     if: always()
-    needs: [lint, typecheck, test, commitlint, verify-dispatcher-pins]
+    needs: [lint, typecheck, test, commitlint, verify-dispatcher-pins, verify-aptu-pin-alignment]
     permissions: {}
     steps:
       - name: Verify all jobs passed or were skipped
