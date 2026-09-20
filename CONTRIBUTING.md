@@ -68,27 +68,26 @@ All checks must pass before merge.
 
 ## Releases & Versioning
 
-This project uses [Release Please](https://github.com/googleapis/release-please-action) to automate version management and changelog generation from [Conventional Commits](https://www.conventionalcommits.org/).
+There is **no release automation**. Releases are cut manually by maintainers from signed annotated tags on `main`. Write [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, etc.) — the version increment follows the accumulated commit types since the last tag (`feat` → minor, `fix`/`chore`/`docs` → patch, breaking change → major).
 
-### How It Works
+### Maintainer Release Steps
 
-1. Every merge to `main` triggers the `release.yml` workflow
-2. Release Please scans new commits for conventional commit types (`feat`, `fix`, `docs`, etc.)
-3. It opens or updates a **Release PR** that bumps the version and generates a changelog
-4. Merging the Release PR creates a tagged GitHub Release and updates the manifest
+1. Land all changes on `main` via PRs (including any pin bumps; see below)
+2. Tag the release commit: `git tag -a -s vX.Y.Z -m "vX.Y.Z" <sha> && git push origin vX.Y.Z` — must be a GPG-signed annotated tag; a lightweight tag is not accepted
+3. Create the GitHub release with curated notes:
 
-### Important: GITHUB_TOKEN Limitation
+   ```bash
+   gh release create vX.Y.Z --verify-tag --title "vX.Y.Z" --notes "..."
+   ```
 
-Release Please runs using the default `GITHUB_TOKEN`. GitHub Actions workflows triggered by `GITHUB_TOKEN` do **not** trigger other workflows (this prevents recursive CI loops). This means CI checks (lint, typecheck, test) do **not** run on Release Please PRs.
+   Notes follow the standard format: a `## What's Changed` bullet list of merged PRs (one per line, `* <title> by @<author> in <PR URL>`) followed by a `**Full Changelog**: <compare URL>` link (see [v0.1.4](https://github.com/clouatre-labs/aptu-github-app/releases/tag/v0.1.4) for a complete example)
 
-This is expected behaviour. Contributors should never bump versions manually or merge Release PRs with failing status checks (the check is a formality and will always be pending, not failing).
+### Pin Updates Around a Release
 
-### What Contributors Need to Know
+Workflows reference each other by commit SHA (never mutable tags). After a release:
 
-- Write conventional commit messages (`feat:`, `fix:`, `docs:`, etc.)
-- Do **not** manually edit version numbers in `package.json`, `wrangler.jsonc`, or any manifest
-- Do **not** manually create GitHub Releases
-- The Release PR can be merged as soon as it appears; the changelog is generated automatically
+- The dispatcher workflows (`aptu-*.yml`) pin the reusable workflows (`pr-review.yml`, `issue-triage.yml`, `scan-security.yml`) to the tagged release commit — repin them to the new tag's SHA in a follow-up PR (the `Verify Dispatcher Pins` check enforces that pins resolve to tagged commits)
+- When a new `clouatre-labs/aptu` CLI version ships, bump the aptu action pin in `pr-review.yml` and `issue-triage.yml` to that release's tagged commit via a PR; the bump is included in the next app release
 
 ## Code Review
 

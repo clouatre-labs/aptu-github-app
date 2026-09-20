@@ -48,9 +48,13 @@ All commits must be GPG-signed with DCO sign-off (`git commit -S --signoff`).
 
 - **Deploy**: Merging to `main` triggers `deploy.yml`, which deploys the Worker to
   Cloudflare via `bunx wrangler deploy`.
-- **Release**: No release automation. Releases are cut manually: `git tag -s vX.Y.Z <sha> -m "vX.Y.Z"`,
-  `git push origin vX.Y.Z`, then `gh release create vX.Y.Z --target <sha> --generate-notes`. Bump
-  version per conventional-commit types accumulated since the last tag (`feat` -> minor, `fix`/`chore`/`docs` -> patch, breaking change -> major).
+- **Release**: No release automation. Releases are cut manually: `git tag -a -s vX.Y.Z -m "vX.Y.Z" <sha>`
+  (GPG-signed annotated tag on a `main` commit), `git push origin vX.Y.Z`, then
+  `gh release create vX.Y.Z --verify-tag` with curated notes (`## What's Changed` PR list +
+  `**Full Changelog**` compare link). Version increment per conventional-commit types accumulated
+  since the last tag (`feat` -> minor, `fix`/`chore`/`docs` -> patch, breaking change -> major).
+  After tagging: repin the `aptu-*.yml` dispatchers to the new tag's SHA in a follow-up PR
+  (`Verify Dispatcher Pins` enforces tagged commits); full steps in `CONTRIBUTING.md`
 
 ## Secrets Model
 
