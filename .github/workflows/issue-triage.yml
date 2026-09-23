@@ -49,7 +49,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run Aptu issue triage
-        uses: clouatre-labs/aptu@ce21cb7277564d95108cdca60c2f4340dcd063e9 # v0.11.0
+        uses: clouatre-labs/aptu@6ed5cf5a12146551212db133b577a4220f037502 # v0.12.1
         with:
           github-token: ${{ secrets.installation-token }}
           anthropic-api-key: ${{ secrets.ai-api-key }}
