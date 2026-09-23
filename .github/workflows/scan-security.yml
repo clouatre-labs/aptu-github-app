@@ -103,7 +103,7 @@ jobs:
 
       - name: Run Aptu security scan
         id: scan
-        uses: clouatre-labs/aptu@6ed5cf5a12146551212db133b577a4220f037502 # v0.12.1
+        uses: clouatre-labs/aptu@e222831d32a42133910468a915a3da63dd7ec52b # v0.12.2
         with:
           github-token: ${{ secrets.installation-token }}
           scan-path: ${{ inputs.scan_path }}
