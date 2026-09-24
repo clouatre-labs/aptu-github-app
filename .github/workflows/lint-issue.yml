@@ -94,8 +94,7 @@ jobs:
         with:
           path: ~/.local/bin/aptu
           key: aptu-${{ steps.resolve-version.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
-          restore-keys: |
-            aptu-${{ steps.resolve-version.outputs.version }}-${{ runner.os }}-
+          restore-keys: aptu-${{ steps.resolve-version.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
 
       - name: Install aptu binary
         if: steps.cache-aptu.outputs.cache-hit != 'true'

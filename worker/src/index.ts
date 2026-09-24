@@ -844,41 +844,51 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
             PERMS.dispatch,
             eventType
           );
-          if (dispatchToken instanceof Response) return dispatchToken;
-
-          const lintToken = await getTokenOr500(
-            env,
-            installationId,
-            repo,
-            PERMS.triage,
-            eventType
-          );
-          if (lintToken instanceof Response) return lintToken;
-
-          let issueBody = issue.body ?? '';
-          if (issueBody.length > 60000) {
+          if (dispatchToken instanceof Response) {
             console.warn(
-              `Truncating issue_body for ${repo}#${issue.number} from ${issueBody.length} to 60000 chars`
+              `Skipping lint dispatch for ${repo}: dispatch token unavailable (${dispatchToken.status})`
             );
-            issueBody = issueBody.slice(0, 60000);
-          }
+          } else {
+            const lintToken = await getTokenOr500(
+              env,
+              installationId,
+              repo,
+              PERMS.triage,
+              eventType
+            );
+            if (lintToken instanceof Response) {
+              console.warn(
+                `Skipping lint dispatch for ${repo}: lint installation token unavailable (${lintToken.status})`
+              );
+            } else {
+              let issueBody = issue.body ?? '';
+              if (issueBody.length > 60000) {
+                console.warn(
+                  `Truncating issue_body for ${repo}#${issue.number} from ${issueBody.length} to 60000 chars`
+                );
+                issueBody = issueBody.slice(0, 60000);
+              }
 
-          try {
-            await dispatchEvent(dispatchToken, repo, 'aptu-lint-issue', {
-              originating_repo: repo,
-              issue_number: issue.number,
-              issue_body: issueBody,
-              ...(config?.lint?.spec ? { lint_spec: config.lint.spec } : {}),
-              installation_token: lintToken,
-            });
-            await maybeRecordQuota(env, owner, installationId, 'lint');
-            lintDispatched = true;
-          } catch (error) {
-            captureException(error, { tags: { eventType, repo } });
-            console.error(
-              `Failed to dispatch aptu-lint-issue event for ${repo}:`,
-              error
-            );
+              try {
+                await dispatchEvent(dispatchToken, repo, 'aptu-lint-issue', {
+                  originating_repo: repo,
+                  issue_number: issue.number,
+                  issue_body: issueBody,
+                  ...(config?.lint?.spec
+                    ? { lint_spec: config.lint.spec }
+                    : {}),
+                  installation_token: lintToken,
+                });
+                await maybeRecordQuota(env, owner, installationId, 'lint');
+                lintDispatched = true;
+              } catch (error) {
+                captureException(error, { tags: { eventType, repo } });
+                console.error(
+                  `Failed to dispatch aptu-lint-issue event for ${repo}:`,
+                  error
+                );
+              }
+            }
           }
         }
       }

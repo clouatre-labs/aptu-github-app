@@ -3074,6 +3074,58 @@ describe('lint dispatch', () => {
     expect(payloads.length).toBe(1);
     expect(payloads[0]?.event_type).toBe('aptu-triage');
   });
+
+  it('skips lint dispatch and does not return 500 on issues.edited when the dispatch token fails', async () => {
+    mockConfig(
+      'version: 1\ntriage:\n  enabled: true\nlint:\n  enabled: true\n  spec: specs.toml'
+    );
+    const { createAppAuth } = await import('@octokit/auth-app');
+    // biome-ignore lint/suspicious/noExplicitAny: mocking requires casting to any
+    (createAppAuth as any).mockImplementation(
+      () =>
+        function (opts: { permissions?: Record<string, unknown> }) {
+          if (opts.permissions?.contents === 'write') {
+            return Promise.reject(new Error('Failed to mint dispatch token'));
+          }
+          return Promise.resolve({ token: 'mock-installation-token' });
+        }
+    );
+
+    const response = await callIssues('edited', 'body');
+
+    expect(response.status).toBe(200);
+    expect(dispatchPayloads().length).toBe(0);
+    // biome-ignore lint/suspicious/noExplicitAny: restoring the mocked auth factory
+    (createAppAuth as any).mockImplementation(() =>
+      vi.fn().mockResolvedValue({ token: 'mock-installation-token' })
+    );
+  });
+
+  it('skips lint dispatch and does not return 500 on issues.edited when the lint installation token fails', async () => {
+    mockConfig(
+      'version: 1\ntriage:\n  enabled: true\nlint:\n  enabled: true\n  spec: specs.toml'
+    );
+    const { createAppAuth } = await import('@octokit/auth-app');
+    // biome-ignore lint/suspicious/noExplicitAny: mocking requires casting to any
+    (createAppAuth as any).mockImplementation(
+      () =>
+        function (opts: { permissions?: Record<string, unknown> }) {
+          if (opts.permissions?.issues === 'write') {
+            return Promise.reject(new Error('Failed to mint lint token'));
+          }
+          return Promise.resolve({ token: 'mock-installation-token' });
+        }
+    );
+
+    const response = await callIssues('edited', 'body');
+
+    expect(response.status).toBe(200);
+    expect(dispatchPayloads().length).toBe(0);
+    // biome-ignore lint/suspicious/noExplicitAny: restoring the mocked auth factory
+    (createAppAuth as any).mockImplementation(() =>
+      vi.fn().mockResolvedValue({ token: 'mock-installation-token' })
+    );
+  });
 });
 
 describe('scoped token helper', () => {
