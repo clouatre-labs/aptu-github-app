@@ -3477,14 +3477,14 @@ describe('workflow provisioning', () => {
   function signed(event: string, body: string): Record<string, string> { return { 'X-GitHub-Event': event, 'X-Hub-Signature-256': sign(mockEnv.WEBHOOK_SECRET, body), 'Content-Type': 'application/json' }; }
   beforeEach(async () => { setup(); const { createAppAuth } = await import('@octokit/auth-app'); (createAppAuth as ReturnType<typeof vi.fn>).mockImplementation(() => vi.fn().mockResolvedValue({ token: 'provision-token' })); });
 
-  it('creates all three missing files with base64 content, message, scoped permissions, and headers', async () => {
+  it('creates all four missing files with base64 content, message, scoped permissions, and headers', async () => {
     fetchSpy.mockImplementation((url, init) => { const value = String(url); if (value.startsWith(rawPrefix)) return Promise.resolve(new Response(`source-${value.split('/').pop()}`)); if (!init?.method) return Promise.resolve(new Response(null, { status: 404 })); return Promise.resolve(new Response(null, { status: 201 })); });
     const { provisionWorkflowFiles } = await import('./index.js'); await provisionWorkflowFiles(mockEnv, 'owner/repo', 7);
-    const puts = fetchSpy.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT'); expect(puts).toHaveLength(3);
+    const puts = fetchSpy.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT'); expect(puts).toHaveLength(4);
     for (const [url, init] of puts) { const name = String(url).split('/').pop(); const request = init as RequestInit; expect(JSON.parse(request.body as string)).toEqual({ message: 'ci: add aptu dispatch handler workflows', content: b64(`source-${name}`) }); expect(request.headers).toEqual({ Authorization: 'Bearer provision-token', Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'aptu-webhook/1.0', 'Content-Type': 'application/json' }); }
     const { createAppAuth } = await import('@octokit/auth-app'); const auth = (createAppAuth as ReturnType<typeof vi.fn>).mock.results[0]?.value; expect(auth).toHaveBeenCalledWith(expect.objectContaining({ installationId: 7, repositoryNames: ['repo'], permissions: { contents: 'write', workflows: 'write' } }));
   });
-  it('skips existing files without PUT and continues', async () => { let n = 0; fetchSpy.mockImplementation((url, init) => { if (String(url).startsWith(rawPrefix)) return Promise.resolve(new Response('source')); if (!init?.method) return Promise.resolve(new Response(null, { status: ++n === 1 ? 200 : 404 })); return Promise.resolve(new Response(null, { status: 201 })); }); const { provisionWorkflowFiles } = await import('./index.js'); await provisionWorkflowFiles(mockEnv, 'owner/repo', 7); expect(fetchSpy.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')).toHaveLength(2); });
+  it('skips existing files without PUT and continues', async () => { let n = 0; fetchSpy.mockImplementation((url, init) => { if (String(url).startsWith(rawPrefix)) return Promise.resolve(new Response('source')); if (!init?.method) return Promise.resolve(new Response(null, { status: ++n === 1 ? 200 : 404 })); return Promise.resolve(new Response(null, { status: 201 })); }); const { provisionWorkflowFiles } = await import('./index.js'); await provisionWorkflowFiles(mockEnv, 'owner/repo', 7); expect(fetchSpy.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')).toHaveLength(3); });
   it('continues after PUT 403', async () => {
     let puts = 0;
     fetchSpy.mockImplementation((url, init) => {
@@ -3518,7 +3518,7 @@ describe('workflow provisioning', () => {
     });
     const response = await callHandler(value, signed('installation', value));
     expect(response.status).toBe(200);
-    expect(fetchSpy.mock.calls.filter(([url]) => String(url).includes('/owner/second/contents/'))).toHaveLength(6);
+    expect(fetchSpy.mock.calls.filter(([url]) => String(url).includes('/owner/second/contents/'))).toHaveLength(8);
   });
 
   it('routes installation.created to provisioning', async () => {
