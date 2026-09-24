@@ -90,6 +90,29 @@ describe('parseConfig', () => {
     const raw = btoa('version: 1\ntelemetry:\n  other: true');
     expect(parseConfig(raw)).toBeNull();
   });
+
+  it('parses lint.enabled true with optional lint.spec string', () => {
+    const raw = btoa('version: 1\nlint:\n  enabled: true\n  spec: .github/lint-specs.toml');
+    expect(parseConfig(raw)).toEqual({
+      version: 1,
+      lint: { enabled: true, spec: '.github/lint-specs.toml' },
+    });
+  });
+
+  it('parses lint.enabled without spec', () => {
+    const raw = btoa('version: 1\nlint:\n  enabled: true');
+    expect(parseConfig(raw)).toEqual({ version: 1, lint: { enabled: true } });
+  });
+
+  it('returns null when lint block is missing enabled boolean', () => {
+    const raw = btoa('version: 1\nlint:\n  spec: specs.toml');
+    expect(parseConfig(raw)).toBeNull();
+  });
+
+  it('returns null when lint block is not an object', () => {
+    const raw = btoa('version: 1\nlint: true');
+    expect(parseConfig(raw)).toBeNull();
+  });
 });
 
 describe('shouldDispatch', () => {
@@ -126,6 +149,17 @@ describe('shouldDispatch', () => {
     expect(shouldDispatch(config, 'triage')).toBe(false);
     expect(shouldDispatch(config, 'review')).toBe(false);
     expect(shouldDispatch(config, 'scan')).toBe(false);
+    expect(shouldDispatch(config, 'lint')).toBe(false);
+  });
+
+  it('returns true when lint.enabled is true', () => {
+    const config = { version: 1, lint: { enabled: true } };
+    expect(shouldDispatch(config, 'lint')).toBe(true);
+  });
+
+  it('returns false when lint.enabled is false', () => {
+    const config = { version: 1, lint: { enabled: false } };
+    expect(shouldDispatch(config, 'lint')).toBe(false);
   });
 });
 

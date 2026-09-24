@@ -17,6 +17,11 @@ export interface ScanConfig {
   path?: string;
 }
 
+export interface LintConfig {
+  enabled: boolean;
+  spec?: string;
+}
+
 export interface AptuConfig {
   version: number;
   triage?: { enabled: boolean };
@@ -27,6 +32,7 @@ export interface AptuConfig {
     paths?: string[];
   };
   scan?: ScanConfig;
+  lint?: LintConfig;
   ai?: AiConfig;
   telemetry?: { enabled: boolean };
 }
@@ -133,6 +139,20 @@ export function parseConfig(raw: string): AptuConfig | null {
       }
     }
 
+    if (parsed.lint !== undefined) {
+      if (typeof parsed.lint !== 'object' || parsed.lint === null) {
+        return null;
+      }
+      const lintObj = parsed.lint as Record<string, unknown>;
+      if (typeof lintObj.enabled !== 'boolean') {
+        return null;
+      }
+      config.lint = { enabled: lintObj.enabled };
+      if (typeof lintObj.spec === 'string') {
+        config.lint.spec = lintObj.spec;
+      }
+    }
+
     if (parsed.ai !== undefined) {
       if (typeof parsed.ai !== 'object' || parsed.ai === null) {
         return null;
@@ -173,7 +193,7 @@ export function parseConfig(raw: string): AptuConfig | null {
 
 export function shouldDispatch(
   config: AptuConfig | null,
-  feature: 'triage' | 'review' | 'scan'
+  feature: 'triage' | 'review' | 'scan' | 'lint'
 ): boolean {
   if (config === null) {
     return false;

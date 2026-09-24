@@ -732,22 +732,27 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       return r ?? new Response('OK', { status: 200 });
     }
 
-    if (event === 'issues' && action === 'opened') {
+    if (event === 'issues' && (action === 'opened' || action === 'edited')) {
       if (!installationId) return new Response('Bad Request', { status: 400 });
       const repo = (payload.repository as { full_name: string }).full_name;
       if (!repo.includes('/'))
         return new Response('Bad Request', { status: 400 });
 
+      const eventType = `issues.${action}`;
       const configToken = await getTokenOr500(
         env,
         installationId,
         repo,
         PERMS.config,
-        'issues.opened'
+        eventType
       );
       if (configToken instanceof Response) return configToken;
 
-      const issue = payload.issue as { number: number; title: string };
+      const issue = payload.issue as {
+        number: number;
+        title: string;
+        body?: string;
+      };
       const owner = repo.split('/')[0] ?? '';
       const repoName = repo.split('/')[1] ?? '';
 
@@ -755,64 +760,132 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       try {
         config = await fetchRepoConfig(configToken, owner, repoName);
       } catch (error) {
-        captureException(error, { tags: { eventType: 'issues.opened', repo } });
+        captureException(error, { tags: { eventType, repo } });
         console.error(`Failed to fetch config for ${repo}:`, error);
         config = null;
       }
 
-      const quotaResponse = await maybeCheckQuota(
-        env,
-        owner,
-        installationId,
-        'triage'
-      );
-      if (quotaResponse) return quotaResponse;
+      let triageDispatched = false;
+      let lintDispatched = false;
 
-      if (!shouldDispatch(config, 'triage'))
-        return new Response('OK', { status: 200 });
-
-      const dispatchToken = await getTokenOr500(
-        env,
-        installationId,
-        repo,
-        PERMS.dispatch,
-        'issues.opened'
-      );
-      if (dispatchToken instanceof Response) return dispatchToken;
-
-      const triageToken = await getTokenOr500(
-        env,
-        installationId,
-        repo,
-        PERMS.triage,
-        'issues.opened'
-      );
-      if (triageToken instanceof Response) return triageToken;
-
-      try {
-        await dispatchEvent(dispatchToken, repo, 'aptu-triage', {
-          originating_repo: repo,
-          issue_number: issue.number,
-          installation_token: triageToken,
-          ...(config?.ai
-            ? {
-                ai_provider: config.ai.provider,
-                ai_model: config.ai.model,
-              }
-            : {}),
-        });
-      } catch (error) {
-        captureException(error, { tags: { eventType: 'issues.opened', repo } });
-        console.error(
-          `Failed to dispatch aptu-triage event for ${repo}:`,
-          error
+      // Triage runs on issues.opened only; never re-triage on edit.
+      if (action === 'opened') {
+        const quotaResponse = await maybeCheckQuota(
+          env,
+          owner,
+          installationId,
+          'triage'
         );
-        return new Response('Internal Server Error', { status: 500 });
+        if (quotaResponse) return quotaResponse;
+
+        if (shouldDispatch(config, 'triage')) {
+          const dispatchToken = await getTokenOr500(
+            env,
+            installationId,
+            repo,
+            PERMS.dispatch,
+            eventType
+          );
+          if (dispatchToken instanceof Response) return dispatchToken;
+
+          const triageToken = await getTokenOr500(
+            env,
+            installationId,
+            repo,
+            PERMS.triage,
+            eventType
+          );
+          if (triageToken instanceof Response) return triageToken;
+
+          try {
+            await dispatchEvent(dispatchToken, repo, 'aptu-triage', {
+              originating_repo: repo,
+              issue_number: issue.number,
+              installation_token: triageToken,
+              ...(config?.ai
+                ? {
+                    ai_provider: config.ai.provider,
+                    ai_model: config.ai.model,
+                  }
+                : {}),
+            });
+          } catch (error) {
+            captureException(error, { tags: { eventType, repo } });
+            console.error(
+              `Failed to dispatch aptu-triage event for ${repo}:`,
+              error
+            );
+            return new Response('Internal Server Error', { status: 500 });
+          }
+
+          await maybeRecordQuota(env, owner, installationId, 'triage');
+          triageDispatched = true;
+        }
       }
 
-      await maybeRecordQuota(env, owner, installationId, 'triage');
+      // Lint is advisory: quota exhaustion or dispatch failure never fails the
+      // webhook and never blocks the triage flow.
+      if (shouldDispatch(config, 'lint')) {
+        const lintQuota = await maybeCheckQuota(
+          env,
+          owner,
+          installationId,
+          'lint'
+        );
+        if (lintQuota) {
+          console.warn(
+            `Skipping lint dispatch for ${repo}: quota unavailable or exhausted (${lintQuota.status})`
+          );
+        } else {
+          const dispatchToken = await getTokenOr500(
+            env,
+            installationId,
+            repo,
+            PERMS.dispatch,
+            eventType
+          );
+          if (dispatchToken instanceof Response) return dispatchToken;
 
-      return new Response(null, { status: 204 });
+          const lintToken = await getTokenOr500(
+            env,
+            installationId,
+            repo,
+            PERMS.triage,
+            eventType
+          );
+          if (lintToken instanceof Response) return lintToken;
+
+          let issueBody = issue.body ?? '';
+          if (issueBody.length > 60000) {
+            console.warn(
+              `Truncating issue_body for ${repo}#${issue.number} from ${issueBody.length} to 60000 chars`
+            );
+            issueBody = issueBody.slice(0, 60000);
+          }
+
+          try {
+            await dispatchEvent(dispatchToken, repo, 'aptu-lint-issue', {
+              originating_repo: repo,
+              issue_number: issue.number,
+              issue_body: issueBody,
+              ...(config?.lint?.spec ? { lint_spec: config.lint.spec } : {}),
+              installation_token: lintToken,
+            });
+            await maybeRecordQuota(env, owner, installationId, 'lint');
+            lintDispatched = true;
+          } catch (error) {
+            captureException(error, { tags: { eventType, repo } });
+            console.error(
+              `Failed to dispatch aptu-lint-issue event for ${repo}:`,
+              error
+            );
+          }
+        }
+      }
+
+      if (triageDispatched || lintDispatched)
+        return new Response(null, { status: 204 });
+      return new Response('OK', { status: 200 });
     }
 
     if (
