@@ -17,12 +17,14 @@ function loadWorkflow(name: string) {
 const review = loadWorkflow('aptu-review.yml');
 const triage = loadWorkflow('aptu-triage.yml');
 const scan = loadWorkflow('aptu-scan-security.yml');
+const lintIssue = loadWorkflow('aptu-lint-issue.yml');
 
 describe('aptu dispatch handler templates', () => {
   it('has correct permissions and SHA-pinned refs', () => {
     expect(review).not.toHaveProperty('permissions');
     expect(triage).not.toHaveProperty('permissions');
     expect(scan).not.toHaveProperty('permissions');
+    expect(lintIssue).not.toHaveProperty('permissions');
     expect(review.jobs.review.permissions.contents).toBe('read');
     expect(review.jobs.review.permissions['pull-requests']).toBe('write');
     expect(triage.jobs.triage.permissions.contents).toBe('read');
@@ -30,8 +32,10 @@ describe('aptu dispatch handler templates', () => {
     expect(scan.jobs.scan.permissions.contents).toBe('read');
     expect(scan.jobs.scan.permissions['security-events']).toBe('write');
     expect(scan.jobs.scan.permissions.statuses).toBe('write');
+    expect(lintIssue.jobs.lint.permissions.contents).toBe('read');
     expect(review.jobs.review.uses).toMatch(/@[0-9a-f]{40}/);
     expect(triage.jobs.triage.uses).toMatch(/@[0-9a-f]{40}/);
     expect(scan.jobs.scan.uses).toMatch(/@[0-9a-f]{40}/);
+    expect(lintIssue.jobs.lint.uses).toMatch(/@[0-9a-f]{40}/);
   });
 });

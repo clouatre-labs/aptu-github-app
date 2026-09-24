@@ -103,6 +103,7 @@ const APTU_WORKFLOW_FILES = [
   'aptu-review.yml',
   'aptu-triage.yml',
   'aptu-scan-security.yml',
+  'aptu-lint-issue.yml',
 ] as const;
 const APTU_WORKFLOW_SOURCE_BASE_URL =
   'https://raw.githubusercontent.com/clouatre-labs/aptu-github-app/main/.github/workflows';
