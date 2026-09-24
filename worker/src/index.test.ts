@@ -2908,6 +2908,226 @@ describe('operator org quota exemption', () => {
   });
 });
 
+describe('lint dispatch', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const { createAppAuth } = await import('@octokit/auth-app');
+    // biome-ignore lint/suspicious/noExplicitAny: restoring the mocked auth factory
+    (createAppAuth as any).mockImplementation(() =>
+      vi.fn().mockResolvedValue({ token: 'mock-installation-token' })
+    );
+    quotaControl.body = JSON.stringify({
+      count: 0,
+      exceeded: false,
+      retryAfter: null,
+    });
+    quotaControl.status = 200;
+    quotaControl.overrides = undefined;
+  });
+
+  function mockConfig(yaml: string) {
+    fetchSpy.mockImplementation((url: unknown) => {
+      const urlStr =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.href
+            : (url as Request).url;
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(makeConfigResponse(yaml));
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+  }
+
+  function makeIssuesBody(action: string, issueBody?: string) {
+    return JSON.stringify({
+      action,
+      installation: { id: 1 },
+      issue: {
+        number: 5,
+        title: 'Lint test',
+        ...(issueBody !== undefined ? { body: issueBody } : {}),
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+  }
+
+  async function callIssues(action: string, issueBody?: string) {
+    const body = makeIssuesBody(action, issueBody);
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    return callHandler(body, {
+      'X-GitHub-Event': 'issues',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+  }
+
+  function dispatchPayloads() {
+    return fetchSpy.mock.calls
+      .filter((call) => String(call[0]).includes('/dispatches'))
+      .map(
+        (call) =>
+          JSON.parse((call[1]?.body as string) ?? '{}') as {
+            event_type: string;
+            client_payload: Record<string, unknown>;
+          }
+      );
+  }
+
+  it('dispatches both aptu-triage and aptu-lint-issue on issues.opened when lint.enabled is true, truncating long bodies', async () => {
+    mockConfig(
+      'version: 1\ntriage:\n  enabled: true\nlint:\n  enabled: true\n  spec: .github/lint-specs.toml'
+    );
+
+    const longBody = 'x'.repeat(70000);
+    const response = await callIssues('opened', longBody);
+
+    expect(response.status).toBe(204);
+    const payloads = dispatchPayloads();
+    expect(payloads.length).toBe(2);
+    expect(payloads[0]?.event_type).toBe('aptu-triage');
+    expect(payloads[1]?.event_type).toBe('aptu-lint-issue');
+    expect(payloads[1]?.client_payload).toEqual({
+      originating_repo: 'owner/repo',
+      issue_number: 5,
+      issue_body: 'x'.repeat(60000),
+      lint_spec: '.github/lint-specs.toml',
+      installation_token: 'mock-installation-token',
+    });
+  });
+
+  it('omits lint_spec from the aptu-lint-issue payload when lint.spec is absent', async () => {
+    mockConfig('version: 1\ntriage:\n  enabled: true\nlint:\n  enabled: true');
+
+    await callIssues('opened', 'short body');
+
+    const payloads = dispatchPayloads();
+    expect(payloads.length).toBe(2);
+    expect(payloads[1]?.event_type).toBe('aptu-lint-issue');
+    expect(payloads[1]?.client_payload).not.toHaveProperty('lint_spec');
+  });
+
+  it('does not dispatch aptu-lint-issue when lint is absent while triage is unaffected', async () => {
+    mockConfig('version: 1\ntriage:\n  enabled: true');
+
+    const response = await callIssues('opened', 'body');
+
+    expect(response.status).toBe(204);
+    const payloads = dispatchPayloads();
+    expect(payloads.length).toBe(1);
+    expect(payloads[0]?.event_type).toBe('aptu-triage');
+  });
+
+  it('does not dispatch aptu-lint-issue when lint.enabled is false', async () => {
+    mockConfig('version: 1\ntriage:\n  enabled: true\nlint:\n  enabled: false');
+
+    const response = await callIssues('opened', 'body');
+
+    expect(response.status).toBe(204);
+    const payloads = dispatchPayloads();
+    expect(payloads.length).toBe(1);
+    expect(payloads[0]?.event_type).toBe('aptu-triage');
+  });
+
+  it('dispatches aptu-lint-issue only on issues.edited without re-triage', async () => {
+    mockConfig(
+      'version: 1\ntriage:\n  enabled: true\nlint:\n  enabled: true\n  spec: specs.toml'
+    );
+
+    const response = await callIssues('edited', 'edited body');
+
+    expect(response.status).toBe(204);
+    const payloads = dispatchPayloads();
+    expect(payloads.length).toBe(1);
+    expect(payloads[0]?.event_type).toBe('aptu-lint-issue');
+    expect(payloads[0]?.client_payload).toMatchObject({
+      originating_repo: 'owner/repo',
+      issue_number: 5,
+      issue_body: 'edited body',
+      lint_spec: 'specs.toml',
+    });
+  });
+
+  it('returns 200 on issues.edited when lint is not enabled', async () => {
+    mockConfig('version: 1\ntriage:\n  enabled: true');
+
+    const response = await callIssues('edited', 'body');
+
+    expect(response.status).toBe(200);
+    expect(dispatchPayloads().length).toBe(0);
+  });
+
+  it('skips lint silently when lint quota is exhausted while triage on opened still proceeds', async () => {
+    mockConfig(
+      'version: 1\ntriage:\n  enabled: true\nlint:\n  enabled: true\n  spec: specs.toml'
+    );
+    quotaControl.overrides = {
+      lint: { body: JSON.stringify({ exceeded: true }), status: 429 },
+    };
+
+    const response = await callIssues('opened', 'body');
+
+    expect(response.status).toBe(204);
+    const payloads = dispatchPayloads();
+    expect(payloads.length).toBe(1);
+    expect(payloads[0]?.event_type).toBe('aptu-triage');
+  });
+
+  it('skips lint dispatch and does not return 500 on issues.edited when the dispatch token fails', async () => {
+    mockConfig(
+      'version: 1\ntriage:\n  enabled: true\nlint:\n  enabled: true\n  spec: specs.toml'
+    );
+    const { createAppAuth } = await import('@octokit/auth-app');
+    // biome-ignore lint/suspicious/noExplicitAny: mocking requires casting to any
+    (createAppAuth as any).mockImplementation(
+      () =>
+        function (opts: { permissions?: Record<string, unknown> }) {
+          if (opts.permissions?.contents === 'write') {
+            return Promise.reject(new Error('Failed to mint dispatch token'));
+          }
+          return Promise.resolve({ token: 'mock-installation-token' });
+        }
+    );
+
+    const response = await callIssues('edited', 'body');
+
+    expect(response.status).toBe(200);
+    expect(dispatchPayloads().length).toBe(0);
+    // biome-ignore lint/suspicious/noExplicitAny: restoring the mocked auth factory
+    (createAppAuth as any).mockImplementation(() =>
+      vi.fn().mockResolvedValue({ token: 'mock-installation-token' })
+    );
+  });
+
+  it('skips lint dispatch and does not return 500 on issues.edited when the lint installation token fails', async () => {
+    mockConfig(
+      'version: 1\ntriage:\n  enabled: true\nlint:\n  enabled: true\n  spec: specs.toml'
+    );
+    const { createAppAuth } = await import('@octokit/auth-app');
+    // biome-ignore lint/suspicious/noExplicitAny: mocking requires casting to any
+    (createAppAuth as any).mockImplementation(
+      () =>
+        function (opts: { permissions?: Record<string, unknown> }) {
+          if (opts.permissions?.issues === 'write') {
+            return Promise.reject(new Error('Failed to mint lint token'));
+          }
+          return Promise.resolve({ token: 'mock-installation-token' });
+        }
+    );
+
+    const response = await callIssues('edited', 'body');
+
+    expect(response.status).toBe(200);
+    expect(dispatchPayloads().length).toBe(0);
+    // biome-ignore lint/suspicious/noExplicitAny: restoring the mocked auth factory
+    (createAppAuth as any).mockImplementation(() =>
+      vi.fn().mockResolvedValue({ token: 'mock-installation-token' })
+    );
+  });
+});
+
 describe('scoped token helper', () => {
   beforeEach(() => {
     vi.clearAllMocks();

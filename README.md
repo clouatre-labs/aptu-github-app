@@ -1,11 +1,11 @@
 # aptu-github-app
 
-A Cloudflare Worker and GitHub Actions that automate issue triage and PR review for any repository with the aptu GitHub App installed, powered by [aptu](https://aptu.dev). The Worker validates GitHub webhook signatures, reads each repository's `.github/aptu.yml` opt-in config, and dispatches `repository_dispatch` events to the originating repository to trigger aptu-powered triage, review, and security scan workflows via reusable workflows.
+A Cloudflare Worker and GitHub Actions that automate issue triage and PR review for any repository with the aptu GitHub App installed, powered by [aptu](https://aptu.dev). The Worker validates GitHub webhook signatures, reads each repository's `.github/aptu.yml` opt-in config, and dispatches `repository_dispatch` events to the originating repository to trigger aptu-powered triage, review, security scan, and issue lint workflows via reusable workflows.
 
 ## Architecture
 
 ```text
-GitHub event (issues.opened / pull_request.opened|synchronize|reopened|ready_for_review
+GitHub event (issues.opened|edited / pull_request.opened|synchronize|reopened|ready_for_review
               / issue_comment.created / pull_request_review_comment.created)
   -> Cloudflare Worker
        1. Verify X-Hub-Signature-256 (HMAC)
@@ -17,7 +17,7 @@ GitHub event (issues.opened / pull_request.opened|synchronize|reopened|ready_for
        7. For PRs: skip draft PRs; evaluate review.paths filters
        8. Get dispatch token (scoped to originating repo)
        9. POST repository_dispatch to originating repo
-  -> Caller's .github/workflows/aptu-{review,triage,scan-security}.yml (repository_dispatch handlers)
+  -> Caller's .github/workflows/aptu-{review,triage,scan-security,lint-issue}.yml (repository_dispatch handlers)
        -> Calls reusable workflow from aptu-github-app repo
             -> Checkout caller repo, run aptu CLI with caller's AI API key
   -> GitHub Reviews API (inline comments as github-actions[bot])
@@ -54,6 +54,10 @@ scan:
   fail-on: critical,high                          # optional: comma-separated severities that fail the scan
   path: src/                                      # optional: root directory to scan (default ".")
 
+lint:
+  enabled: true                                   # required if lint block present
+  spec: .github/lint-specs.toml                   # optional: lint spec path passed to aptu lint-issue --config
+
 ai:
   provider: openrouter                            # required if ai block present
   model: google/gemma-4-26b-a4b-it                # required if ai block present
@@ -78,9 +82,11 @@ The `scan` block enables aptu's local pattern-based security scanning. Scan runs
 | `scan.enabled` | boolean | `false` | Enable aptu scan-security on pull requests. Runs local pattern-based secret scanning and uploads SARIF results to GitHub Code Scanning. No `ai` block required. |
 | `scan.fail-on` | string | -- | Comma-separated severities that fail the scan (`critical`, `high`, `medium`, `low`). Omit to report findings without failing the check. |
 | `scan.path` | string | `.` | Root directory to scan. |
+| `lint.enabled` | boolean | `false` | Dispatch `aptu-lint-issue` on `issues.opened` and `issues.edited` events. Deterministic linting of the issue body; advisory only (never fails the workflow). |
+| `lint.spec` | string | -- | Path to a lint spec file, relative to the target repo root. Passed to aptu as `--config`. Omit for default auto-discovery. |
 | `telemetry.enabled` | boolean | `false` | Opt in to POST anonymized review-context counters (`reviews_total`, `truncation_events_total`, `files_truncated_total`, `budget_drop_reason_counts`, `finish_reasons_counts`, `model_tier_counts`, `prompt_budget_pct_histogram`) to the hosted Worker for aggregate product analytics. No repo, PR, or actor identifiers are ever included; a failed or unreachable POST never fails the PR review job. Off by default. |
 
-All fields under `triage`, `review`, `scan`, `ai`, and `telemetry` are validated strictly: unknown keys are ignored, but a missing `enabled` boolean causes the entire config to be rejected (no dispatch). Both `ai` fields (`provider` and `model`) are required if the `ai` block is present; a partial or empty-string block is rejected.
+All fields under `triage`, `review`, `scan`, `lint`, `ai`, and `telemetry` are validated strictly: unknown keys are ignored, but a missing `enabled` boolean causes the entire config to be rejected (no dispatch). Both `ai` fields (`provider` and `model`) are required if the `ai` block is present; a partial or empty-string block is rejected.
 
 ### Telemetry rollup
 
@@ -119,8 +125,9 @@ Each repository that uses the aptu GitHub App must have these files:
 2. `.github/workflows/aptu-review.yml` -- dispatch handler for PR review
 3. `.github/workflows/aptu-triage.yml` -- dispatch handler for issue triage
 4. `.github/workflows/aptu-scan-security.yml` -- dispatch handler for security scans
+5. `.github/workflows/aptu-lint-issue.yml` -- dispatch handler for issue linting (not auto-provisioned; requires `lint.enabled: true` in `.github/aptu.yml` and an aptu release containing the `lint-issue` command)
 
-When a repository is added to an installation, the Worker automatically provisions the three workflow files above. You only need to add `.github/aptu.yml` and configure an AI provider API key secret (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`) in your repository. The GitHub App must have the **Workflows** permission enabled for automatic provisioning.
+The Worker automatically provisions the three workflow files above when a repository is added to an installation; the lint dispatch handler below is not auto-provisioned and must be added manually while it is absent from the pinned reusable-workflow tag. You only need to add `.github/aptu.yml` and configure an AI provider API key secret (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`) in your repository. The GitHub App must have the **Workflows** permission enabled for automatic provisioning.
 
 Each dispatch handler receives its own `repository_dispatch` event type from the Worker and calls the appropriate reusable workflow hosted in `clouatre-labs/aptu-github-app`. The Worker mints an operation-scoped installation token and forwards it via `client_payload.installation_token`, which the dispatch handler passes into the reusable workflow's `secrets:` block. Installers do not need `APP_ID` or `APP_PRIVATE_KEY` secrets in their repository. The caller's AI API key secret is also passed to the reusable workflow via the `secrets:` block. Each handler resolves the key named after the `ai.provider` in `.github/aptu.yml` (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`). Create that secret in your own repository or rely on an org-visible secret of the same name.
 

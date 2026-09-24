@@ -1,0 +1,224 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
+
+name: Lint Issue
+
+on:
+  workflow_call:
+    inputs:
+      originating_repo:
+        required: true
+        type: string
+      issue_number:
+        required: true
+        type: number
+      issue_body:
+        required: true
+        type: string
+      lint_spec:
+        required: false
+        type: string
+        default: ''
+    secrets:
+      installation-token:
+        required: true
+
+permissions: {}
+
+jobs:
+  lint:
+    name: Lint Issue
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Mask installation token
+        env:
+          INSTALLATION_TOKEN: ${{ secrets.installation-token }}
+        run: |
+          if [ -n "$INSTALLATION_TOKEN" ]; then
+            echo "::add-mask::$INSTALLATION_TOKEN"
+          fi
+
+      - name: Validate payload
+        id: validate
+        env:
+          ORIGINATING_REPO: ${{ inputs.originating_repo }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+        run: |
+          GITHUB_NAME_RE='^[a-zA-Z0-9]([a-zA-Z0-9._-]{0,37}[a-zA-Z0-9])?$'
+          ORIGINATING_OWNER="${ORIGINATING_REPO%%/*}"
+          ORIGINATING_REPO_NAME="${ORIGINATING_REPO#*/}"
+          if [[ "${ORIGINATING_REPO}" != *"/"* || -z "${ORIGINATING_OWNER}" || -z "${ORIGINATING_REPO_NAME}" || ! "${ORIGINATING_OWNER}" =~ ${GITHUB_NAME_RE} ]]; then
+            echo "::error::Invalid originating_owner: ${ORIGINATING_OWNER}"
+            exit 1
+          fi
+          if [[ ! "${ORIGINATING_REPO_NAME}" =~ ${GITHUB_NAME_RE} ]]; then
+            echo "::error::Invalid originating_repo_name: ${ORIGINATING_REPO_NAME}"
+            exit 1
+          fi
+          if [[ ! "${ISSUE_NUMBER}" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Invalid issue_number: ${ISSUE_NUMBER}"
+            exit 1
+          fi
+
+      - name: Checkout originating repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.originating_repo }}
+          token: ${{ secrets.installation-token }}
+          persist-credentials: false
+
+      - name: Resolve aptu version
+        id: resolve-version
+        env:
+          GH_TOKEN: ${{ secrets.installation-token }}
+        run: |
+          echo "::group::Resolving latest aptu v0.x release"
+          APTU_VERSION=$(gh api repos/clouatre-labs/aptu/releases \
+            --jq '[.[] | select(.tag_name | startswith("v0."))] | first | .tag_name' \
+            | sed 's/^v//')
+          if [[ -z "$APTU_VERSION" ]]; then
+            echo "::error::Could not resolve latest aptu v0.x release"
+            exit 1
+          fi
+          echo "Resolved: $APTU_VERSION"
+          echo "version=$APTU_VERSION" >> "$GITHUB_OUTPUT"
+          echo "::endgroup::"
+
+      - name: Cache aptu binary
+        id: cache-aptu
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.local/bin/aptu
+          key: aptu-${{ steps.resolve-version.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
+          restore-keys: aptu-${{ steps.resolve-version.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Install aptu binary
+        if: steps.cache-aptu.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.installation-token }}
+          APTU_VERSION: ${{ steps.resolve-version.outputs.version }}
+        run: |
+          set -euo pipefail
+          echo "::group::Installing aptu v$APTU_VERSION"
+
+          case "$(uname -m)" in
+            aarch64 | arm64) ARCH="aarch64" ;;
+            x86_64)          ARCH="x86_64"  ;;
+            *) echo "::error::Unsupported architecture $(uname -m)" >&2; exit 1 ;;
+          esac
+          ARCHIVE="aptu-cli-${APTU_VERSION}-${ARCH}-unknown-linux-musl.tar.gz"
+          TEMP_DIR=$(mktemp -d)
+          trap 'rm -rf "$TEMP_DIR"' EXIT
+
+          gh release download "v${APTU_VERSION}" -R clouatre-labs/aptu \
+            --pattern "${ARCHIVE}" \
+            --pattern "${ARCHIVE%.tar.gz}.sha256" \
+            -D "$TEMP_DIR"
+
+          pushd "$TEMP_DIR" > /dev/null
+          sha256sum -c "${ARCHIVE%.tar.gz}.sha256"
+          popd > /dev/null
+
+          gh attestation verify "$TEMP_DIR/${ARCHIVE}" -R clouatre-labs/aptu
+
+          tar -xzf "$TEMP_DIR/${ARCHIVE}" -C "$TEMP_DIR"
+
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 "$TEMP_DIR/aptu" "$HOME/.local/bin/aptu"
+
+          echo "aptu v$APTU_VERSION installed and verified"
+          echo "::endgroup::"
+
+      - name: Check lint-issue capability
+        id: capability
+        env:
+          GH_TOKEN: ${{ secrets.installation-token }}
+        run: |
+          if [[ -x "$HOME/.local/bin/aptu" ]] && "$HOME/.local/bin/aptu" lint-issue --help >/dev/null 2>&1; then
+            echo "supported=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::aptu CLI does not support 'lint-issue' yet (feature not in latest release); skipping lint"
+            echo "supported=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write issue body to file
+        if: steps.capability.outputs.supported == 'true'
+        env:
+          ISSUE_BODY: ${{ inputs.issue_body }}
+        run: |
+          printf '%s' "$ISSUE_BODY" > "$RUNNER_TEMP/issue-body.md"
+
+      - name: Run aptu lint-issue and route exit code
+        if: steps.capability.outputs.supported == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.installation-token }}
+          ORIGINATING_REPO: ${{ inputs.originating_repo }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          LINT_SPEC: ${{ inputs.lint_spec }}
+          BODY_FILE: ${{ runner.temp }}/issue-body.md
+        run: |
+          set -uo pipefail
+
+          ARGS=(--file "$BODY_FILE" --output text)
+          if [[ -n "$LINT_SPEC" ]]; then
+            ARGS+=(--config "$LINT_SPEC")
+          fi
+
+          EXIT_CODE=0
+          aptu lint-issue "${ARGS[@]}" || EXIT_CODE=$?
+
+          MARKER="<!-- aptu-lint-issue: ${ORIGINATING_REPO}#${ISSUE_NUMBER} -->"
+
+          find_comment_id() {
+            gh api "repos/${ORIGINATING_REPO}/issues/${ISSUE_NUMBER}/comments" \
+              --jq '.[] | "\(.id)\t\(.body)"' \
+              | awk -F'\t' -v m="$MARKER" 'index($0, m) { print $1 }' \
+              | tail -n 1
+          }
+
+          case "$EXIT_CODE" in
+            0)
+              gh api --method DELETE \
+                "repos/${ORIGINATING_REPO}/issues/${ISSUE_NUMBER}/labels/lint-issue" \
+                >/dev/null 2>&1 || true
+
+              COMMENT_ID=$(find_comment_id)
+              if [[ -n "$COMMENT_ID" ]]; then
+                gh api --method PATCH "repos/${ORIGINATING_REPO}/issues/comments/${COMMENT_ID}" \
+                  -f body="${MARKER}
+          Lint passed: no violations found (issue linted by aptu)." \
+                  >/dev/null
+              fi
+              ;;
+            1)
+              COMMENT_ID=$(find_comment_id)
+              if [[ -n "$COMMENT_ID" ]]; then
+                gh api --method PATCH "repos/${ORIGINATING_REPO}/issues/comments/${COMMENT_ID}" \
+                  -f body="${MARKER}
+          Lint violations found. See the workflow run output above for details." \
+                  >/dev/null
+              else
+                gh api --method POST "repos/${ORIGINATING_REPO}/issues/${ISSUE_NUMBER}/comments" \
+                  -f body="${MARKER}
+          Lint violations found. See the workflow run output above for details." \
+                  >/dev/null
+              fi
+
+              gh api --method POST \
+                "repos/${ORIGINATING_REPO}/issues/${ISSUE_NUMBER}/labels" \
+                -f 'labels[]=lint-issue' \
+                >/dev/null 2>&1 || true
+              ;;
+            2)
+              echo "::error::aptu lint-issue failed with a configuration error; check lint.spec and the lint spec file"
+              exit 1
+              ;;
+            *)
+              echo "::error::aptu lint-issue failed unexpectedly with exit code ${EXIT_CODE}"
+              exit 1
+              ;;
+          esac
