@@ -84,10 +84,10 @@ There is **no release automation**. Releases are cut manually by maintainers fro
 
 ### Pin Updates Around a Release
 
-Workflows reference each other by commit SHA (never mutable tags). After a release:
+Workflows reference each other by commit SHA (never mutable tags).
 
-- The dispatcher workflows (`aptu-*.yml`) pin the reusable workflows (`pr-review.yml`, `issue-triage.yml`, `scan-security.yml`) to the tagged release commit — repin them to the new tag's SHA in a follow-up PR (the `Verify Dispatcher Pins` check enforces that pins resolve to tagged commits)
-- When a new `clouatre-labs/aptu` CLI version ships, bump the aptu action pin in `pr-review.yml` and `issue-triage.yml` to that release's tagged commit via a PR; the bump is included in the next app release
+- Same-repo dispatcher workflows (`aptu-review.yml`, `aptu-triage.yml`, `aptu-scan-security.yml`, `aptu-lint-issue.yml`) reference reusable workflows with relative `uses:` paths (e.g. `./.github/workflows/pr-review.yml`), so they always run the current `main` and never need manual repinning
+- Cross-repo `clouatre-labs/aptu` pins in `pr-review.yml` and `issue-triage.yml` are bumped automatically by Renovate: a customManager tracks `clouatre-labs/aptu@<40-hex-SHA> # vX.Y.Z` comments using the `git-tags` datasource against https://github.com/clouatre-labs/aptu.git and automerges updates. When bumping a pin manually, keep the SHA and version comment together so both stay truthful
 
 ## Code Review
 
@@ -135,16 +135,12 @@ docs/             # Architecture and design documentation
 
 ## Tagging Convention
 
-Reusable workflow files (`pr-review.yml`, `issue-triage.yml`, `scan-security.yml`) are consumed by dispatcher workflows via SHA-pinned `uses:` references. Keeping those pins current requires a tag-and-bump convention:
+Reusable workflow files (`pr-review.yml`, `issue-triage.yml`, `scan-security.yml`) are consumed by dispatcher workflows via relative `uses:` paths, so they require no pin maintenance. Cross-repo `clouatre-labs/aptu` pins are SHA-pinned with a version comment and tracked by Renovate's customManager (git-tags datasource, automerge):
 
-- Cut an annotated semver tag (e.g. `git tag -a v0.2.0 -m "v0.2.0"`) on any merge to main that
-  touches a reusable workflow file referenced by a dispatcher (`pr-review.yml`, `issue-triage.yml`, `scan-security.yml`).
-- In the same or a prompt follow-up PR, bump the affected dispatcher workflow's (`aptu-review.yml`,
-  `aptu-triage.yml`, `aptu-scan-security.yml`) `uses:` pin to `@<new-tag-SHA> # <new-tag>` -- both the SHA and comment must change together so the comment stays truthful.
 - Tags matching `v*.*.*` are protected by a repository ruleset: creation, deletion, and
   re-pointing (force-move) are restricted to repository admins.
-- This lets Renovate's github-actions manager track and bump the pin automatically when a newer
-  tag is cut (requires the SHA+comment form -- a bare SHA is not tracked).
+- Renovate continuously watches https://github.com/clouatre-labs/aptu.git tags and automerges
+  updates to the pinned SHA and version comment.
 
 ## Contribution Checklist
 

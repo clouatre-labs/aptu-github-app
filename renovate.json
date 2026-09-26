@@ -7,7 +7,39 @@
   "dependencyDashboard": false,
   "schedule": ["before 6am on monday"],
   "timezone": "UTC",
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": [
+        "^\\.github/workflows/[^/]+\\.ya?ml$"
+      ],
+      "matchStrings": [
+        "uses:\\s+clouatre-labs/aptu@(?<currentDigest>[0-9a-f]{40})\\s+#\\s*(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "clouatre-labs/aptu",
+      "datasourceTemplate": "git-tags",
+      "registryUrlTemplate": "https://github.com/clouatre-labs/aptu.git",
+      "extractVersionTemplate": "^v(.+)$"
+    }
+  ],
   "packageRules": [
+    {
+      "matchManagers": [
+        "regex"
+      ],
+      "matchDepNames": [
+        "clouatre-labs/aptu"
+      ],
+      "schedule": [],
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch",
+        "digest",
+        "pin"
+      ],
+      "automerge": true
+    },
     {
       "groupName": "non-major",
       "matchUpdateTypes": [

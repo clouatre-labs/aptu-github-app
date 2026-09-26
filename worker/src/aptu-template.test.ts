@@ -20,7 +20,7 @@ const scan = loadWorkflow('aptu-scan-security.yml');
 const lintIssue = loadWorkflow('aptu-lint-issue.yml');
 
 describe('aptu dispatch handler templates', () => {
-  it('has correct permissions and SHA-pinned refs', () => {
+  it('has correct permissions and relative reusable workflow refs', () => {
     expect(review).not.toHaveProperty('permissions');
     expect(triage).not.toHaveProperty('permissions');
     expect(scan).not.toHaveProperty('permissions');
@@ -33,9 +33,9 @@ describe('aptu dispatch handler templates', () => {
     expect(scan.jobs.scan.permissions['security-events']).toBe('write');
     expect(scan.jobs.scan.permissions.statuses).toBe('write');
     expect(lintIssue.jobs.lint.permissions.contents).toBe('read');
-    expect(review.jobs.review.uses).toMatch(/@[0-9a-f]{40}/);
-    expect(triage.jobs.triage.uses).toMatch(/@[0-9a-f]{40}/);
-    expect(scan.jobs.scan.uses).toMatch(/@[0-9a-f]{40}/);
-    expect(lintIssue.jobs.lint.uses).toMatch(/@[0-9a-f]{40}/);
+    expect(review.jobs.review.uses).toBe('./.github/workflows/pr-review.yml');
+    expect(triage.jobs.triage.uses).toBe('./.github/workflows/issue-triage.yml');
+    expect(scan.jobs.scan.uses).toBe('./.github/workflows/scan-security.yml');
+    expect(lintIssue.jobs.lint.uses).toBe('./.github/workflows/lint-issue.yml');
   });
 });
