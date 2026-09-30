@@ -3518,7 +3518,8 @@ describe('workflow provisioning', () => {
     });
     const response = await callHandler(value, signed('installation', value));
     expect(response.status).toBe(200);
-    expect(fetchSpy.mock.calls.filter(([url]) => String(url).includes('/owner/second/contents/'))).toHaveLength(8);
+    // 8 provisioning calls (4 existing-GET + 4 PUT) plus 1 welcome config GET
+    expect(fetchSpy.mock.calls.filter(([url]) => String(url).includes('/owner/second/contents/'))).toHaveLength(9);
   });
 
   it('routes installation.created to provisioning', async () => {
@@ -3565,5 +3566,74 @@ describe('workflow provisioning', () => {
     const value = payload('installation', 'created', [{}]);
     expect((await callHandler(value, signed('installation', value))).status).toBe(400);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  describe('welcome issue', () => {
+    function issuePosts(): Array<[unknown, RequestInit | undefined]> {
+      return fetchSpy.mock.calls.filter(
+        ([, init]) =>
+          (init as RequestInit | undefined)?.method === 'POST' &&
+          String((init as RequestInit | undefined)?.body ?? '').includes('"title"')
+      ) as unknown as Array<[unknown, RequestInit | undefined]>;
+    }
+    function setupFetch(configStatus: number, issueStatus: number): void {
+      fetchSpy.mockImplementation((url, init) => {
+        const target = String(url);
+        if (target.startsWith(rawPrefix))
+          return Promise.resolve(new Response('source'));
+        if (target.endsWith('/contents/.github/aptu.yml'))
+          return Promise.resolve(
+            configStatus === 200
+              ? makeConfigResponse('version: 1\ntriage:\n  enabled: true\nai:\n  provider: openrouter\n  model: m')
+              : new Response(null, { status: configStatus })
+          );
+        if (target.endsWith('/issues') && init?.method === 'POST')
+          return Promise.resolve(new Response(null, { status: issueStatus }));
+        return Promise.resolve(
+          new Response(null, { status: init?.method ? 201 : 404 })
+        );
+      });
+    }
+
+    it('posts a welcome issue mentioning the minimal config when aptu.yml is missing', async () => {
+      setupFetch(404, 201);
+      const value = payload('installation', 'created', [{ full_name: 'owner/repo' }]);
+      expect((await callHandler(value, signed('installation', value))).status).toBe(200);
+      const posts = issuePosts();
+      expect(posts).toHaveLength(1);
+      const [url, init] = posts[0] as [unknown, RequestInit | undefined];
+      expect(String(url)).toBe('https://api.github.com/repos/owner/repo/issues');
+      const parsed = JSON.parse((init as RequestInit).body as string);
+      expect(parsed.body).toContain('version: 1');
+      expect(parsed.body).toContain('ai:');
+    });
+
+    it('captures a welcome-issue POST failure and still returns 200', async () => {
+      setupFetch(404, 500);
+      const value = payload('installation', 'created', [{ full_name: 'owner/repo' }]);
+      expect((await callHandler(value, signed('installation', value))).status).toBe(200);
+      expect(issuePosts()).toHaveLength(1);
+      const { captureException } = await import('@sentry/cloudflare');
+      expect(captureException).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('500') }),
+        expect.objectContaining({ tags: expect.objectContaining({ eventType: 'welcome' }) })
+      );
+    });
+
+    it('skips the welcome issue when config is valid with an ai block', async () => {
+      setupFetch(200, 201);
+      const value = payload('installation', 'created', [{ full_name: 'owner/repo' }]);
+      expect((await callHandler(value, signed('installation', value))).status).toBe(200);
+      expect(issuePosts()).toHaveLength(0);
+    });
+
+    it('posts a welcome issue on installation_repositories added action', async () => {
+      setupFetch(404, 201);
+      const value = payload('installation_repositories', 'added', [
+        { full_name: 'owner/repo' },
+      ]);
+      expect((await callHandler(value, signed('installation_repositories', value))).status).toBe(200);
+      expect(issuePosts()).toHaveLength(1);
+    });
   });
 });

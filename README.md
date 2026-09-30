@@ -94,13 +94,18 @@ When `telemetry.enabled: true`, the `pr-review.yml` workflow passes `telemetry-r
 
 ### Minimal opt-in example
 
+This happy-path example parses with `parseConfig` and is the same example the welcome issue posted on installation suggests:
+
 ```yaml
 version: 1
 triage:
   enabled: true
-review:
-  enabled: true
+ai:
+  provider: openrouter
+  model: google/gemma-4-26b-a4b-it
 ```
+
+The `ai` block contains no secret. It selects the provider and model, which determines which of your repository secrets the dispatch handler resolves: `gemini` -> `GEMINI_API_KEY`, `anthropic` -> `ANTHROPIC_API_KEY`, `openrouter` -> `OPENROUTER_API_KEY`. Create the matching secret yourself; the Worker cannot verify that it exists. Security scanning works without the `ai` block.
 
 ### External installation example
 
@@ -127,7 +132,7 @@ Each repository that uses the aptu GitHub App must have these files:
 4. `.github/workflows/aptu-scan-security.yml` -- dispatch handler for security scans
 5. `.github/workflows/aptu-lint-issue.yml` -- dispatch handler for issue linting (not auto-provisioned; requires `lint.enabled: true` in `.github/aptu.yml` and an aptu release containing the `lint-issue` command)
 
-The Worker automatically provisions the three workflow files above when a repository is added to an installation; the lint dispatch handler below is not auto-provisioned and must be added manually while it is absent from the pinned reusable-workflow tag. You only need to add `.github/aptu.yml` and configure an AI provider API key secret (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`) in your repository. The GitHub App must have the **Workflows** permission enabled for automatic provisioning.
+The Worker automatically provisions the three workflow files above when a repository is added to an installation; the lint dispatch handler below is not auto-provisioned and must be added manually while it is absent from the pinned reusable-workflow tag. You only need to add `.github/aptu.yml` and configure an AI provider API key secret (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`) in your repository. The GitHub App must have the **Workflows** permission enabled for automatic provisioning. For a step-by-step walkthrough, see [docs/onboarding.md](docs/onboarding.md).
 
 Each dispatch handler receives its own `repository_dispatch` event type from the Worker and calls the appropriate reusable workflow hosted in `clouatre-labs/aptu-github-app`. The Worker mints an operation-scoped installation token and forwards it via `client_payload.installation_token`, which the dispatch handler passes into the reusable workflow's `secrets:` block. Installers do not need `APP_ID` or `APP_PRIVATE_KEY` secrets in their repository. The caller's AI API key secret is also passed to the reusable workflow via the `secrets:` block. Each handler resolves the key named after the `ai.provider` in `.github/aptu.yml` (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`). Create that secret in your own repository or rely on an org-visible secret of the same name.
 
