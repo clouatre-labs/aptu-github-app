@@ -212,7 +212,7 @@ const WELCOME_ISSUE_BODY = [
   'secret of the same name). The Worker cannot verify that the secret exists;',
   'you must create it yourself. Security scanning works without the `ai` block.',
   '',
-  'See the full runbook in [docs/onboarding.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/docs/onboarding.md).',
+  'See the full runbook in [docs/ONBOARDING.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/docs/ONBOARDING.md).',
 ].join('\n');
 
 /**

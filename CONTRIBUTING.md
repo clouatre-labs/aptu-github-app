@@ -158,7 +158,7 @@ Reusable workflow files (`pr-review.yml`, `issue-triage.yml`, `scan-security.yml
 ## Getting Help
 
 - **Bug Reports**: open an issue with reproduction steps
-- **Onboarding verification**: use the runbook in [docs/onboarding.md](docs/onboarding.md) to verify install-to-first-review behavior
+- **Onboarding verification**: use the runbook in [docs/ONBOARDING.md](docs/ONBOARDING.md) to verify install-to-first-review behavior
 - **Feature Requests**: check ROADMAP.md first, then open an issue
 - **Security Issues**: report privately to hugues+aptu-github-app-security@linux.com
 

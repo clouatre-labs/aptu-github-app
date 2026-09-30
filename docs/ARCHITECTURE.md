@@ -246,4 +246,4 @@ The Worker route `aptu.dev/webhook` requires a proxied `AAAA 100::` DNS record o
 
 Tests live in `worker/src/index.test.ts` and run via Vitest (`bun test`). CI enforces lint (Biome), type check (TypeScript), and tests before merge. The `InstallationQuota` Durable Object is mocked via a `DurableObjectStub` test double. All checks must pass; the `CI Result` job is the sole required status check in the branch ruleset.
 
-Onboarding operators should follow the step-by-step runbook in [docs/onboarding.md](onboarding.md), which covers installation, `.github/aptu.yml`, the AI secret, and the install-time welcome-issue flow.
+Onboarding operators should follow the step-by-step runbook in [docs/ONBOARDING.md](ONBOARDING.md), which covers installation, `.github/aptu.yml`, the AI secret, and the install-time welcome-issue flow.

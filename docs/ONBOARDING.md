@@ -37,11 +37,7 @@ This file is parsed by the Worker's `parseConfig`; `version` must be `1`, each f
 
 ## Step 3: Add the AI secret
 
-The `ai` block contains no secret. It selects the provider and model, which determines which repository secret the dispatch handler resolves:
-
-- `provider: gemini` -> `GEMINI_API_KEY`
-- `provider: anthropic` -> `ANTHROPIC_API_KEY`
-- `provider: openrouter` -> `OPENROUTER_API_KEY`
+The `ai` block contains no secret. It selects the provider and model, which determines which repository secret the dispatch handler resolves; see the [canonical ai-block-vs-secret explanation](https://github.com/clouatre-labs/aptu-github-app/blob/main/README.md#installation) in README.md for the provider-to-secret-name mapping.
 
 Create the matching secret in the repository (Settings > Secrets and variables > Actions) or rely on an org-visible secret of the same name. The Worker cannot verify that the secret exists; a missing secret surfaces only as a failed reusable-workflow run at review time. Security scanning works without the `ai` block.
 
@@ -50,6 +46,7 @@ Create the matching secret in the repository (Settings > Secrets and variables >
 1. Confirm the welcome issue (if one was opened) can be closed after the config lands.
 2. Open a pull request. Within moments the aptu app should appear as a reviewer (`github-actions[bot]` inline comments come from the reusable workflow).
 3. Open an issue and confirm triage runs.
+4. With `lint.enabled: true` in `.github/aptu.yml`, opened or edited issues also trigger deterministic issue linting (`aptu-lint-issue`, advisory only); this requires an aptu release containing the `lint-issue` command.
 
 Acceptance for the install-time flow itself (welcome issue posted for missing/incomplete config, dedupe when complete) is covered by unit tests in `worker/src/index.test.ts` under the "welcome issue" describe block. A live scratch-repo walkthrough of steps 1-4 is the manual acceptance step for this runbook.
 
