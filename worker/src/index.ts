@@ -97,6 +97,7 @@ export const PERMS = {
   scan: { contents: 'read', security_events: 'write', statuses: 'write' },
   dispatch: { contents: 'write' },
   provision: { contents: 'write', workflows: 'write' },
+  welcome: { contents: 'read', issues: 'write' },
 } as const;
 
 const APTU_WORKFLOW_FILES = [
@@ -179,6 +180,88 @@ export async function provisionWorkflowFiles(
       captureException(error, { tags: { eventType: 'provision', repo: repoFullName, file } });
       console.error(`Provisioning failed for ${repoFullName}/${file}:`, error);
     }
+  }
+}
+
+const WELCOME_ISSUE_TITLE = 'Welcome to aptu: finish onboarding with .github/aptu.yml';
+
+const WELCOME_ISSUE_BODY = [
+  'Thanks for installing the aptu GitHub App on this repository.',
+  '',
+  'The dispatch handler workflows were provisioned automatically. To enable',
+  'aptu triage and review, add a `.github/aptu.yml` file with at least one',
+  'enabled feature block. Copy-paste this minimal example:',
+  '',
+  '```yaml',
+  'version: 1',
+  'triage:',
+  '  enabled: true',
+  'ai:',
+  '  provider: openrouter',
+  '  model: google/gemma-4-26b-a4b-it',
+  '```',
+  '',
+  'The `ai` block contains no secret. It selects the provider and model, which',
+  'determines which repository secret the dispatch handler resolves:',
+  '',
+  '- `provider: gemini` -> `GEMINI_API_KEY`',
+  '- `provider: anthropic` -> `ANTHROPIC_API_KEY`',
+  '- `provider: openrouter` -> `OPENROUTER_API_KEY`',
+  '',
+  'Create the matching secret in this repository (or rely on an org-visible',
+  'secret of the same name). The Worker cannot verify that the secret exists;',
+  'you must create it yourself. Security scanning works without the `ai` block.',
+  '',
+  'See the full runbook in [docs/ONBOARDING.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/docs/ONBOARDING.md).',
+].join('\n');
+
+/**
+ * Posts a config-aware welcome issue after workflow provisioning.
+ *
+ * Classifies the repository's .github/aptu.yml: absent/invalid or present
+ * without an ai block receives a welcome issue with copy-paste guidance; a
+ * complete config (valid with ai block) receives nothing. Failures are
+ * captured via captureException and never propagate to the webhook response.
+ */
+export async function postWelcomeIssue(
+  env: Env,
+  repoFullName: string,
+  installationId: number
+): Promise<void> {
+  let token: string;
+  try {
+    token = await getScopedToken(env, installationId, repoFullName, PERMS.welcome);
+  } catch (error) {
+    captureException(error, { tags: { eventType: 'welcome', repo: repoFullName } });
+    console.error(`Failed to get welcome token for ${repoFullName}:`, error);
+    return;
+  }
+  try {
+    const [owner, repo] = repoFullName.split('/');
+    if (!owner || !repo) return;
+    const config = await fetchRepoConfig(token, owner, repo);
+    // Dedupe: a valid config with an ai block means onboarding is complete.
+    if (config !== null && config.ai !== undefined) {
+      console.log(`Welcome skipped-complete ${repoFullName}`);
+      return;
+    }
+    const response = await fetch(`https://api.github.com/repos/${repoFullName}/issues`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(REPO_CONFIG_FETCH_TIMEOUT_MS),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'aptu-webhook/1.0',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ title: WELCOME_ISSUE_TITLE, body: WELCOME_ISSUE_BODY }),
+    });
+    if (!response.ok) throw new Error(`Issues POST failed: ${response.status}`);
+    console.log(`Welcome issue posted for ${repoFullName}`);
+  } catch (error) {
+    captureException(error, { tags: { eventType: 'welcome', repo: repoFullName } });
+    console.error(`Welcome issue failed for ${repoFullName}:`, error);
   }
 }
 
@@ -1109,6 +1192,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       }
       for (const repository of repositories) {
         await provisionWorkflowFiles(env, repository.full_name, installationId);
+        await postWelcomeIssue(env, repository.full_name, installationId);
       }
       return new Response('OK', { status: 200 });
     }
