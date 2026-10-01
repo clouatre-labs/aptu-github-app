@@ -69,7 +69,7 @@ All commits must be GPG-signed with DCO sign-off (`git commit -S --signoff`).
 - Reusable workflow `uses:` refs and action pins must use commit SHAs, not mutable tags (see CVE-2025-30066)
 - Every workflow step must have a `name:` key for readable CI logs
 - Do not duplicate workflow YAML in Markdown files; link to the source file instead (Renovate cannot update SHA pins in Markdown)
-- Renovate manages workflow/action SHA pin updates via `matchManagers: ["github-actions"]` and cross-repo `clouatre-labs/aptu` action pins via a customManager on `@<SHA> # vX.Y.Z` comments (git-tags datasource, automerge)
+- Renovate manages all workflow/action SHA pin updates (including cross-repo `clouatre-labs/aptu` and `clouatre-labs/aptu-github-app` pins) via the native `github-actions` manager on `@<SHA> # vX.Y.Z` comments; the org preset automerges these first-party pins with no `minimumReleaseAge` hold
 
 ## SPDX Headers
 
