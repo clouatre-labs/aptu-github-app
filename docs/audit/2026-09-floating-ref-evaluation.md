@@ -8,7 +8,7 @@ Status: Closed -- No-Go. Issue [#283](https://github.com/clouatre-labs/aptu-gith
 
 - [2026-08-byok-rollout-simplification.md](./2026-08-byok-rollout-simplification.md) -- prior audit; its R2 finding (release-tag pinning plus CI drift check) is the immediate predecessor of this evaluation.
 - [AGENTS.md](../../AGENTS.md) -- "Workflow Security" section (SHA-pinning policy).
-- [CONTRIBUTING.md](../../CONTRIBUTING.md) -- "Releases & Versioning" and "Pin Updates Around a Release" sections, including the Renovate automerge customManager.
+- [CONTRIBUTING.md](../../CONTRIBUTING.md) -- "Releases & Versioning" and "Pin Updates Around a Release" sections, including the Renovate automerge setup for first-party pins.
 
 ## Purpose
 
@@ -47,7 +47,7 @@ The SHA-pinning requirement is explicit house policy: `AGENTS.md` ("Workflow Sec
 The problem floating refs would solve -- manual pin bumps -- is already solved:
 
 - Same-repo dispatcher workflows use relative `uses:` paths and never need repinning.
-- Cross-repo `clouatre-labs/aptu` pins are tracked by a Renovate customManager (git-tags datasource) that automerges SHA and version-comment bumps; see `renovate.json` and `CONTRIBUTING.md`. Zero-touch today, without sacrificing immutability.
+- Cross-repo `clouatre-labs/aptu` pins are tracked by Renovate (native `github-actions` manager) with automerge for first-party pins; see `renovate.json` and `CONTRIBUTING.md`. Zero-touch today, without sacrificing immutability.
 
 A floating ref trades a real security property for a convenience that automation already provides.
 
@@ -55,7 +55,7 @@ A floating ref trades a real security property for a convenience that automation
 
 ## Recommendation
 
-**No-Go.** Do not move the `v0.1` tag or pin consumer workflows to `@main`. Keep SHA pinning for all cross-repo `uses:` refs; rely on the Renovate automerge customManager for zero-touch bumps. Issue #283 closes with this rationale.
+**No-Go.** Do not move the `v0.1` tag or pin consumer workflows to `@main`. Keep SHA pinning for all cross-repo `uses:` refs; rely on Renovate automerge for zero-touch bumps of first-party pins. Issue #283 closes with this rationale.
 
 ### Fallback
 
