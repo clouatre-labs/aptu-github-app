@@ -53,8 +53,8 @@ All commits must be GPG-signed with DCO sign-off (`git commit -S --signoff`).
   `gh release create vX.Y.Z --verify-tag` with curated notes (`## What's Changed` PR list +
   `**Full Changelog**` compare link). Version increment per conventional-commit types accumulated
   since the last tag (`feat` -> minor, `fix`/`chore`/`docs` -> patch, breaking change -> major).
-  After tagging: repin the `aptu-*.yml` dispatchers to the new tag's SHA in a follow-up PR
-  (`Verify Dispatcher Pins` enforces tagged commits); full steps in `CONTRIBUTING.md`
+  No post-tag pin work is required: same-repo dispatchers use relative `uses:` refs, and Renovate
+  automerges cross-repo `clouatre-labs/aptu` action pin bumps; full steps in `CONTRIBUTING.md`
 
 ## Secrets Model
 
@@ -69,7 +69,7 @@ All commits must be GPG-signed with DCO sign-off (`git commit -S --signoff`).
 - Reusable workflow `uses:` refs and action pins must use commit SHAs, not mutable tags (see CVE-2025-30066)
 - Every workflow step must have a `name:` key for readable CI logs
 - Do not duplicate workflow YAML in Markdown files; link to the source file instead (Renovate cannot update SHA pins in Markdown)
-- Renovate manages SHA pin updates via `matchManagers: ["github-actions"]`
+- Renovate manages workflow/action SHA pin updates via `matchManagers: ["github-actions"]` and cross-repo `clouatre-labs/aptu` action pins via a customManager on `@<SHA> # vX.Y.Z` comments (git-tags datasource, automerge)
 
 ## SPDX Headers
 
