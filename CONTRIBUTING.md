@@ -61,7 +61,8 @@ All pull requests run automated checks:
 - **lint** -- Biome lint and format check
 - **typecheck** -- TypeScript type check
 - **test** -- Bun test suite
-- **release** -- Release Please automation (triggered on merge to main)
+- **commitlint** -- Conventional commit message check
+- **verify-aptu-pin-alignment** -- `clouatre-labs/aptu` action pins are SHA-pinned with matching version comments
 - **ci-result** -- Aggregate gate; sole required status check
 
 All checks must pass before merge.
