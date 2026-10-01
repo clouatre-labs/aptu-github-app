@@ -57,7 +57,7 @@ There is still no org-wide aggregate *spend* ceiling (Durable Objects usage-base
 
 ### Config Parser (`worker/src/config.ts`)
 
-`fetchRepoConfig` fetches `.github/aptu.yml` from the originating repository via the GitHub Contents API and decodes the base64 response. `parseConfig` validates the YAML strictly: all required fields must be present and correctly typed; unknown fields are ignored; a partial or empty `ai` block -- missing or empty `provider` or `model` -- causes the entire config to be rejected. `shouldDispatch` checks whether the resolved config enables the requested feature (`triage` or `review`).
+`fetchRepoConfig` fetches `.github/aptu.yml` from the originating repository via the GitHub Contents API and decodes the base64 response. `parseConfig` validates the YAML strictly: all required fields must be present and correctly typed; unknown fields are ignored. The `ai` block is optional; when present as an object, a missing or empty `provider` defaults to `openrouter` and a missing or empty `model` defaults to an empty string, and only a non-object `ai` block rejects the entire config. `shouldDispatch` checks whether the resolved config enables the requested feature (`triage` or `review`).
 
 ## Data Flow
 
@@ -187,7 +187,7 @@ ai:                          # optional
   model: google/gemma-4-26b-a4b-it
 ```
 
-When the `ai` block is configured, the dispatch payload carries `ai_provider` and `ai_model`. The caller's static dispatch handler derives which repository secret to use from `ai_provider` via a static mapping (`anthropic` -> `secrets.ANTHROPIC_API_KEY`, `gemini` -> `secrets.GEMINI_API_KEY`, otherwise `secrets.OPENROUTER_API_KEY`), resolved inside the caller's own workflow run against the caller's own repository secrets. Every secret name in that mapping is a fixed literal, not a caller-supplied string -- this avoids GitHub Actions' requirement to provision the entire secrets context for a dynamically-computed secret key (zizmor's `overprovisioned-secrets` audit).
+When the `ai` block is configured, the dispatch payload carries `ai_provider` and `ai_model` (with `provider` defaulting to `openrouter` and `model` to an empty string when omitted or empty). The caller's static dispatch handler derives which repository secret to use from `ai_provider` via a static mapping (`anthropic` -> `secrets.ANTHROPIC_API_KEY`, `gemini` -> `secrets.GEMINI_API_KEY`, otherwise `secrets.OPENROUTER_API_KEY`), resolved inside the caller's own workflow run against the caller's own repository secrets. Every secret name in that mapping is a fixed literal, not a caller-supplied string -- this avoids GitHub Actions' requirement to provision the entire secrets context for a dynamically-computed secret key (zizmor's `overprovisioned-secrets` audit).
 
 ## Caller-Supplied AI Keys (BYOK)
 

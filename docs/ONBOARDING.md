@@ -33,7 +33,7 @@ ai:
   model: google/gemma-4-26b-a4b-it
 ```
 
-This file is parsed by the Worker's `parseConfig`; `version` must be `1`, each feature block needs an `enabled` boolean, and both `ai.provider` and `ai.model` are required if the `ai` block is present.
+This file is parsed by the Worker's `parseConfig`; `version` must be `1`, each feature block needs an `enabled` boolean, and the `ai` block itself is optional. When `ai` is present, a missing or empty `provider` defaults to `openrouter` and a missing or empty `model` defaults to an empty string; only a non-object `ai` block is rejected.
 
 ## Step 3: Add the AI secret
 

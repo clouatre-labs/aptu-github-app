@@ -140,18 +140,32 @@ export async function provisionWorkflowFiles(
 ): Promise<void> {
   let token: string;
   try {
-    token = await getScopedToken(env, installationId, repoFullName, PERMS.provision);
+    token = await getScopedToken(
+      env,
+      installationId,
+      repoFullName,
+      PERMS.provision
+    );
   } catch (error) {
-    captureException(error, { tags: { eventType: 'provision', repo: repoFullName } });
-    console.error(`Failed to get provisioning token for ${repoFullName}:`, error);
+    captureException(error, {
+      tags: { eventType: 'provision', repo: repoFullName },
+    });
+    console.error(
+      `Failed to get provisioning token for ${repoFullName}:`,
+      error
+    );
     return;
   }
   for (const file of APTU_WORKFLOW_FILES) {
     try {
-      const sourceResponse = await fetch(`${APTU_WORKFLOW_SOURCE_BASE_URL}/${file}`, {
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!sourceResponse.ok) throw new Error(`source fetch failed: ${sourceResponse.status}`);
+      const sourceResponse = await fetch(
+        `${APTU_WORKFLOW_SOURCE_BASE_URL}/${file}`,
+        {
+          signal: AbortSignal.timeout(5000),
+        }
+      );
+      if (!sourceResponse.ok)
+        throw new Error(`source fetch failed: ${sourceResponse.status}`);
       const content = await sourceResponse.text();
       const url = `https://api.github.com/repos/${repoFullName}/contents/.github/workflows/${file}`;
       const headers = {
@@ -165,7 +179,8 @@ export async function provisionWorkflowFiles(
         console.log(`Provisioning skipped-existing ${repoFullName}/${file}`);
         continue;
       }
-      if (existing.status !== 404) throw new Error(`Contents GET failed: ${existing.status}`);
+      if (existing.status !== 404)
+        throw new Error(`Contents GET failed: ${existing.status}`);
       const put = await fetch(url, {
         method: 'PUT',
         headers: { ...headers, 'Content-Type': 'application/json' },
@@ -177,13 +192,16 @@ export async function provisionWorkflowFiles(
       if (!put.ok) throw new Error(`Contents PUT failed: ${put.status}`);
       console.log(`Provisioning provisioned ${repoFullName}/${file}`);
     } catch (error) {
-      captureException(error, { tags: { eventType: 'provision', repo: repoFullName, file } });
+      captureException(error, {
+        tags: { eventType: 'provision', repo: repoFullName, file },
+      });
       console.error(`Provisioning failed for ${repoFullName}/${file}:`, error);
     }
   }
 }
 
-const WELCOME_ISSUE_TITLE = 'Welcome to aptu: finish onboarding with .github/aptu.yml';
+const WELCOME_ISSUE_TITLE =
+  'Welcome to aptu: finish onboarding with .github/aptu.yml';
 
 const WELCOME_ISSUE_BODY = [
   'Thanks for installing the aptu GitHub App on this repository.',
@@ -230,9 +248,16 @@ export async function postWelcomeIssue(
 ): Promise<void> {
   let token: string;
   try {
-    token = await getScopedToken(env, installationId, repoFullName, PERMS.welcome);
+    token = await getScopedToken(
+      env,
+      installationId,
+      repoFullName,
+      PERMS.welcome
+    );
   } catch (error) {
-    captureException(error, { tags: { eventType: 'welcome', repo: repoFullName } });
+    captureException(error, {
+      tags: { eventType: 'welcome', repo: repoFullName },
+    });
     console.error(`Failed to get welcome token for ${repoFullName}:`, error);
     return;
   }
@@ -245,22 +270,30 @@ export async function postWelcomeIssue(
       console.log(`Welcome skipped-complete ${repoFullName}`);
       return;
     }
-    const response = await fetch(`https://api.github.com/repos/${repoFullName}/issues`, {
-      method: 'POST',
-      signal: AbortSignal.timeout(REPO_CONFIG_FETCH_TIMEOUT_MS),
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-        'User-Agent': 'aptu-webhook/1.0',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ title: WELCOME_ISSUE_TITLE, body: WELCOME_ISSUE_BODY }),
-    });
+    const response = await fetch(
+      `https://api.github.com/repos/${repoFullName}/issues`,
+      {
+        method: 'POST',
+        signal: AbortSignal.timeout(REPO_CONFIG_FETCH_TIMEOUT_MS),
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'aptu-webhook/1.0',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: WELCOME_ISSUE_TITLE,
+          body: WELCOME_ISSUE_BODY,
+        }),
+      }
+    );
     if (!response.ok) throw new Error(`Issues POST failed: ${response.status}`);
     console.log(`Welcome issue posted for ${repoFullName}`);
   } catch (error) {
-    captureException(error, { tags: { eventType: 'welcome', repo: repoFullName } });
+    captureException(error, {
+      tags: { eventType: 'welcome', repo: repoFullName },
+    });
     console.error(`Welcome issue failed for ${repoFullName}:`, error);
   }
 }
@@ -1187,7 +1220,11 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       if (!installationId || !Array.isArray(repositories))
         return new Response('Bad Request', { status: 400 });
       for (const repository of repositories) {
-        if (!repository || typeof repository.full_name !== 'string' || !repository.full_name.includes('/'))
+        if (
+          !repository ||
+          typeof repository.full_name !== 'string' ||
+          !repository.full_name.includes('/')
+        )
           return new Response('Bad Request', { status: 400 });
       }
       for (const repository of repositories) {
