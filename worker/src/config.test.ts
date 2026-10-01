@@ -55,17 +55,32 @@ describe('parseConfig', () => {
     });
   });
 
-  it('rejects partial ai block with only provider set', () => {
+  it('accepts partial ai block with only provider set, defaulting model to empty string', () => {
     const raw = btoa(
       'version: 1\ntriage:\n  enabled: true\nai:\n  provider: openai'
     );
-    expect(parseConfig(raw)).toBeNull();
+    const config = parseConfig(raw);
+    expect(config).not.toBeNull();
+    expect(config?.ai).toEqual({
+      provider: 'openai',
+      model: '',
+    });
   });
 
-  it('rejects ai block with empty-string fields', () => {
+  it('accepts ai block with empty-string provider, defaulting to openrouter', () => {
     const raw = btoa(
       'version: 1\ntriage:\n  enabled: true\nai:\n  provider: ""\n  model: gpt-4o'
     );
+    const config = parseConfig(raw);
+    expect(config).not.toBeNull();
+    expect(config?.ai).toEqual({
+      provider: 'openrouter',
+      model: 'gpt-4o',
+    });
+  });
+
+  it('returns null when ai block is a non-object', () => {
+    const raw = btoa('version: 1\nai: openai');
     expect(parseConfig(raw)).toBeNull();
   });
 
@@ -92,7 +107,9 @@ describe('parseConfig', () => {
   });
 
   it('parses lint.enabled true with optional lint.spec string', () => {
-    const raw = btoa('version: 1\nlint:\n  enabled: true\n  spec: .github/lint-specs.toml');
+    const raw = btoa(
+      'version: 1\nlint:\n  enabled: true\n  spec: .github/lint-specs.toml'
+    );
     expect(parseConfig(raw)).toEqual({
       version: 1,
       lint: { enabled: true, spec: '.github/lint-specs.toml' },

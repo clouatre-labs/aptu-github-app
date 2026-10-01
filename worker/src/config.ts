@@ -158,17 +158,12 @@ export function parseConfig(raw: string): AptuConfig | null {
         return null;
       }
       const aiObj = parsed.ai as Record<string, unknown>;
-      if (
-        typeof aiObj.provider !== 'string' ||
-        aiObj.provider === '' ||
-        typeof aiObj.model !== 'string' ||
-        aiObj.model === ''
-      ) {
-        return null;
-      }
       config.ai = {
-        provider: aiObj.provider,
-        model: aiObj.model,
+        provider:
+          typeof aiObj.provider === 'string' && aiObj.provider !== ''
+            ? aiObj.provider
+            : 'openrouter',
+        model: typeof aiObj.model === 'string' ? aiObj.model : '',
       };
     }
 

@@ -80,7 +80,7 @@ describe('validateTelemetryPayload', () => {
     ['reviews_total', Number.POSITIVE_INFINITY],
     ['reviews_total', -1],
     ['reviews_total', Number.NaN],
-    ['truncation_events_total', 1e400],
+    ['truncation_events_total', Number.MAX_VALUE * 2],
     ['files_truncated_total', -5],
   ])('returns null when %s is %p', async (field, value) => {
     const { validateTelemetryPayload } = await import('./telemetry.js');
@@ -159,7 +159,9 @@ describe('mergeCountMap cardinality cap', () => {
     };
     expect(Object.keys(stored.budget_drop_reason_counts)).toHaveLength(256);
     expect(stored.budget_drop_reason_counts['reason-0']).toBe(2);
-    expect(stored.budget_drop_reason_counts['brand-new-reason']).toBeUndefined();
+    expect(
+      stored.budget_drop_reason_counts['brand-new-reason']
+    ).toBeUndefined();
   });
 });
 
@@ -381,9 +383,7 @@ describe('TelemetryRollup Durable Object', () => {
   it('accumulates counters across two sequential valid POSTs', async () => {
     const { TelemetryRollup } = await import('./telemetry.js');
     const ctx = makeMockCtx();
-    const rollup = new TelemetryRollup(
-      ctx as unknown as DurableObjectState
-    );
+    const rollup = new TelemetryRollup(ctx as unknown as DurableObjectState);
 
     const first = makeValidPayload({
       run_id: 'run-1',

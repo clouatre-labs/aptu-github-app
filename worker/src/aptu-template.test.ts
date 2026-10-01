@@ -34,7 +34,9 @@ describe('aptu dispatch handler templates', () => {
     expect(scan.jobs.scan.permissions.statuses).toBe('write');
     expect(lintIssue.jobs.lint.permissions.contents).toBe('read');
     expect(review.jobs.review.uses).toBe('./.github/workflows/pr-review.yml');
-    expect(triage.jobs.triage.uses).toBe('./.github/workflows/issue-triage.yml');
+    expect(triage.jobs.triage.uses).toBe(
+      './.github/workflows/issue-triage.yml'
+    );
     expect(scan.jobs.scan.uses).toBe('./.github/workflows/scan-security.yml');
     expect(lintIssue.jobs.lint.uses).toBe('./.github/workflows/lint-issue.yml');
   });

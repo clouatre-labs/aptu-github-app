@@ -179,12 +179,10 @@ export function validateTelemetryPayload(
       string,
       number
     >,
-    finish_reasons_counts: obj.finish_reasons_counts as Record<
-      string,
-      number
-    >,
+    finish_reasons_counts: obj.finish_reasons_counts as Record<string, number>,
     model_tier_counts: obj.model_tier_counts as Record<string, number>,
-    prompt_budget_pct_histogram: obj.prompt_budget_pct_histogram as TelemetryHistogram,
+    prompt_budget_pct_histogram:
+      obj.prompt_budget_pct_histogram as TelemetryHistogram,
     run_id: obj.run_id,
     timestamp: obj.timestamp,
   };

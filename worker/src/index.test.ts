@@ -61,9 +61,7 @@ function makeTelemetryMockNamespace(): DurableObjectNamespace {
 
 function makeTelemetryRateLimitMockNamespace(): DurableObjectNamespace {
   const stub = {
-    fetch: vi.fn(() =>
-      Promise.resolve(Response.json({ exceeded: false }))
-    ),
+    fetch: vi.fn(() => Promise.resolve(Response.json({ exceeded: false }))),
   };
   return {
     idFromName: vi.fn(() => 'mock-id' as unknown as DurableObjectId),
@@ -336,25 +334,28 @@ describe('event routing', () => {
     ['opened', 'opened PR'],
     ['synchronize', 'sync PR'],
     ['reopened', 'reopened PR'],
-  ])('returns 204 and calls repository_dispatch for pull_request.%s', async (action) => {
-    const body = JSON.stringify({
-      action,
-      installation: { id: 99 },
-      pull_request: { number: 7, title: 'Test PR' },
-      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
-    });
-    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
-    const response = await callHandler(body, {
-      'X-GitHub-Event': 'pull_request',
-      'X-Hub-Signature-256': sig,
-      'Content-Type': 'application/json',
-    });
-    expect(response.status).toBe(204);
-    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
-      String(call[0]).includes('/dispatches')
-    );
-    expect(dispatchCalls.length).toBe(1);
-  });
+  ])(
+    'returns 204 and calls repository_dispatch for pull_request.%s',
+    async (action) => {
+      const body = JSON.stringify({
+        action,
+        installation: { id: 99 },
+        pull_request: { number: 7, title: 'Test PR' },
+        repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+      });
+      const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+      const response = await callHandler(body, {
+        'X-GitHub-Event': 'pull_request',
+        'X-Hub-Signature-256': sig,
+        'Content-Type': 'application/json',
+      });
+      expect(response.status).toBe(204);
+      const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+        String(call[0]).includes('/dispatches')
+      );
+      expect(dispatchCalls.length).toBe(1);
+    }
+  );
 
   it.each([
     [
@@ -375,16 +376,19 @@ describe('event routing', () => {
         repository: { owner: { login: 'clouatre-labs' } },
       }),
     ],
-  ])('returns 200 without calling dispatch for %s.created', async (event, body) => {
-    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
-    const response = await callHandler(body, {
-      'X-GitHub-Event': event,
-      'X-Hub-Signature-256': sig,
-      'Content-Type': 'application/json',
-    });
-    expect(response.status).toBe(200);
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
+  ])(
+    'returns 200 without calling dispatch for %s.created',
+    async (event, body) => {
+      const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+      const response = await callHandler(body, {
+        'X-GitHub-Event': event,
+        'X-Hub-Signature-256': sig,
+        'Content-Type': 'application/json',
+      });
+      expect(response.status).toBe(200);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    }
+  );
 
   it('returns 400 for unrecognized X-GitHub-Event value', async () => {
     const body = JSON.stringify({
@@ -1519,40 +1523,40 @@ describe('Quota check integration', () => {
       bodyField: 'pull_request',
       eventLabel: 'pull_request',
     },
-  ])('returns 429 with Retry-After header when quota exceeded for $eventLabel event, without dispatching repository_dispatch', async ({
-    eventHeader,
-    bodyField,
-  }) => {
-    quotaControl.body = JSON.stringify({
-      count: 50,
-      exceeded: true,
-      retryAfter: 3600,
-    });
+  ])(
+    'returns 429 with Retry-After header when quota exceeded for $eventLabel event, without dispatching repository_dispatch',
+    async ({ eventHeader, bodyField }) => {
+      quotaControl.body = JSON.stringify({
+        count: 50,
+        exceeded: true,
+        retryAfter: 3600,
+      });
 
-    const body = JSON.stringify({
-      action: 'opened',
-      installation: { id: 1 },
-      [bodyField]: { number: 1, title: 'Test' },
-      repository: {
-        full_name: 'owner/repo',
-        owner: { login: 'owner' },
-      },
-    });
-    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
-    const response = await callHandler(body, {
-      'X-GitHub-Event': eventHeader,
-      'X-Hub-Signature-256': sig,
-      'Content-Type': 'application/json',
-    });
-    expect(response.status).toBe(429);
-    expect(response.headers.get('Retry-After')).toBe('3600');
+      const body = JSON.stringify({
+        action: 'opened',
+        installation: { id: 1 },
+        [bodyField]: { number: 1, title: 'Test' },
+        repository: {
+          full_name: 'owner/repo',
+          owner: { login: 'owner' },
+        },
+      });
+      const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+      const response = await callHandler(body, {
+        'X-GitHub-Event': eventHeader,
+        'X-Hub-Signature-256': sig,
+        'Content-Type': 'application/json',
+      });
+      expect(response.status).toBe(429);
+      expect(response.headers.get('Retry-After')).toBe('3600');
 
-    // No dispatch call should be made for a quota-exceeded request
-    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
-      String(call[0]).includes('/dispatches')
-    );
-    expect(dispatchCalls.length).toBe(0);
-  });
+      // No dispatch call should be made for a quota-exceeded request
+      const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+        String(call[0]).includes('/dispatches')
+      );
+      expect(dispatchCalls.length).toBe(0);
+    }
+  );
 
   it('proceeds to normal dispatch flow when quota not exceeded', async () => {
     quotaControl.body = JSON.stringify({
@@ -1926,7 +1930,7 @@ describe('mention commands', () => {
     );
     expect(dispatchCalls.length).toBe(1);
     const dispatchBody = JSON.parse(
-      (dispatchCalls[0]?.[1] as RequestInit).body as string
+      (dispatchCalls[0] as [string, RequestInit])[1].body as string
     );
     expect(dispatchBody.event_type).toBe('aptu-triage');
     expect(dispatchBody.client_payload.originating_repo).toBe('owner/repo');
@@ -1962,7 +1966,7 @@ describe('mention commands', () => {
     );
     expect(dispatchCalls.length).toBe(1);
     const dispatchBody = JSON.parse(
-      (dispatchCalls[0]?.[1] as RequestInit).body as string
+      (dispatchCalls[0] as [string, RequestInit])[1].body as string
     );
     expect(dispatchBody.event_type).toBe('aptu-review');
     expect(dispatchBody.client_payload.originating_repo).toBe('owner/repo');
@@ -2000,7 +2004,7 @@ describe('mention commands', () => {
     );
     expect(dispatchCalls.length).toBe(1);
     const dispatchBody = JSON.parse(
-      (dispatchCalls[0]?.[1] as RequestInit).body as string
+      (dispatchCalls[0] as [string, RequestInit])[1].body as string
     );
     expect(dispatchBody.event_type).toBe('aptu-review');
     expect(dispatchBody.client_payload.originating_repo).toBe('owner/repo');
@@ -2205,7 +2209,7 @@ describe('mention commands', () => {
     );
     expect(dispatchCalls.length).toBe(1);
     const dispatchBody = JSON.parse(
-      (dispatchCalls[0]?.[1] as RequestInit).body as string
+      (dispatchCalls[0] as [string, RequestInit])[1].body as string
     );
     expect(dispatchBody.event_type).toBe('aptu-triage');
     expect(dispatchBody.client_payload.originating_repo).toBe('owner/repo');
@@ -2554,6 +2558,46 @@ describe('scan dispatch', () => {
     expect(parsed.client_payload).not.toHaveProperty('originating_repo_name');
     expect(parsed.client_payload).toHaveProperty('installation_token');
     expect(parsed.client_payload.installation_token).toBeTruthy();
+  });
+
+  it('dispatches aptu-scan-security when config has a partial ai block (provider only)', async () => {
+    mockConfig(
+      'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true\nscan:\n  enabled: true\n  fail-on: critical,high\n  path: src/\nai:\n  provider: openai'
+    );
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: {
+        number: 10,
+        title: 'Scan test partial ai',
+        head: { sha: 'abc123' },
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(2);
+    const scanCall = dispatchCalls[1] as [string, RequestInit];
+    const parsed = JSON.parse(scanCall[1].body as string);
+    expect(parsed.event_type).toBe('aptu-scan-security');
+    expect(parsed.client_payload).toEqual({
+      originating_repo: 'owner/repo',
+      head_sha: 'abc123',
+      pull_number: 10,
+      scan_path: 'src/',
+      fail_on: 'critical,high',
+      installation_token: 'mock-installation-token',
+    });
   });
 
   it('does not dispatch aptu-scan-security when scan.enabled is false', async () => {
@@ -3082,13 +3126,12 @@ describe('lint dispatch', () => {
     const { createAppAuth } = await import('@octokit/auth-app');
     // biome-ignore lint/suspicious/noExplicitAny: mocking requires casting to any
     (createAppAuth as any).mockImplementation(
-      () =>
-        function (opts: { permissions?: Record<string, unknown> }) {
-          if (opts.permissions?.contents === 'write') {
-            return Promise.reject(new Error('Failed to mint dispatch token'));
-          }
-          return Promise.resolve({ token: 'mock-installation-token' });
+      () => (opts: { permissions?: Record<string, unknown> }) => {
+        if (opts.permissions?.contents === 'write') {
+          return Promise.reject(new Error('Failed to mint dispatch token'));
         }
+        return Promise.resolve({ token: 'mock-installation-token' });
+      }
     );
 
     const response = await callIssues('edited', 'body');
@@ -3108,13 +3151,12 @@ describe('lint dispatch', () => {
     const { createAppAuth } = await import('@octokit/auth-app');
     // biome-ignore lint/suspicious/noExplicitAny: mocking requires casting to any
     (createAppAuth as any).mockImplementation(
-      () =>
-        function (opts: { permissions?: Record<string, unknown> }) {
-          if (opts.permissions?.issues === 'write') {
-            return Promise.reject(new Error('Failed to mint lint token'));
-          }
-          return Promise.resolve({ token: 'mock-installation-token' });
+      () => (opts: { permissions?: Record<string, unknown> }) => {
+        if (opts.permissions?.issues === 'write') {
+          return Promise.reject(new Error('Failed to mint lint token'));
         }
+        return Promise.resolve({ token: 'mock-installation-token' });
+      }
     );
 
     const response = await callIssues('edited', 'body');
@@ -3170,30 +3212,26 @@ describe('scoped token helper', () => {
     },
   ] as const;
 
-  it.each(
-    cases
-  )('getScopedToken with PERMS.$key passes correct permissions to auth', async ({
-    key,
-    installId,
-    repo,
-    expected,
-  }) => {
-    const { createAppAuth } = await import('@octokit/auth-app');
-    const { getScopedToken, PERMS } = await import('./index.js');
+  it.each(cases)(
+    'getScopedToken with PERMS.$key passes correct permissions to auth',
+    async ({ key, installId, repo, expected }) => {
+      const { createAppAuth } = await import('@octokit/auth-app');
+      const { getScopedToken, PERMS } = await import('./index.js');
 
-    await getScopedToken(mockEnv, installId, repo, PERMS[key]);
+      await getScopedToken(mockEnv, installId, repo, PERMS[key]);
 
-    const mockedCreateAppAuth = createAppAuth as ReturnType<typeof vi.fn>;
-    const authFn = mockedCreateAppAuth.mock.results[0]?.value as ReturnType<
-      typeof vi.fn
-    >;
-    expect(authFn).toHaveBeenCalledWith({
-      type: 'installation',
-      installationId: installId,
-      repositoryNames: [repo.split('/')[1] ?? repo],
-      permissions: expected,
-    });
-  });
+      const mockedCreateAppAuth = createAppAuth as ReturnType<typeof vi.fn>;
+      const authFn = mockedCreateAppAuth.mock.results[0]?.value as ReturnType<
+        typeof vi.fn
+      >;
+      expect(authFn).toHaveBeenCalledWith({
+        type: 'installation',
+        installationId: installId,
+        repositoryNames: [repo.split('/')[1] ?? repo],
+        permissions: expected,
+      });
+    }
+  );
 
   it('getScopedToken preserves a repository name without an owner prefix', async () => {
     const { createAppAuth } = await import('@octokit/auth-app');
@@ -3471,39 +3509,138 @@ describe('IP validation', () => {
 });
 
 describe('workflow provisioning', () => {
-  const rawPrefix = 'https://raw.githubusercontent.com/clouatre-labs/aptu-github-app/main/.github/workflows/';
-  function setup(): void { vi.clearAllMocks(); fetchSpy = vi.spyOn(globalThis, 'fetch'); }
-  function payload(event: string, action: string, repos: unknown[], id = 7): string { return JSON.stringify({ action, installation: { id }, ...(event === 'installation' ? { repositories: repos } : { repositories_added: repos }) }); }
-  function signed(event: string, body: string): Record<string, string> { return { 'X-GitHub-Event': event, 'X-Hub-Signature-256': sign(mockEnv.WEBHOOK_SECRET, body), 'Content-Type': 'application/json' }; }
-  beforeEach(async () => { setup(); const { createAppAuth } = await import('@octokit/auth-app'); (createAppAuth as ReturnType<typeof vi.fn>).mockImplementation(() => vi.fn().mockResolvedValue({ token: 'provision-token' })); });
+  const rawPrefix =
+    'https://raw.githubusercontent.com/clouatre-labs/aptu-github-app/main/.github/workflows/';
+  function setup(): void {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  }
+  function payload(
+    event: string,
+    action: string,
+    repos: unknown[],
+    id = 7
+  ): string {
+    return JSON.stringify({
+      action,
+      installation: { id },
+      ...(event === 'installation'
+        ? { repositories: repos }
+        : { repositories_added: repos }),
+    });
+  }
+  function signed(event: string, body: string): Record<string, string> {
+    return {
+      'X-GitHub-Event': event,
+      'X-Hub-Signature-256': sign(mockEnv.WEBHOOK_SECRET, body),
+      'Content-Type': 'application/json',
+    };
+  }
+  beforeEach(async () => {
+    setup();
+    const { createAppAuth } = await import('@octokit/auth-app');
+    (createAppAuth as ReturnType<typeof vi.fn>).mockImplementation(() =>
+      vi.fn().mockResolvedValue({ token: 'provision-token' })
+    );
+  });
 
   it('creates all four missing files with base64 content, message, scoped permissions, and headers', async () => {
-    fetchSpy.mockImplementation((url, init) => { const value = String(url); if (value.startsWith(rawPrefix)) return Promise.resolve(new Response(`source-${value.split('/').pop()}`)); if (!init?.method) return Promise.resolve(new Response(null, { status: 404 })); return Promise.resolve(new Response(null, { status: 201 })); });
-    const { provisionWorkflowFiles } = await import('./index.js'); await provisionWorkflowFiles(mockEnv, 'owner/repo', 7);
-    const puts = fetchSpy.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT'); expect(puts).toHaveLength(4);
-    for (const [url, init] of puts) { const name = String(url).split('/').pop(); const request = init as RequestInit; expect(JSON.parse(request.body as string)).toEqual({ message: 'ci: add aptu dispatch handler workflows', content: b64(`source-${name}`) }); expect(request.headers).toEqual({ Authorization: 'Bearer provision-token', Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'aptu-webhook/1.0', 'Content-Type': 'application/json' }); }
-    const { createAppAuth } = await import('@octokit/auth-app'); const auth = (createAppAuth as ReturnType<typeof vi.fn>).mock.results[0]?.value; expect(auth).toHaveBeenCalledWith(expect.objectContaining({ installationId: 7, repositoryNames: ['repo'], permissions: { contents: 'write', workflows: 'write' } }));
+    fetchSpy.mockImplementation((url, init) => {
+      const value = String(url);
+      if (value.startsWith(rawPrefix))
+        return Promise.resolve(
+          new Response(`source-${value.split('/').pop()}`)
+        );
+      if (!init?.method)
+        return Promise.resolve(new Response(null, { status: 404 }));
+      return Promise.resolve(new Response(null, { status: 201 }));
+    });
+    const { provisionWorkflowFiles } = await import('./index.js');
+    await provisionWorkflowFiles(mockEnv, 'owner/repo', 7);
+    const puts = fetchSpy.mock.calls.filter(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'PUT'
+    );
+    expect(puts).toHaveLength(4);
+    for (const [url, init] of puts) {
+      const name = String(url).split('/').pop();
+      const request = init as RequestInit;
+      expect(JSON.parse(request.body as string)).toEqual({
+        message: 'ci: add aptu dispatch handler workflows',
+        content: b64(`source-${name}`),
+      });
+      expect(request.headers).toEqual({
+        Authorization: 'Bearer provision-token',
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'aptu-webhook/1.0',
+        'Content-Type': 'application/json',
+      });
+    }
+    const { createAppAuth } = await import('@octokit/auth-app');
+    const auth = (createAppAuth as ReturnType<typeof vi.fn>).mock.results[0]
+      ?.value;
+    expect(auth).toHaveBeenCalledWith(
+      expect.objectContaining({
+        installationId: 7,
+        repositoryNames: ['repo'],
+        permissions: { contents: 'write', workflows: 'write' },
+      })
+    );
   });
-  it('skips existing files without PUT and continues', async () => { let n = 0; fetchSpy.mockImplementation((url, init) => { if (String(url).startsWith(rawPrefix)) return Promise.resolve(new Response('source')); if (!init?.method) return Promise.resolve(new Response(null, { status: ++n === 1 ? 200 : 404 })); return Promise.resolve(new Response(null, { status: 201 })); }); const { provisionWorkflowFiles } = await import('./index.js'); await provisionWorkflowFiles(mockEnv, 'owner/repo', 7); expect(fetchSpy.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')).toHaveLength(3); });
+  it('skips existing files without PUT and continues', async () => {
+    let n = 0;
+    fetchSpy.mockImplementation((url, init) => {
+      if (String(url).startsWith(rawPrefix))
+        return Promise.resolve(new Response('source'));
+      if (!init?.method)
+        return Promise.resolve(
+          new Response(null, { status: ++n === 1 ? 200 : 404 })
+        );
+      return Promise.resolve(new Response(null, { status: 201 }));
+    });
+    const { provisionWorkflowFiles } = await import('./index.js');
+    await provisionWorkflowFiles(mockEnv, 'owner/repo', 7);
+    expect(
+      fetchSpy.mock.calls.filter(
+        ([, init]) => (init as RequestInit | undefined)?.method === 'PUT'
+      )
+    ).toHaveLength(3);
+  });
   it('continues after PUT 403', async () => {
     let puts = 0;
     fetchSpy.mockImplementation((url, init) => {
-      if (String(url).startsWith(rawPrefix)) return Promise.resolve(new Response('source'));
-      if (!init?.method) return Promise.resolve(new Response(null, { status: 404 }));
-      return Promise.resolve(new Response(null, { status: ++puts === 1 ? 403 : 201 }));
+      if (String(url).startsWith(rawPrefix))
+        return Promise.resolve(new Response('source'));
+      if (!init?.method)
+        return Promise.resolve(new Response(null, { status: 404 }));
+      return Promise.resolve(
+        new Response(null, { status: ++puts === 1 ? 403 : 201 })
+      );
     });
-    const body = payload('installation', 'created', [{ full_name: 'owner/repo' }]);
-    expect((await callHandler(body, signed('installation', body))).status).toBe(200);
+    const body = payload('installation', 'created', [
+      { full_name: 'owner/repo' },
+    ]);
+    expect((await callHandler(body, signed('installation', body))).status).toBe(
+      200
+    );
   });
   it('continues after GET 409', async () => {
     let gets = 0;
     fetchSpy.mockImplementation((url, init) => {
-      if (String(url).startsWith(rawPrefix)) return Promise.resolve(new Response('source'));
-      if (!init?.method) return Promise.resolve(new Response(null, { status: ++gets === 1 ? 409 : 404 }));
+      if (String(url).startsWith(rawPrefix))
+        return Promise.resolve(new Response('source'));
+      if (!init?.method)
+        return Promise.resolve(
+          new Response(null, { status: ++gets === 1 ? 409 : 404 })
+        );
       return Promise.resolve(new Response(null, { status: 201 }));
     });
-    const body = payload('installation', 'created', [{ full_name: 'owner/repo' }]);
-    expect((await callHandler(body, signed('installation', body))).status).toBe(200);
+    const body = payload('installation', 'created', [
+      { full_name: 'owner/repo' },
+    ]);
+    expect((await callHandler(body, signed('installation', body))).status).toBe(
+      200
+    );
   });
   it('continues provisioning after the first repository rejects', async () => {
     const value = payload('installation', 'created', [
@@ -3512,59 +3649,94 @@ describe('workflow provisioning', () => {
     ]);
     fetchSpy.mockImplementation((url, init) => {
       const target = String(url);
-      if (target.startsWith(rawPrefix)) return Promise.resolve(new Response('source'));
-      if (target.includes('/owner/first/')) return Promise.reject(new Error('failure'));
-      return Promise.resolve(new Response(null, { status: init?.method ? 201 : 404 }));
+      if (target.startsWith(rawPrefix))
+        return Promise.resolve(new Response('source'));
+      if (target.includes('/owner/first/'))
+        return Promise.reject(new Error('failure'));
+      return Promise.resolve(
+        new Response(null, { status: init?.method ? 201 : 404 })
+      );
     });
     const response = await callHandler(value, signed('installation', value));
     expect(response.status).toBe(200);
     // 8 provisioning calls (4 existing-GET + 4 PUT) plus 1 welcome config GET
-    expect(fetchSpy.mock.calls.filter(([url]) => String(url).includes('/owner/second/contents/'))).toHaveLength(9);
+    expect(
+      fetchSpy.mock.calls.filter(([url]) =>
+        String(url).includes('/owner/second/contents/')
+      )
+    ).toHaveLength(9);
   });
 
   it('routes installation.created to provisioning', async () => {
     fetchSpy.mockImplementation((url, init) => {
       const target = String(url);
-      if (target.startsWith(rawPrefix)) return Promise.resolve(new Response('source'));
-      return Promise.resolve(new Response(null, { status: init?.method ? 204 : 200 }));
+      if (target.startsWith(rawPrefix))
+        return Promise.resolve(new Response('source'));
+      return Promise.resolve(
+        new Response(null, { status: init?.method ? 204 : 200 })
+      );
     });
-    const value = payload('installation', 'created', [{ full_name: 'owner/repo' }]);
-    expect((await callHandler(value, signed('installation', value))).status).toBe(200);
+    const value = payload('installation', 'created', [
+      { full_name: 'owner/repo' },
+    ]);
+    expect(
+      (await callHandler(value, signed('installation', value))).status
+    ).toBe(200);
     expect(fetchSpy).toHaveBeenCalled();
   });
 
   it('routes installation_repositories.added to provisioning', async () => {
     fetchSpy.mockImplementation((url, init) => {
       const target = String(url);
-      if (target.startsWith(rawPrefix)) return Promise.resolve(new Response('source'));
-      return Promise.resolve(new Response(null, { status: init?.method ? 204 : 200 }));
+      if (target.startsWith(rawPrefix))
+        return Promise.resolve(new Response('source'));
+      return Promise.resolve(
+        new Response(null, { status: init?.method ? 204 : 200 })
+      );
     });
-    const value = payload('installation_repositories', 'added', [{ full_name: 'owner/repo' }]);
-    expect((await callHandler(value, signed('installation_repositories', value))).status).toBe(200);
+    const value = payload('installation_repositories', 'added', [
+      { full_name: 'owner/repo' },
+    ]);
+    expect(
+      (await callHandler(value, signed('installation_repositories', value)))
+        .status
+    ).toBe(200);
     expect(fetchSpy).toHaveBeenCalled();
   });
 
   it('does not provision after installation.deleted', async () => {
     const value = payload('installation', 'deleted', []);
-    expect((await callHandler(value, signed('installation', value))).status).toBe(200);
+    expect(
+      (await callHandler(value, signed('installation', value))).status
+    ).toBe(200);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('does not provision after installation_repositories.removed', async () => {
     const value = payload('installation_repositories', 'removed', []);
-    expect((await callHandler(value, signed('installation_repositories', value))).status).toBe(200);
+    expect(
+      (await callHandler(value, signed('installation_repositories', value)))
+        .status
+    ).toBe(200);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('rejects a payload missing installation.id', async () => {
-    const value = JSON.stringify({ action: 'created', repositories: [{ full_name: 'owner/repo' }] });
-    expect((await callHandler(value, signed('installation', value))).status).toBe(400);
+    const value = JSON.stringify({
+      action: 'created',
+      repositories: [{ full_name: 'owner/repo' }],
+    });
+    expect(
+      (await callHandler(value, signed('installation', value))).status
+    ).toBe(400);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('rejects a repository entry missing full_name', async () => {
     const value = payload('installation', 'created', [{}]);
-    expect((await callHandler(value, signed('installation', value))).status).toBe(400);
+    expect(
+      (await callHandler(value, signed('installation', value))).status
+    ).toBe(400);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -3573,7 +3745,9 @@ describe('workflow provisioning', () => {
       return fetchSpy.mock.calls.filter(
         ([, init]) =>
           (init as RequestInit | undefined)?.method === 'POST' &&
-          String((init as RequestInit | undefined)?.body ?? '').includes('"title"')
+          String((init as RequestInit | undefined)?.body ?? '').includes(
+            '"title"'
+          )
       ) as unknown as Array<[unknown, RequestInit | undefined]>;
     }
     function setupFetch(configStatus: number, issueStatus: number): void {
@@ -3584,7 +3758,9 @@ describe('workflow provisioning', () => {
         if (target.endsWith('/contents/.github/aptu.yml'))
           return Promise.resolve(
             configStatus === 200
-              ? makeConfigResponse('version: 1\ntriage:\n  enabled: true\nai:\n  provider: openrouter\n  model: m')
+              ? makeConfigResponse(
+                  'version: 1\ntriage:\n  enabled: true\nai:\n  provider: openrouter\n  model: m'
+                )
               : new Response(null, { status: configStatus })
           );
         if (target.endsWith('/issues') && init?.method === 'POST')
@@ -3597,12 +3773,18 @@ describe('workflow provisioning', () => {
 
     it('posts a welcome issue mentioning the minimal config when aptu.yml is missing', async () => {
       setupFetch(404, 201);
-      const value = payload('installation', 'created', [{ full_name: 'owner/repo' }]);
-      expect((await callHandler(value, signed('installation', value))).status).toBe(200);
+      const value = payload('installation', 'created', [
+        { full_name: 'owner/repo' },
+      ]);
+      expect(
+        (await callHandler(value, signed('installation', value))).status
+      ).toBe(200);
       const posts = issuePosts();
       expect(posts).toHaveLength(1);
       const [url, init] = posts[0] as [unknown, RequestInit | undefined];
-      expect(String(url)).toBe('https://api.github.com/repos/owner/repo/issues');
+      expect(String(url)).toBe(
+        'https://api.github.com/repos/owner/repo/issues'
+      );
       const parsed = JSON.parse((init as RequestInit).body as string);
       expect(parsed.body).toContain('version: 1');
       expect(parsed.body).toContain('ai:');
@@ -3610,20 +3792,30 @@ describe('workflow provisioning', () => {
 
     it('captures a welcome-issue POST failure and still returns 200', async () => {
       setupFetch(404, 500);
-      const value = payload('installation', 'created', [{ full_name: 'owner/repo' }]);
-      expect((await callHandler(value, signed('installation', value))).status).toBe(200);
+      const value = payload('installation', 'created', [
+        { full_name: 'owner/repo' },
+      ]);
+      expect(
+        (await callHandler(value, signed('installation', value))).status
+      ).toBe(200);
       expect(issuePosts()).toHaveLength(1);
       const { captureException } = await import('@sentry/cloudflare');
       expect(captureException).toHaveBeenCalledWith(
         expect.objectContaining({ message: expect.stringContaining('500') }),
-        expect.objectContaining({ tags: expect.objectContaining({ eventType: 'welcome' }) })
+        expect.objectContaining({
+          tags: expect.objectContaining({ eventType: 'welcome' }),
+        })
       );
     });
 
     it('skips the welcome issue when config is valid with an ai block', async () => {
       setupFetch(200, 201);
-      const value = payload('installation', 'created', [{ full_name: 'owner/repo' }]);
-      expect((await callHandler(value, signed('installation', value))).status).toBe(200);
+      const value = payload('installation', 'created', [
+        { full_name: 'owner/repo' },
+      ]);
+      expect(
+        (await callHandler(value, signed('installation', value))).status
+      ).toBe(200);
       expect(issuePosts()).toHaveLength(0);
     });
 
@@ -3632,7 +3824,10 @@ describe('workflow provisioning', () => {
       const value = payload('installation_repositories', 'added', [
         { full_name: 'owner/repo' },
       ]);
-      expect((await callHandler(value, signed('installation_repositories', value))).status).toBe(200);
+      expect(
+        (await callHandler(value, signed('installation_repositories', value)))
+          .status
+      ).toBe(200);
       expect(issuePosts()).toHaveLength(1);
     });
   });
