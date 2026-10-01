@@ -88,7 +88,7 @@ There is **no release automation**. Releases are cut manually by maintainers fro
 Workflows reference each other by commit SHA (never mutable tags).
 
 - Same-repo dispatcher workflows (`aptu-review.yml`, `aptu-triage.yml`, `aptu-scan-security.yml`, `aptu-lint-issue.yml`) reference reusable workflows with relative `uses:` paths (e.g. `./.github/workflows/pr-review.yml`), so they always run the current `main` and never need manual repinning
-- Cross-repo `clouatre-labs/aptu` pins in `pr-review.yml` and `issue-triage.yml` are bumped automatically by Renovate: a customManager tracks `clouatre-labs/aptu@<40-hex-SHA> # vX.Y.Z` comments using the `git-tags` datasource against https://github.com/clouatre-labs/aptu.git and automerges updates. When bumping a pin manually, keep the SHA and version comment together so both stay truthful
+- Cross-repo pins (`clouatre-labs/aptu` actions in `pr-review.yml` and `issue-triage.yml`; `clouatre-labs/aptu-github-app` reusable workflows in consumer repos) are bumped automatically by Renovate: the native `github-actions` manager tracks `<dep>@<40-hex-SHA> # vX.Y.Z` comments and the org preset (`clouatre-labs/.github` `default.json`) automerges these first-party updates with no `minimumReleaseAge` hold. When bumping a pin manually, keep the SHA and version comment together so both stay truthful
 
 ## Code Review
 
@@ -136,12 +136,12 @@ docs/             # Architecture and design documentation
 
 ## Tagging Convention
 
-Reusable workflow files (`pr-review.yml`, `issue-triage.yml`, `scan-security.yml`) are consumed by dispatcher workflows via relative `uses:` paths, so they require no pin maintenance. Cross-repo `clouatre-labs/aptu` pins are SHA-pinned with a version comment and tracked by Renovate's customManager (git-tags datasource, automerge):
+Reusable workflow files (`pr-review.yml`, `issue-triage.yml`, `scan-security.yml`) are consumed by dispatcher workflows via relative `uses:` paths, so they require no pin maintenance. Cross-repo `clouatre-labs/aptu` pins are SHA-pinned with a version comment and tracked by Renovate's native `github-actions` manager (automerge via the org preset):
 
 - Tags matching `v*.*.*` are protected by a repository ruleset: creation, deletion, and
   re-pointing (force-move) are restricted to repository admins.
-- Renovate continuously watches https://github.com/clouatre-labs/aptu.git tags and automerges
-  updates to the pinned SHA and version comment.
+- Renovate continuously watches `clouatre-labs/aptu` and `clouatre-labs/aptu-github-app` tags via the native `github-actions` manager and automerges
+  updates to the pinned SHA and version comment, with no release-age hold for these first-party dependencies.
 
 ## Contribution Checklist
 
