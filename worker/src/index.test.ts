@@ -3790,6 +3790,36 @@ describe('workflow provisioning', () => {
       expect(parsed.body).toContain('ai:');
     });
 
+    it('does not introduce mid-paragraph hard breaks in the welcome issue body', async () => {
+      setupFetch(404, 201);
+      const value = payload('installation', 'created', [
+        { full_name: 'owner/repo' },
+      ]);
+      expect(
+        (await callHandler(value, signed('installation', value))).status
+      ).toBe(200);
+      const [, init] = issuePosts()[0] as [unknown, RequestInit | undefined];
+      const body = JSON.parse((init as RequestInit).body as string)
+        .body as string;
+      const lines = body.split('\n');
+      for (let i = 0; i < lines.length - 1; i += 1) {
+        const line = lines[i];
+        if (!line || line === '') continue;
+        if (line === '```yaml' || line === '```') continue;
+        if (line.startsWith('- ')) continue;
+        const openCount = lines
+          .slice(0, i + 1)
+          .filter((l) => l === '```yaml').length;
+        const closeCount = lines
+          .slice(0, i + 1)
+          .filter((l) => l === '```').length;
+        if (openCount > closeCount) continue;
+        expect(lines[i + 1] ?? '').toBe('');
+      }
+      expect(body).toContain('version: 1');
+      expect(body).toContain('ai:');
+    });
+
     it('captures a welcome-issue POST failure and still returns 200', async () => {
       setupFetch(404, 500);
       const value = payload('installation', 'created', [
