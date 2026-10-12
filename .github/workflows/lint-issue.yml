@@ -169,7 +169,7 @@ jobs:
           fi
 
           EXIT_CODE=0
-          aptu lint-issue "${ARGS[@]}" || EXIT_CODE=$?
+          aptu lint-issue "${ARGS[@]}" 2>&1 | tee "$RUNNER_TEMP/lint-output.txt" || EXIT_CODE=$?
 
           MARKER="<!-- aptu-lint-issue: ${ORIGINATING_REPO}#${ISSUE_NUMBER} -->"
 
@@ -186,25 +186,41 @@ jobs:
                 "repos/${ORIGINATING_REPO}/issues/${ISSUE_NUMBER}/labels/lint-issue" \
                 >/dev/null 2>&1 || true
 
+              if [[ -n "$LINT_SPEC" ]]; then
+                MODE="$LINT_SPEC"
+              else
+                MODE='generic'
+              fi
+
               COMMENT_ID=$(find_comment_id)
               if [[ -n "$COMMENT_ID" ]]; then
+                printf '%s\nLint passed (mode: %s): no violations found (issue linted by aptu).\n' \
+                  "$MARKER" "$MODE" > "$RUNNER_TEMP/comment-body.md"
+                jq -Rs '{body: .}' < "$RUNNER_TEMP/comment-body.md" > "$RUNNER_TEMP/comment-payload.json"
                 gh api --method PATCH "repos/${ORIGINATING_REPO}/issues/comments/${COMMENT_ID}" \
-                  -f body="${MARKER}
-          Lint passed: no violations found (issue linted by aptu)." \
+                  --input "$RUNNER_TEMP/comment-payload.json" \
                   >/dev/null
               fi
               ;;
             1)
+              {
+                printf '%s\nLint violations found:\n```text\n' "$MARKER"
+                head -c 40000 "$RUNNER_TEMP/lint-output.txt"
+                if [[ "$(wc -c < "$RUNNER_TEMP/lint-output.txt")" -gt 40000 ]]; then
+                  printf '\n... (output truncated)\n'
+                fi
+                printf '\n```\n'
+              } > "$RUNNER_TEMP/comment-body.md"
+              jq -Rs '{body: .}' < "$RUNNER_TEMP/comment-body.md" > "$RUNNER_TEMP/comment-payload.json"
+
               COMMENT_ID=$(find_comment_id)
               if [[ -n "$COMMENT_ID" ]]; then
                 gh api --method PATCH "repos/${ORIGINATING_REPO}/issues/comments/${COMMENT_ID}" \
-                  -f body="${MARKER}
-          Lint violations found. See the workflow run output above for details." \
+                  --input "$RUNNER_TEMP/comment-payload.json" \
                   >/dev/null
               else
                 gh api --method POST "repos/${ORIGINATING_REPO}/issues/${ISSUE_NUMBER}/comments" \
-                  -f body="${MARKER}
-          Lint violations found. See the workflow run output above for details." \
+                  --input "$RUNNER_TEMP/comment-payload.json" \
                   >/dev/null
               fi
 
