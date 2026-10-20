@@ -357,9 +357,7 @@ export async function shouldSkipPrDispatch(
 ): Promise<boolean> {
   const explicitPaths = aptuConfig?.review?.paths;
   const pathFilters =
-    explicitPaths && explicitPaths.length > 0
-      ? explicitPaths
-      : DEFAULT_PR_PATH_EXCLUDES;
+    explicitPaths !== undefined ? explicitPaths : DEFAULT_PR_PATH_EXCLUDES;
 
   try {
     const prFilesResponse = await fetch(

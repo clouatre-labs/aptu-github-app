@@ -887,6 +887,54 @@ describe('path filter config', () => {
     expect(dispatchCalls.length).toBe(0);
   });
 
+  it('dispatches both events for a markdown-only PR when review.paths is an explicit empty array', async () => {
+    // Mock config fetch - review and scan enabled, paths: [] disables filtering
+    fetchSpy.mockResolvedValueOnce(
+      makeConfigResponse(
+        'version: 1\nreview:\n  enabled: true\n  paths: []\nscan:\n  enabled: true'
+      )
+    );
+    // Mock PR files fetch - markdown-only PR would match default excludes
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify([{ filename: 'README.md' }]), {
+        status: 200,
+      })
+    );
+    fetchSpy.mockResolvedValue(new Response(null, { status: 204 }));
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: {
+        number: 52,
+        title: 'Markdown only',
+        head: { sha: 'eee666' },
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(2);
+    const eventTypes = await Promise.all(
+      dispatchCalls.map((call) => {
+        const init = call[1] as RequestInit;
+        const parsed = JSON.parse(String(init.body)) as { event_type: string };
+        return parsed.event_type;
+      })
+    );
+    expect(eventTypes).toContain('aptu-review');
+    expect(eventTypes).toContain('aptu-scan-security');
+  });
+
   it('returns 204 without dispatching for bot-authored PRs', async () => {
     fetchSpy.mockImplementation(mockEnabledFetch());
 

@@ -208,7 +208,7 @@ The AI API key secret value never passes through the Worker or the webhook dispa
 | Caller AI keys | BYOK: caller provides AI API key via a repository secret in their own repo, named after the provider selected via `ai.provider` in their own `.github/aptu.yml` (`ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `OPENROUTER_API_KEY`); the dispatch handler statically selects one of these three fixed names per-dispatch and passes the secret to the reusable workflow via `secrets:`; operator keys never exposed |
 | Config validation | Strict field-level validation; unknown keys ignored; partial blocks rejected |
 | Self-mention loop | `APTU_BOT_ID` check prevents the bot from triggering itself via `@aptu` |
-| Path filtering | `review.paths` evaluated against full PR file list before dispatch; the same single fetch result also gates scan dispatch. Default excludes (`**/*.md`, `docs/**`) apply when `review.paths` is unset. Bot-authored PRs are skipped unless carrying the `aptu:run` label; a PR carrying `review.skip-label` (default `aptu:skip`) is skipped pre-dispatch. Gates apply regardless of repository visibility. |
+| Path filtering | `review.paths` evaluated against full PR file list before dispatch; the same single fetch result also gates scan dispatch. Default excludes (`**/*.md`, `docs/**`) apply when `review.paths` is unset; an explicit empty array disables path filtering entirely. Bot-authored PRs are skipped unless carrying the `aptu:run` label; a PR carrying `review.skip-label` (default `aptu:skip`) is skipped pre-dispatch. Gates apply regardless of repository visibility. |
 
 ## Key Abstractions
 
