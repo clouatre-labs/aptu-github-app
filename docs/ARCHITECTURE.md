@@ -178,7 +178,8 @@ review:
   enabled: true
   instructions-file: .github/instructions/pr-review.md  # optional
   skip-labeled: false                                     # optional
-  paths:                                          # optional; suppress PR review when no file qualifies
+  skip-label: aptu:skip                                   # optional; PRs carrying this label are skipped pre-dispatch
+  paths:                                          # optional; suppress PR review AND scan when no file qualifies
     - "src/**"                                    # bare patterns are includes
     - "!src/data/**"                              # '!'-prefixed patterns are excludes
 
@@ -207,7 +208,7 @@ The AI API key secret value never passes through the Worker or the webhook dispa
 | Caller AI keys | BYOK: caller provides AI API key via a repository secret in their own repo, named after the provider selected via `ai.provider` in their own `.github/aptu.yml` (`ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `OPENROUTER_API_KEY`); the dispatch handler statically selects one of these three fixed names per-dispatch and passes the secret to the reusable workflow via `secrets:`; operator keys never exposed |
 | Config validation | Strict field-level validation; unknown keys ignored; partial blocks rejected |
 | Self-mention loop | `APTU_BOT_ID` check prevents the bot from triggering itself via `@aptu` |
-| Path filtering | `review.paths` evaluated against full PR file list before dispatch |
+| Path filtering | `review.paths` evaluated against full PR file list before dispatch; the same single fetch result also gates scan dispatch. Default excludes (`**/*.md`, `docs/**`) apply when `review.paths` is unset. Bot-authored PRs are skipped unless carrying the `aptu:run` label; a PR carrying `review.skip-label` (default `aptu:skip`) is skipped pre-dispatch. Gates apply regardless of repository visibility. |
 
 ## Key Abstractions
 
@@ -221,7 +222,7 @@ Enforces per-installation quota by delegating to the `InstallationQuota` Durable
 
 ### `shouldSkipPrDispatch`
 
-Fetches the PR file list from the GitHub API and applies `review.paths` patterns using `shouldSkipByPathFilters` (picomatch `isMatch`). Returns `true` (skip) only when no file in the PR qualifies for review: a file qualifies when it matches an include pattern (if any includes are configured) and does not match any exclude pattern. With no `review.paths`, it returns `false` immediately without an HTTP call.
+Fetches the PR file list from the GitHub API and applies `review.paths` patterns (or the default `**/*.md` / `docs/**` excludes when `review.paths` is unset) using `shouldSkipByPathFilters` (picomatch `isMatch`). Returns `true` (skip) only when no file in the PR qualifies for review: a file qualifies when it matches an include pattern (if any includes are configured) and does not match any exclude pattern. The single PR-files fetch result gates both the review and the scan dispatch; on fetch or parse error the gate fails open and both events dispatch.
 
 ### `handleMentionCommand`
 

@@ -45,7 +45,8 @@ review:
   enabled: true                                   # required if review block present
   instructions-file: .github/instructions/pr-review.md  # optional; path in the target repo
   skip-labeled: false                             # optional; aptu skips review if PR has a label
-  paths:                                          # optional; suppress PR review when no file qualifies
+  skip-label: aptu:skip                           # optional; PRs carrying this label are skipped pre-dispatch (empty string disables)
+  paths:                                          # optional; suppress PR review AND scan when no file qualifies
     - "src/**"                                    # bare patterns are includes
     - "!src/data/**"                              # '!'-prefixed patterns are excludes
 
@@ -67,6 +68,16 @@ ai:
 
 The `scan` block enables aptu's local pattern-based security scanning. Scan runs without an AI provider -- no `ai` block is required. Results are uploaded as SARIF code scanning alerts to the originating repository. `fail-on` takes a comma-separated list of severities (`critical`, `high`, `medium`, `low`); the scan fails only if a finding matches one of the listed severities. Omitting `fail-on` reports findings without failing the check.
 
+### PR dispatch gating
+
+The Worker evaluates three gates before any dispatch on `pull_request` events, regardless of repository visibility:
+
+- Path filters: `review.paths` (or the default `**/*.md` / `docs/**` excludes when unset) are evaluated against a single PR-files fetch; when no file qualifies, both review and scan dispatches are suppressed. On a fetch or parse error the gate fails open and both events dispatch.
+- Bot authors: PRs authored by `user.type === 'Bot'` accounts are skipped entirely unless they carry the `aptu:run` opt-in label (zero extra API calls).
+- Skip label: a PR carrying `review.skip-label` (default `aptu:skip`; empty string disables) is skipped before any dispatch.
+
+All aptu workflows use `concurrency` groups keyed on the originating repository plus the pull or issue number with `cancel-in-progress: true`, so rapid PR updates cancel stale in-flight runs instead of queueing billed minutes.
+
 ### Field reference
 
 | Field | Type | Default | Description |
@@ -76,7 +87,8 @@ The `scan` block enables aptu's local pattern-based security scanning. Scan runs
 | `review.enabled` | boolean | -- | Dispatch `aptu-review` on `pull_request` opened/synchronize/reopened/ready_for_review events. |
 | `review.instructions-file` | string | `.github/instructions/pr-review.md` | Path to PR review instructions file, relative to the target repo root. Passed to aptu as `--instructions-file`. |
 | `review.skip-labeled` | boolean | `false` | Passed to aptu as `--skip-labeled`. When true, aptu skips review if the PR already carries a label. |
-| `review.paths` | string[] | -- | Glob patterns (picomatch) evaluated against the full PR file list. Bare patterns are includes; `!`-prefixed patterns are excludes. A PR is dispatched if at least one file qualifies. If no file qualifies, the review dispatch is suppressed. |
+| `review.skip-label` | string | `aptu:skip` | Label that suppresses both review and scan dispatch pre-dispatch when present on the PR. Set to an empty string to disable the gate. |
+| `review.paths` | string[] | `['!**/*.md', '!docs/**']` | Glob patterns (picomatch) evaluated against the full PR file list. Bare patterns are includes; `!`-prefixed patterns are excludes. A PR is dispatched if at least one file qualifies. If no file qualifies, both the review and scan dispatches are suppressed. When unset, the default excludes skip markdown-only and docs-only PRs; explicit `paths` fully replace the defaults. Gates apply regardless of repository visibility. |
 | `ai.provider` | string | -- | AI provider name passed to aptu as `--provider`. Supported: `gemini`, `anthropic`, `openrouter`. Required if `ai` block present. Also selects which of the caller's own repository secrets (`GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`) the dispatch handler resolves. |
 | `ai.model` | string | -- | AI model name passed to aptu as `--model`. Required if `ai` block present. |
 | `scan.enabled` | boolean | `false` | Enable aptu scan-security on pull requests. Runs local pattern-based secret scanning and uploads SARIF results to GitHub Code Scanning. No `ai` block required. |

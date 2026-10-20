@@ -26,6 +26,10 @@ on:
       installation-token:
         required: true
 
+concurrency:
+  group: ${{ github.workflow }}-scan-security-${{ inputs.pull_number }}
+  cancel-in-progress: true
+
 permissions: {}
 
 jobs:

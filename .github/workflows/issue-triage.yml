@@ -26,6 +26,10 @@ on:
       installation-token:
         required: true
 
+concurrency:
+  group: ${{ github.workflow }}-issue-triage-${{ inputs.issue_number }}
+  cancel-in-progress: true
+
 permissions: {}
 
 jobs:

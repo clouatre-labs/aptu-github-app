@@ -807,14 +807,19 @@ describe('path filter config', () => {
     expect(dispatchCalls.length).toBe(0);
   });
 
-  it('returns 204 and dispatches when aptuConfig has no review.paths field', async () => {
+  it('returns 204 and dispatches when aptuConfig has no review.paths field (default excludes apply)', async () => {
     // Mock config fetch - no review.paths
     fetchSpy.mockResolvedValueOnce(
       makeConfigResponse(
         'version: 1\ntriage:\n  enabled: true\nreview:\n  enabled: true'
       )
     );
-    // Mock dispatch event (no PR files fetch should be made)
+    // Mock PR files fetch (default excludes now require it) and dispatch event
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify([{ filename: 'worker/src/index.ts' }]), {
+        status: 200,
+      })
+    );
     fetchSpy.mockResolvedValueOnce(new Response(null, { status: 204 }));
 
     const body = JSON.stringify({
@@ -837,11 +842,228 @@ describe('path filter config', () => {
     const prFilesCalls = fetchSpy.mock.calls.filter((call) =>
       String(call[0]).includes('/pulls/')
     );
-    expect(prFilesCalls.length).toBe(0);
+    expect(prFilesCalls.length).toBe(1);
     const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
       String(call[0]).includes('/dispatches')
     );
     expect(dispatchCalls.length).toBe(1);
+  });
+
+  it('returns 204 without dispatch when no PR file matches the default excludes', async () => {
+    // Mock config fetch - review and scan enabled, no review.paths
+    fetchSpy.mockResolvedValueOnce(
+      makeConfigResponse(
+        'version: 1\nreview:\n  enabled: true\nscan:\n  enabled: true'
+      )
+    );
+    // Mock PR files fetch - docs-only PR matches default excludes
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify([{ filename: 'README.md' }]), {
+        status: 200,
+      })
+    );
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: {
+        number: 50,
+        title: 'Docs only',
+        head: { sha: 'ddd555' },
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(0);
+  });
+
+  it('returns 204 without dispatching for bot-authored PRs', async () => {
+    fetchSpy.mockImplementation(mockEnabledFetch());
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: {
+        number: 51,
+        title: 'Bot PR',
+        user: { type: 'Bot' },
+        labels: [],
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(0);
+  });
+
+  it('dispatches for a bot-authored PR carrying the aptu:run label', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(
+        makeConfigResponse(
+          'version: 1\nreview:\n  enabled: true\nscan:\n  enabled: true'
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([{ filename: 'src/app.ts' }]), {
+          status: 200,
+        })
+      )
+      .mockResolvedValue(new Response(null, { status: 204 }));
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: {
+        number: 52,
+        title: 'Opted-in bot PR',
+        user: { type: 'Bot' },
+        labels: [{ name: 'aptu:run' }],
+        head: { sha: 'bbb666' },
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(2);
+  });
+
+  it('returns 204 pre-dispatch when the PR carries the configured skip label', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      makeConfigResponse(
+        'version: 1\nreview:\n  enabled: true\n  skip-label: do-not-review\nscan:\n  enabled: true'
+      )
+    );
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: {
+        number: 53,
+        title: 'Skipped PR',
+        labels: [{ name: 'do-not-review' }],
+        head: { sha: 'ccc777' },
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(0);
+  });
+
+  it('keeps fail-open scan dispatch on PR-files fetch error', async () => {
+    // Config: review disabled, scan enabled, explicit paths
+    fetchSpy.mockResolvedValueOnce(
+      makeConfigResponse(
+        'version: 1\nreview:\n  enabled: false\n  paths:\n    - "src/**"\nscan:\n  enabled: true'
+      )
+    );
+    // PR files fetch fails
+    fetchSpy.mockResolvedValueOnce(
+      new Response('Internal Server Error', { status: 500 })
+    );
+    // Dispatch event
+    fetchSpy.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: {
+        number: 54,
+        title: 'Fail-open scan',
+        head: { sha: 'eee888' },
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
+    const parsed = JSON.parse(
+      (dispatchCalls[0] as [string, RequestInit])[1].body as string
+    );
+    expect(parsed.event_type).toBe('aptu-scan-security');
+  });
+
+  it('dispatches both review and scan for a code-change PR', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      makeConfigResponse(
+        'version: 1\nreview:\n  enabled: true\nscan:\n  enabled: true'
+      )
+    );
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify([{ filename: 'src/index.ts' }]), {
+        status: 200,
+      })
+    );
+    fetchSpy.mockResolvedValue(new Response(null, { status: 204 }));
+
+    const body = JSON.stringify({
+      action: 'opened',
+      installation: { id: 1 },
+      pull_request: {
+        number: 55,
+        title: 'Code change',
+        head: { sha: 'fff999' },
+      },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(2);
   });
 
   it('returns 204 and dispatches on GitHub PR-files API failure when review.paths are configured (error-resilient contract)', async () => {
@@ -1482,7 +1704,12 @@ describe('shouldSkipPrDispatch direct unit tests', () => {
     expect(result).toBe(true);
   });
 
-  it('returns false (dispatch) when aptuConfig has no review.paths, without triggering a PR files fetch', async () => {
+  it('fetches PR files and dispatches (false) when aptuConfig has no review.paths (default excludes)', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify([{ filename: 'src/index.ts' }]), {
+        status: 200,
+      })
+    );
     const { shouldSkipPrDispatch } = await import('./index.js');
     const result = await shouldSkipPrDispatch(
       'clouatre-labs/clouatre.ca',
@@ -1494,7 +1721,23 @@ describe('shouldSkipPrDispatch direct unit tests', () => {
     const prFilesCalls = fetchSpy.mock.calls.filter((call) =>
       String(call[0]).includes('/pulls/')
     );
-    expect(prFilesCalls.length).toBe(0);
+    expect(prFilesCalls.length).toBe(1);
+  });
+
+  it('skips (true) when aptuConfig has no review.paths and all files match default excludes', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify([{ filename: 'docs/readme.md' }]), {
+        status: 200,
+      })
+    );
+    const { shouldSkipPrDispatch } = await import('./index.js');
+    const result = await shouldSkipPrDispatch(
+      'clouatre-labs/clouatre.ca',
+      43,
+      'mock-token',
+      { version: 1 }
+    );
+    expect(result).toBe(true);
   });
 });
 

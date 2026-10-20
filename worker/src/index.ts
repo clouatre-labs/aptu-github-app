@@ -11,6 +11,8 @@ export { TelemetryRateLimit, TelemetryRollup } from './telemetry';
 import { captureException, withSentry } from '@sentry/cloudflare';
 import {
   type AptuConfig,
+  DEFAULT_PR_PATH_EXCLUDES,
+  DEFAULT_PR_SKIP_LABEL,
   fetchRepoConfig,
   REPO_CONFIG_FETCH_TIMEOUT_MS,
   shouldDispatch,
@@ -353,8 +355,11 @@ export async function shouldSkipPrDispatch(
   token: string,
   aptuConfig: AptuConfig | null = null
 ): Promise<boolean> {
-  const pathFilters = aptuConfig?.review?.paths;
-  if (!pathFilters || pathFilters.length === 0) return false;
+  const explicitPaths = aptuConfig?.review?.paths;
+  const pathFilters =
+    explicitPaths && explicitPaths.length > 0
+      ? explicitPaths
+      : DEFAULT_PR_PATH_EXCLUDES;
 
   try {
     const prFilesResponse = await fetch(
@@ -1036,9 +1041,19 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         title: string;
         head: { sha: string };
         draft?: boolean;
+        user?: { type?: string };
+        labels?: Array<{ name?: string }>;
       };
 
       if (action === 'opened' && pr.draft) {
+        return new Response(null, { status: 204 });
+      }
+
+      const prLabels = (pr.labels ?? []).map((l) => l.name ?? '');
+
+      // Bot-authored PRs are skipped entirely unless they carry the opt-in
+      // label. This runs before any config or PR-files fetch (zero API calls).
+      if (pr.user?.type === 'Bot' && !prLabels.includes('aptu:run')) {
         return new Response(null, { status: 204 });
       }
 
@@ -1054,6 +1069,15 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         config = null;
       }
 
+      // Configurable skip-label gate: a PR carrying the label is skipped
+      // before any dispatch. Empty string disables the gate.
+      const skipLabel = config?.review?.['skip-label'] ?? DEFAULT_PR_SKIP_LABEL;
+      if (skipLabel !== '' && prLabels.includes(skipLabel)) {
+        return new Response(null, { status: 204 });
+      }
+
+      // Single PR-files fetch feeds both gates: the path-filter result
+      // suppresses review AND scan (fail-open on fetch/parse error).
       const reviewWouldSkip = await shouldSkipPrDispatch(
         repo,
         pr.number,
@@ -1061,7 +1085,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         config
       );
       const shouldReview = shouldDispatch(config, 'review') && !reviewWouldSkip;
-      const shouldScan = shouldDispatch(config, 'scan');
+      const shouldScan = shouldDispatch(config, 'scan') && !reviewWouldSkip;
 
       if (!shouldReview && !shouldScan)
         return new Response(reviewWouldSkip ? null : 'OK', {
