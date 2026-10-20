@@ -8,6 +8,10 @@ on:
     types:
       - aptu-scan-security
 
+concurrency:
+  group: ${{ github.repository }}-aptu-scan-security-${{ github.event.client_payload.pull_number }}
+  cancel-in-progress: true
+
 jobs:
   scan:
     name: Scan Security

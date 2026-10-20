@@ -6,6 +6,15 @@ import { parse } from 'yaml';
 
 export const REPO_CONFIG_FETCH_TIMEOUT_MS = 5000;
 
+// Default path excludes applied when the installation defines no review.paths.
+// Patterns use the shouldSkipByPathFilters negation prefix so they act as
+// excludes. Explicit review.paths fully replace these defaults.
+export const DEFAULT_PR_PATH_EXCLUDES = ['!**/*.md', '!docs/**'];
+
+// Default label that suppresses both review and scan dispatch pre-dispatch.
+// Empty string disables the skip-label gate.
+export const DEFAULT_PR_SKIP_LABEL = 'aptu:skip';
+
 export interface AiConfig {
   provider: string;
   model: string;
@@ -30,6 +39,7 @@ export interface AptuConfig {
     'skip-labeled'?: boolean;
     'instructions-file'?: string;
     paths?: string[];
+    'skip-label'?: string;
   };
   scan?: ScanConfig;
   lint?: LintConfig;
@@ -106,6 +116,9 @@ export function parseConfig(raw: string): AptuConfig | null {
       };
       if (typeof reviewObj['skip-labeled'] === 'boolean') {
         config.review['skip-labeled'] = reviewObj['skip-labeled'];
+      }
+      if (typeof reviewObj['skip-label'] === 'string') {
+        config.review['skip-label'] = reviewObj['skip-label'];
       }
       if (typeof reviewObj['instructions-file'] === 'string') {
         config.review['instructions-file'] = reviewObj['instructions-file'];

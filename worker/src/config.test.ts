@@ -2,7 +2,12 @@
 // SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
 
 import { describe, expect, it } from 'vitest';
-import { parseConfig, shouldDispatch, shouldSkipByPathFilters } from './config';
+import {
+  DEFAULT_PR_PATH_EXCLUDES,
+  parseConfig,
+  shouldDispatch,
+  shouldSkipByPathFilters,
+} from './config';
 
 describe('parseConfig', () => {
   it('returns null for version != 1', () => {
@@ -246,5 +251,39 @@ describe('shouldSkipByPathFilters', () => {
 
   it('returns false (dispatch) when file list is empty and patterns are empty', () => {
     expect(shouldSkipByPathFilters([], [])).toBe(false);
+  });
+
+  describe('default pr path excludes', () => {
+    it('skips md and docs files when review.paths is unset', () => {
+      expect(
+        shouldSkipByPathFilters(DEFAULT_PR_PATH_EXCLUDES, [
+          'README.md',
+          'docs/guide.md',
+        ])
+      ).toBe(true);
+      expect(
+        shouldSkipByPathFilters(DEFAULT_PR_PATH_EXCLUDES, ['src/index.ts'])
+      ).toBe(false);
+    });
+
+    it('applies defaults only for md/docs and dispatches code files', () => {
+      expect(
+        shouldSkipByPathFilters(DEFAULT_PR_PATH_EXCLUDES, [
+          'src/app.ts',
+          'docs/notes.md',
+        ])
+      ).toBe(false);
+    });
+
+    it('parses explicit review.paths that replace the defaults', () => {
+      const raw = btoa(
+        'version: 1\nreview:\n  enabled: true\n  paths:\n    - "src/**"'
+      );
+      const config = parseConfig(raw);
+      expect(config?.review?.paths).toEqual(['src/**']);
+      expect(
+        shouldSkipByPathFilters(config?.review?.paths ?? [], ['README.md'])
+      ).toBe(true);
+    });
   });
 });

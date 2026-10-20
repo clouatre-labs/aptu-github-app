@@ -8,6 +8,10 @@ on:
     types:
       - aptu-review
 
+concurrency:
+  group: ${{ github.repository }}-aptu-review-${{ github.event.client_payload.pull_number }}
+  cancel-in-progress: true
+
 jobs:
   review:
     name: Review PR
