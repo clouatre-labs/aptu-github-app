@@ -1,0 +1,31 @@
+---
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
+const steps = [
+  { title: 'Install App', body: 'One click on the GitHub App install page.' },
+  { title: 'Issue opened', body: 'A contributor files an issue in your repo.' },
+  {
+    title: 'aptu reads the repo',
+    body: 'Code, tests, and history -- not just the issue body.',
+  },
+  {
+    title: 'Comment posted',
+    body: 'A structured triage comment lands with labels applied.',
+  },
+];
+---
+
+<section class="border-t border-border py-20 md:py-24">
+  <h2 class="text-2xl font-bold tracking-tight text-fg">How It Works</h2>
+  <ol class="mt-10 grid gap-8 md:grid-cols-4">
+    {
+      steps.map((step, index) => (
+        <li class="border-t-2 border-accent pt-4">
+          <span class="font-mono text-sm text-accent">{String(index + 1).padStart(2, "0")}</span>
+          <h3 class="mt-2 text-base font-semibold text-fg">{step.title}</h3>
+          <p class="mt-2 text-sm leading-relaxed text-muted">{step.body}</p>
+        </li>
+      ))
+    }
+  </ol>
+</section>

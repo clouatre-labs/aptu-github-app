@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
 
-name: Deploy Worker
+name: Deploy
 
 on:
   push:
     branches: [main]
     paths:
       - 'worker/**'
+      - 'site/**'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
@@ -19,8 +20,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Deploy to Cloudflare
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-26.04-arm
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      worker: ${{ steps.filter.outputs.worker }}
+      site: ${{ steps.filter.outputs.site }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Detect changed paths
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            worker:
+              - 'worker/**'
+              - '.github/workflows/deploy.yml'
+            site:
+              - 'site/**'
+              - '.github/workflows/deploy.yml'
+
+  deploy-worker:
+    name: Deploy Worker to Cloudflare
+    needs: changes
+    # Preserves the previous effective trigger: worker/** or deploy.yml changes,
+    # plus every workflow_dispatch run.
+    if: github.event_name != 'push' || needs.changes.outputs.worker == 'true'
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 10
     steps:
@@ -37,6 +66,33 @@ jobs:
 
       - name: Deploy Worker
         run: bun run --cwd worker deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+
+  deploy-site:
+    name: Deploy Site to Cloudflare
+    needs: changes
+    if: github.event_name != 'push' || needs.changes.outputs.site == 'true'
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.3"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build site
+        run: bun run --cwd site build
+
+      - name: Deploy Site
+        run: cd site && bunx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}

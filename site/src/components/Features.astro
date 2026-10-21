@@ -1,0 +1,31 @@
+---
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
+const features = [
+  {
+    title: 'Instant Triage',
+    body: 'Complexity assessment with LOC estimate, related issue detection, implementation approach, and automatic labels -- posted as a structured comment seconds after an issue opens.',
+  },
+  {
+    title: 'Automated PR Review',
+    body: 'A concise summary plus targeted inline comments on every pull request, with no workflow files to write or maintain.',
+  },
+  {
+    title: 'Zero Configuration',
+    body: 'Install the GitHub App and you are done. No YAML, no secrets to rotate, no setup scripts. Webhooks drive everything.',
+  },
+];
+---
+
+<section class="border-t border-border py-20 md:py-24">
+  <div class="grid gap-10 md:grid-cols-3">
+    {
+      features.map((feature) => (
+        <div>
+          <h2 class="text-lg font-semibold text-fg">{feature.title}</h2>
+          <p class="mt-3 text-sm leading-relaxed text-muted">{feature.body}</p>
+        </div>
+      ))
+    }
+  </div>
+</section>

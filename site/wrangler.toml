@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
+
+name = "aptu-dev-site"
+compatibility_date = "2026-01-15"
+
+[assets]
+directory = "./dist"
+not_found_handling = "404-page"
+
+[[routes]]
+pattern = "aptu.dev"
+zone_name = "aptu.dev"

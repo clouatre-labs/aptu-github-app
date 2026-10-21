@@ -1,0 +1,90 @@
+---
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
+const INSTALL_URL = 'https://github.com/apps/aptu-dev';
+const REPO_URL = 'https://github.com/clouatre-labs/aptu-github-app';
+---
+
+<header class="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
+  <a href="/" class="flex items-center gap-2">
+    <img src="/logo.svg" alt="aptu logo" class="h-7 w-7" width="28" height="28" />
+    <span class="text-lg font-semibold tracking-tight">aptu</span>
+  </a>
+  <a
+    href={REPO_URL}
+    class="rounded-md border border-border px-4 py-2 text-sm font-medium text-fg transition-colors hover:border-accent hover:text-accent-hover"
+  >
+    GitHub
+  </a>
+</header>
+
+<main class="mx-auto max-w-6xl px-6">
+  <section class="grid items-center gap-12 py-20 md:grid-cols-2 md:py-28">
+    <div>
+      <h1 class="text-4xl leading-tight font-bold tracking-tight text-fg md:text-5xl">
+        Triage that actually reads the code.
+      </h1>
+      <p class="mt-6 text-lg leading-relaxed text-muted">
+        aptu labels, scores complexity, links related issues, and writes an
+        implementation approach -- automatically, on every issue.
+      </p>
+      <div class="mt-8 flex flex-wrap gap-4">
+        <a
+          href={INSTALL_URL}
+          class="rounded-md bg-accent px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+        >
+          Install GitHub App
+        </a>
+        <a
+          href={REPO_URL}
+          class="rounded-md border border-border px-6 py-3 text-sm font-semibold text-fg transition-colors hover:border-accent"
+        >
+          View Repo
+        </a>
+      </div>
+    </div>
+
+    <!-- Triage comment mockup: CSS animation only, zero JS -->
+    <div class="font-mono text-xs leading-relaxed md:text-sm">
+      <div class="rounded-lg border border-border bg-surface p-5">
+        <div class="mb-4 border-b border-border pb-3 text-muted">
+          Issue <span class="text-fg">#42</span> HMAC validation passes on replayed events
+        </div>
+        <div class="anim-fade d-1 mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span class="font-medium text-fg">aptu-dev[bot]</span>
+          <span class="text-muted">commented just now</span>
+          <span class="anim-pop d-2 rounded-full border border-[#f8514955] bg-[#f8514922] px-2 py-0.5 text-[#f85149]">bug</span>
+          <span class="anim-pop d-3 rounded-full border border-[#a371f755] bg-[#a371f722] px-2 py-0.5 text-[#a371f7]">P1</span>
+        </div>
+        <div class="anim-slide d-4 mb-3 grid grid-cols-[6rem_1fr] gap-x-3">
+          <span class="text-accent">Complexity</span>
+          <span>
+            Low (~40 LOC)<br />
+            <span class="text-muted">Affected: worker/src/index.ts, worker/src/index.test.ts</span>
+          </span>
+        </div>
+        <div class="anim-slide d-5 mb-3 grid grid-cols-[6rem_1fr] gap-x-3">
+          <span class="text-accent">Related</span>
+          <span>
+            <span class="text-fg">#38</span> Add timestamp window to signature validation<br />
+            <span class="border-l-2 border-border pl-2 text-muted">&gt; Both issues involve the HMAC verification path.</span>
+          </span>
+        </div>
+        <div class="anim-slide d-6 mb-3 grid grid-cols-[6rem_1fr] gap-x-3">
+          <span class="text-accent">Approach</span>
+          <span>
+            1. Add a X-Hub-Signature-Timestamp header check in index.ts<br />
+            2. Reject requests older than 300 s<br />
+            3. Cover the window boundary in index.test.ts
+          </span>
+        </div>
+        <div class="anim-slide d-7 grid grid-cols-[6rem_1fr] gap-x-3">
+          <span class="text-accent">Guidance</span>
+          <span>
+            Good first issue -- scope is narrow, tests are adjacent.<span class="anim-blink ml-0.5 inline-block h-3.5 w-[0.5em] bg-accent align-middle"></span>
+          </span>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>

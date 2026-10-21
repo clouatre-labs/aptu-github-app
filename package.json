@@ -2,7 +2,8 @@
   "name": "aptu-github-app",
   "private": true,
   "workspaces": [
-    "worker"
+    "worker",
+    "site"
   ],
   "overrides": {
     "nanoid": "6.0.2",

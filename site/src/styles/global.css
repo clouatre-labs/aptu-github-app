@@ -1,0 +1,114 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 aptu-github-app Contributors */
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0a0a0a;
+  --color-surface: #161616;
+  --color-border: #2a2a2a;
+  --color-accent: #7c3aed;
+  --color-accent-hover: #8b5cf6;
+  --color-fg: #e6e6e6;
+  --color-muted: #8a8a8a;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+}
+
+/* Hero mockup animations: CSS only, zero JS */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  70% {
+    transform: scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.anim-fade {
+  opacity: 0;
+  animation: fade-in 0.4s ease-out forwards;
+}
+
+.anim-pop {
+  opacity: 0;
+  animation: pop-in 0.3s ease-out forwards;
+}
+
+.anim-slide {
+  opacity: 0;
+  animation: slide-up 0.4s ease-out forwards;
+}
+
+.anim-blink {
+  animation: blink 1s step-end infinite;
+}
+
+/* Sequence: comment header 150ms, labels staggered 80ms each,
+   sections staggered 120ms apart; hold 3s; loop. */
+.d-1 {
+  animation-delay: 150ms;
+}
+.d-2 {
+  animation-delay: 230ms;
+}
+.d-3 {
+  animation-delay: 310ms;
+}
+.d-4 {
+  animation-delay: 430ms;
+}
+.d-5 {
+  animation-delay: 550ms;
+}
+.d-6 {
+  animation-delay: 670ms;
+}
+.d-7 {
+  animation-delay: 790ms;
+}

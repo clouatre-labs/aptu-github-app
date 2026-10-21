@@ -25,6 +25,7 @@ jobs:
       pull-requests: read
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      site: ${{ steps.filter.outputs.site }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -39,6 +40,12 @@ jobs:
               - 'package.json'
               - 'bun.lock'
               - '.github/workflows/**'
+            site:
+              - 'site/**'
+              - 'package.json'
+              - 'bun.lock'
+              - 'biome.json'
+              - '.github/workflows/ci.yml'
 
   lint:
     name: Lint
@@ -122,6 +129,34 @@ jobs:
       - name: Validate commit messages
         run: bunx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
 
+  site:
+    name: Site Build
+    needs: changes
+    if: needs.changes.outputs.site == 'true' || github.event_name != 'pull_request'
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.3"
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Biome check site
+        run: bunx biome check site
+      - name: Build site
+        run: bun run --cwd site build
+      - name: Verify dist output
+        run: |
+          test -f site/dist/index.html || { echo "::error::site/dist/index.html not found"; exit 1; }
+          test -f site/dist/404.html || { echo "::error::site/dist/404.html not found"; exit 1; }
+      - name: Validate Wrangler config
+        run: cd site && bunx wrangler deploy --dry-run
+
   verify-aptu-pin-alignment:
     name: Verify Aptu Pin Alignment
     runs-on: ubuntu-26.04-arm
@@ -162,7 +197,7 @@ jobs:
     name: CI Result
     runs-on: ubuntu-26.04-arm
     if: always()
-    needs: [lint, typecheck, test, commitlint, verify-aptu-pin-alignment]
+    needs: [lint, typecheck, test, commitlint, verify-aptu-pin-alignment, site]
     permissions: {}
     steps:
       - name: Verify all jobs passed or were skipped

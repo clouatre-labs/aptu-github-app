@@ -101,3 +101,27 @@ path = ".editorconfig"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
 SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "site/**/*.astro"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "site/**/*.mjs"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "site/**/*.css"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "site/**/*.svg"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 aptu-github-app Contributors"
+SPDX-License-Identifier = "Apache-2.0"

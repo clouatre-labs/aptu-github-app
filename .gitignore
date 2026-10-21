@@ -8,3 +8,5 @@ dist/
 # Coder skill handoff artifacts (clouatre/dotfiles#797)
 .handoff/
 .worktrees/
+# Astro generated types
+site/.astro/
