@@ -4,7 +4,7 @@
 // InstallationUsage Durable Object
 // Persists per-installation usage counters (adoption metrics) using Durable
 // Object SQLite-backed storage. Counters are keyed only by installation id,
-// event type (triage/review/mention), and outcome (success/failure); no repo
+// event type (triage/review), and outcome (success/failure); no repo
 // names, issue/PR numbers, user ids, or secrets are ever stored. The
 // installation id is pseudonymous: it identifies an installation, not a person.
 //
@@ -19,7 +19,7 @@
 export const USAGE_MAX_INSTALLATIONS = 1000;
 export const USAGE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 
-const VALID_EVENT_TYPES = new Set(['triage', 'review', 'mention']);
+const VALID_EVENT_TYPES = new Set(['triage', 'review']);
 const VALID_OUTCOMES = new Set(['success', 'failure']);
 
 export interface UsageCounters {
@@ -67,8 +67,6 @@ export class InstallationUsage {
       return new Response('Bad Request', { status: 400 });
     }
 
-    await this.prune();
-
     const key = `usage:${installationId}`;
     const now = Date.now();
     const stored = await this.ctx.storage.get<UsageEntry>(key);
@@ -78,6 +76,11 @@ export class InstallationUsage {
     entry.counters[eventType] = counters;
     entry.lastSeen = now;
     await this.ctx.storage.put(key, entry);
+
+    // Enforce retention and the entry cap after writing so the cap holds
+    // even when this record introduces a new installation; the freshly
+    // written entry has the newest lastSeen and will not be evicted.
+    await this.prune();
 
     return Response.json({ ok: true, counters: entry.counters });
   }

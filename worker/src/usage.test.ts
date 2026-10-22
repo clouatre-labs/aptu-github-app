@@ -124,7 +124,7 @@ describe('InstallationUsage Durable Object', () => {
     const usage = new InstallationUsage(ctx as unknown as DurableObjectState);
 
     // Act
-    const response = await usage.fetch(recordRequest('mention', 9, 'success'));
+    const response = await usage.fetch(recordRequest('triage', 9, 'success'));
 
     // Assert
     expect(response.status).toBe(200);
@@ -134,6 +134,27 @@ describe('InstallationUsage Durable Object', () => {
     // The newly active installation survives; the least-recently-active were evicted.
     expect(entries.has('usage:9')).toBe(true);
     expect(entries.has(`usage:${USAGE_MAX_INSTALLATIONS + 3}`)).toBe(false);
+  });
+
+  it('does not exceed the cap when a new installation arrives at full capacity', async () => {
+    // Arrange: exactly USAGE_MAX_INSTALLATIONS active entries, no stale ones
+    const now = Date.now();
+    const entries = new Map<string, unknown>();
+    for (let id = 1; id <= USAGE_MAX_INSTALLATIONS; id++) {
+      entries.set(`usage:${id}`, { counters: {}, lastSeen: now - id });
+    }
+    const ctx = makeMockCtx(entries);
+    const usage = new InstallationUsage(ctx as unknown as DurableObjectState);
+
+    // Act: record a previously unseen installation
+    const response = await usage.fetch(
+      recordRequest('review', USAGE_MAX_INSTALLATIONS + 1, 'success')
+    );
+
+    // Assert: the store stays at the cap and the new entry survives
+    expect(response.status).toBe(200);
+    expect(entries.size).toBe(USAGE_MAX_INSTALLATIONS);
+    expect(entries.has(`usage:${USAGE_MAX_INSTALLATIONS + 1}`)).toBe(true);
   });
 });
 
