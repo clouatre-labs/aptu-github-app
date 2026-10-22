@@ -7,6 +7,7 @@ import { createAppAuth } from '@octokit/auth-app';
 // classes to be exported from the entry point (this file) to register them.
 export { InstallationQuota } from './quota';
 export { TelemetryRateLimit, TelemetryRollup } from './telemetry';
+export { InstallationUsage } from './usage';
 
 import { captureException, withSentry } from '@sentry/cloudflare';
 import {
@@ -31,6 +32,7 @@ export interface Env {
   REPLAY_GUARD: DurableObjectNamespace;
   TELEMETRY: DurableObjectNamespace;
   TELEMETRY_RATE_LIMIT: DurableObjectNamespace;
+  INSTALLATION_USAGE: DurableObjectNamespace;
 }
 
 export function hexToBytes(hex: string): Uint8Array {
@@ -511,6 +513,60 @@ async function maybeRecordQuota(
   }
 }
 
+/**
+ * Records a usage event (adoption metric) for an installation.
+ *
+ * Calls InstallationUsage with no action field (records by default). Unlike
+ * quota recording, operator-org installations are counted too: usage analytics
+ * measure adoption, not abuse. Returns void; logs errors but does not block
+ * webhook processing.
+ */
+async function recordUsage(
+  env: Env,
+  installationId: number,
+  eventType: string,
+  outcome: string
+): Promise<void> {
+  try {
+    // All installations share a single DO instance so the in-object entry
+    // cap and inactive-pruning can bound state across installations.
+    const usageId = env.INSTALLATION_USAGE.idFromName('global');
+    const stub = env.INSTALLATION_USAGE.get(usageId);
+    const usageResponse = await stub.fetch('https://usage/usage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventType, installationId, outcome }),
+    });
+    if (!usageResponse.ok) {
+      const text = await usageResponse.text();
+      console.error(
+        `Usage record non-2xx for installation ${installationId}: ${text}`
+      );
+    }
+  } catch (error) {
+    console.error(
+      `Usage record failed for installation ${installationId}:`,
+      error
+    );
+  }
+}
+
+/**
+ * Records a usage event only when the repository's telemetry is enabled.
+ * Call sites gate on config.telemetry.enabled; recording is opt-in via that
+ * per-repo flag (it defaults to false).
+ */
+export async function maybeRecordUsage(
+  env: Env,
+  config: AptuConfig | null,
+  installationId: number,
+  eventType: string,
+  outcome: string
+): Promise<void> {
+  if (config?.telemetry?.enabled !== true) return;
+  await recordUsage(env, installationId, eventType, outcome);
+}
+
 // ---------------------------------------------------------------------------
 // Mention detection & access control
 // ---------------------------------------------------------------------------
@@ -646,10 +702,12 @@ export async function handleMentionCommand(
           }
     );
   } catch {
+    await maybeRecordUsage(env, config, installationId, eventType, 'failure');
     return new Response('Internal Server Error', { status: 500 });
   }
 
   await maybeRecordQuota(env, owner ?? '', installationId, eventType);
+  await maybeRecordUsage(env, config, installationId, eventType, 'success');
 
   return new Response(null, { status: 204 });
 }
@@ -930,10 +988,24 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
               `Failed to dispatch aptu-triage event for ${repo}:`,
               error
             );
+            await maybeRecordUsage(
+              env,
+              config,
+              installationId,
+              'triage',
+              'failure'
+            );
             return new Response('Internal Server Error', { status: 500 });
           }
 
           await maybeRecordQuota(env, owner, installationId, 'triage');
+          await maybeRecordUsage(
+            env,
+            config,
+            installationId,
+            'triage',
+            'success'
+          );
           triageDispatched = true;
         }
       }
@@ -1153,10 +1225,24 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
               `Failed to dispatch aptu-review event for ${repo}:`,
               error
             );
+            await maybeRecordUsage(
+              env,
+              config,
+              installationId,
+              'review',
+              'failure'
+            );
             return new Response('Internal Server Error', { status: 500 });
           }
 
           await maybeRecordQuota(env, owner, installationId, 'review');
+          await maybeRecordUsage(
+            env,
+            config,
+            installationId,
+            'review',
+            'success'
+          );
           reviewDispatched = true;
         }
       }
