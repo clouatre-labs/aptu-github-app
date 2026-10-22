@@ -58,7 +58,9 @@ export class InstallationUsage {
     }
 
     if (
-      !installationId ||
+      typeof installationId !== 'number' ||
+      !Number.isSafeInteger(installationId) ||
+      installationId <= 0 ||
       !VALID_EVENT_TYPES.has(eventType) ||
       !VALID_OUTCOMES.has(outcome)
     ) {

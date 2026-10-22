@@ -32,8 +32,9 @@ as part of normal operation:
   `reviews_total` and `truncation_events_total` with no repo, PR, or actor
   identifiers; see `telemetry.enabled` in
   [README.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/README.md#repository-configuration).
-- **Per-installation usage analytics** (opt-out via `telemetry.enabled`) --
-  when telemetry is enabled, each dispatch records a counter keyed only by
+- **Per-installation usage analytics** (opt-in via `telemetry.enabled`, which
+  defaults to false) -- when telemetry is enabled, each dispatch records a
+  counter keyed only by
   installation id, event type (triage/review/mention), and outcome
   (success/failure). No repo names, issue/PR numbers, user ids, or secrets are
   recorded. The installation id is pseudonymous: it identifies a GitHub App

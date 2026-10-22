@@ -91,6 +91,24 @@ describe('InstallationUsage Durable Object', () => {
     expect(body.counters.review?.success).toBe(0);
   });
 
+  it('rejects invalid installation ids', async () => {
+    // Arrange
+    const ctx = makeMockCtx(new Map<string, unknown>());
+    const usage = new InstallationUsage(ctx as unknown as DurableObjectState);
+    const invalidIds: unknown[] = [0, -1, 1.5, '7', Number.NaN];
+
+    for (const id of invalidIds) {
+      // Act
+      const response = await usage.fetch(
+        recordRequest('triage', id as number, 'success')
+      );
+
+      // Assert
+      expect(response.status).toBe(400);
+      expect(ctx.storage.put).not.toHaveBeenCalled();
+    }
+  });
+
   it('prunes installations inactive beyond the retention window and respects the entry cap', async () => {
     // Arrange
     const entries = new Map<string, unknown>();
@@ -128,11 +146,29 @@ describe('maybeRecordUsage', () => {
   function makeMockEnv(fetchImpl: () => Promise<Response>) {
     return {
       INSTALLATION_USAGE: {
-        idFromName: (name: string) => name,
+        idFromName: vi.fn((name: string) => name),
         get: () => ({ fetch: fetchImpl }),
       },
     };
   }
+
+  it('routes usage recording to the shared global DO instance', async () => {
+    // Arrange
+    const env = makeMockEnv(async () => new Response(null, { status: 200 }));
+    const { maybeRecordUsage } = await import('./index.js');
+
+    // Act
+    await maybeRecordUsage(
+      env as never,
+      { telemetry: { enabled: true } } as never,
+      42,
+      'triage',
+      'success'
+    );
+
+    // Assert
+    expect(env.INSTALLATION_USAGE.idFromName).toHaveBeenCalledWith('global');
+  });
 
   it('does not call the DO when config.telemetry.enabled is false', async () => {
     // Arrange

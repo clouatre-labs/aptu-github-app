@@ -527,9 +527,11 @@ async function recordUsage(
   eventType: string,
   outcome: string
 ): Promise<void> {
-  const usageId = env.INSTALLATION_USAGE.idFromName(String(installationId));
-  const stub = env.INSTALLATION_USAGE.get(usageId);
   try {
+    // All installations share a single DO instance so the in-object entry
+    // cap and inactive-pruning can bound state across installations.
+    const usageId = env.INSTALLATION_USAGE.idFromName('global');
+    const stub = env.INSTALLATION_USAGE.get(usageId);
     const usageResponse = await stub.fetch('https://usage/usage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -551,8 +553,8 @@ async function recordUsage(
 
 /**
  * Records a usage event only when the repository's telemetry is enabled.
- * Call sites gate on config.telemetry.enabled; recording is opt-out via that
- * per-repo flag.
+ * Call sites gate on config.telemetry.enabled; recording is opt-in via that
+ * per-repo flag (it defaults to false).
  */
 export async function maybeRecordUsage(
   env: Env,
