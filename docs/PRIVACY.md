@@ -32,6 +32,13 @@ as part of normal operation:
   `reviews_total` and `truncation_events_total` with no repo, PR, or actor
   identifiers; see `telemetry.enabled` in
   [README.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/README.md#repository-configuration).
+- **Per-installation usage analytics** (opt-out via `telemetry.enabled`) --
+  when telemetry is enabled, each dispatch records a counter keyed only by
+  installation id, event type (triage/review/mention), and outcome
+  (success/failure). No repo names, issue/PR numbers, user ids, or secrets are
+  recorded. The installation id is pseudonymous: it identifies a GitHub App
+  installation, not a natural person. Recording is skipped entirely when
+  `telemetry.enabled` is false.
 
 The Worker itself never persists webhook payload content; it is stateless
 beyond the Durable Object counters described under
@@ -97,6 +104,7 @@ this document does not restate that implementation detail.
 | `ReplayGuard` Durable Object | 300-second delivery-ID TTL | Deduplicates `X-GitHub-Delivery` IDs; expires after 300 seconds of inactivity |
 | `TelemetryRollup` Durable Object | Indefinite, aggregate-only | Stores a single global aggregate of anonymized, opt-in counters with no repo, PR, or actor identifiers |
 | `TelemetryRateLimit` Durable Object | Rolling window, per-IP | Bounds unauthenticated telemetry POST volume |
+| `InstallationUsage` Durable Object | 90-day inactivity retention; entry cap of 1000 installations (least-recently-active evicted first) | Per-installation usage counters keyed by installation id/event type/outcome only; installation id is pseudonymous |
 | OpenRouter (provider-side) | Zero-data-retention (`zdr`/`deny`) per [clouatre-labs/aptu#1494](https://github.com/clouatre-labs/aptu/issues/1494) | Applies when a caller routes through OpenRouter |
 | Anthropic / Gemini (provider-side) | Not documented at this project's account tier | Open item; flagged rather than assumed |
 

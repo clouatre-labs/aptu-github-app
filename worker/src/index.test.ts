@@ -69,6 +69,16 @@ function makeTelemetryRateLimitMockNamespace(): DurableObjectNamespace {
   } as unknown as DurableObjectNamespace;
 }
 
+function makeInstallationUsageMockNamespace(): DurableObjectNamespace {
+  const stub = {
+    fetch: vi.fn(() => Promise.resolve(Response.json({ ok: true }))),
+  };
+  return {
+    idFromName: vi.fn(() => 'mock-id' as unknown as DurableObjectId),
+    get: vi.fn(() => stub as unknown as DurableObjectStub),
+  } as unknown as DurableObjectNamespace;
+}
+
 function makeReplayGuardMockNamespace(): DurableObjectNamespace {
   const stored = new Set<string>();
   const stub = {
@@ -216,6 +226,7 @@ const mockEnv = {
   REPLAY_GUARD: makeReplayGuardMockNamespace(),
   TELEMETRY: makeTelemetryMockNamespace(),
   TELEMETRY_RATE_LIMIT: makeTelemetryRateLimitMockNamespace(),
+  INSTALLATION_USAGE: makeInstallationUsageMockNamespace(),
 };
 
 async function callHandler(
