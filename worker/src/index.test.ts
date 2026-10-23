@@ -730,6 +730,26 @@ describe('path filter config', () => {
     fetchSpy = vi.spyOn(globalThis, 'fetch');
   });
 
+  it('returns 204 without dispatch when synchronize action has a draft PR', async () => {
+    const body = JSON.stringify({
+      action: 'synchronize',
+      installation: { id: 1 },
+      pull_request: { number: 47, title: 'Draft', draft: true },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const response = await callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sign(mockEnv.WEBHOOK_SECRET, body),
+      'Content-Type': 'application/json',
+    });
+    expect(response.status).toBe(204);
+    expect(
+      fetchSpy.mock.calls.filter((call) =>
+        String(call[0]).includes('/dispatches')
+      )
+    ).toHaveLength(0);
+  });
+
   it('dispatches when at least one PR file matches review.paths patterns', async () => {
     // Mock config fetch - aptu.yml with review.paths
     fetchSpy.mockResolvedValueOnce(
