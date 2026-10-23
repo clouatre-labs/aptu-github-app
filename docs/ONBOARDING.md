@@ -11,7 +11,7 @@ This runbook walks through taking a repository from app installation to the firs
 
 Install the aptu GitHub App and select the target repository. On `installation.created` (or `installation_repositories.added`), the Worker automatically:
 
-1. Provisions the four dispatch handler workflow files under `.github/workflows/` (`aptu-review.yml`, `aptu-triage.yml`, `aptu-scan-security.yml`, `aptu-lint-issue.yml`).
+1. Provisions the dispatch handler workflow files under `.github/workflows/` (`aptu-review.yml`, `aptu-triage.yml`, `aptu-scan-security.yml`).
 2. Fetches `.github/aptu.yml` and, if the config is missing or lacks an `ai` block, opens a welcome issue in the repository with copy-paste guidance.
 
 If the config is already valid and complete (present with an `ai` block), no welcome issue is opened.
@@ -46,9 +46,8 @@ Create the matching secret in the repository (Settings > Secrets and variables >
 1. Confirm the welcome issue (if one was opened) can be closed after the config lands.
 2. Open a pull request. Within moments the aptu app should appear as a reviewer (`github-actions[bot]` inline comments come from the reusable workflow).
 3. Open an issue and confirm triage runs.
-4. With `lint.enabled: true` in `.github/aptu.yml`, opened or edited issues also trigger deterministic issue linting (`aptu-lint-issue`, advisory only); this requires an aptu release containing the `lint-issue` command.
 
-Acceptance for the install-time flow itself (welcome issue posted for missing/incomplete config, dedupe when complete) is covered by unit tests in `worker/src/index.test.ts` under the "welcome issue" describe block. A live scratch-repo walkthrough of steps 1-4 is the manual acceptance step for this runbook.
+Acceptance for the install-time flow itself (welcome issue posted for missing/incomplete config, dedupe when complete) is covered by unit tests in `worker/src/index.test.ts` under the "welcome issue" describe block. A live scratch-repo walkthrough of the four steps above (install the app, add `.github/aptu.yml`, add the AI secret, verify triage and review) is the manual acceptance step for this runbook.
 
 ## Troubleshooting
 

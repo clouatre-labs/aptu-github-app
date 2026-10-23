@@ -106,7 +106,6 @@ const APTU_WORKFLOW_FILES = [
   'aptu-review.yml',
   'aptu-triage.yml',
   'aptu-scan-security.yml',
-  'aptu-lint-issue.yml',
 ] as const;
 const APTU_WORKFLOW_SOURCE_BASE_URL =
   'https://raw.githubusercontent.com/clouatre-labs/aptu-github-app/main/.github/workflows';
@@ -928,7 +927,6 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
       }
 
       let triageDispatched = false;
-      let lintDispatched = false;
 
       // Triage runs on issues.opened only; never re-triage on edit.
       if (action === 'opened') {
@@ -985,78 +983,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         }
       }
 
-      // Lint is advisory: quota exhaustion or dispatch failure never fails the
-      // webhook and never blocks the triage flow.
-      if (shouldDispatch(config, 'lint')) {
-        const lintQuota = await maybeCheckQuota(
-          env,
-          owner,
-          installationId,
-          'lint'
-        );
-        if (lintQuota) {
-          console.warn(
-            `Skipping lint dispatch for ${repo}: quota unavailable or exhausted (${lintQuota.status})`
-          );
-        } else {
-          const dispatchToken = await getTokenOr500(
-            env,
-            installationId,
-            repo,
-            PERMS.dispatch,
-            eventType
-          );
-          if (dispatchToken instanceof Response) {
-            console.warn(
-              `Skipping lint dispatch for ${repo}: dispatch token unavailable (${dispatchToken.status})`
-            );
-          } else {
-            const lintToken = await getTokenOr500(
-              env,
-              installationId,
-              repo,
-              PERMS.triage,
-              eventType
-            );
-            if (lintToken instanceof Response) {
-              console.warn(
-                `Skipping lint dispatch for ${repo}: lint installation token unavailable (${lintToken.status})`
-              );
-            } else {
-              let issueBody = issue.body ?? '';
-              if (issueBody.length > 60000) {
-                console.warn(
-                  `Truncating issue_body for ${repo}#${issue.number} from ${issueBody.length} to 60000 chars`
-                );
-                issueBody = issueBody.slice(0, 60000);
-              }
-
-              try {
-                await dispatchEvent(dispatchToken, repo, 'aptu-lint-issue', {
-                  originating_repo: repo,
-                  issue_number: issue.number,
-                  issue_body: issueBody,
-                  ...(config?.lint?.spec
-                    ? { lint_spec: config.lint.spec }
-                    : {}),
-                  installation_token: lintToken,
-                });
-                await maybeRecordQuota(env, owner, installationId, 'lint');
-                lintDispatched = true;
-              } catch (error) {
-                captureException(error, { tags: { eventType, repo } });
-                console.error(
-                  `Failed to dispatch aptu-lint-issue event for ${repo}:`,
-                  error
-                );
-              }
-            }
-          }
-        }
-      }
-
-      if (triageDispatched || lintDispatched)
-        return new Response(null, { status: 204 });
+      if (triageDispatched) return new Response(null, { status: 204 });
       return new Response('OK', { status: 200 });
     }
 

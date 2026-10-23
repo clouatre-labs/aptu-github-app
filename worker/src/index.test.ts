@@ -3423,78 +3423,17 @@ describe('lint dispatch', () => {
       );
   }
 
-  it('dispatches both aptu-triage and aptu-lint-issue on issues.opened when lint.enabled is true, truncating long bodies', async () => {
+  it('emits no aptu-lint-issue dispatch for any issue event while triage is unaffected', async () => {
     mockConfig(
       'version: 1\ntriage:\n  enabled: true\nlint:\n  enabled: true\n  spec: .github/lint-specs.toml'
     );
 
-    const longBody = 'x'.repeat(70000);
-    const response = await callIssues('opened', longBody);
-
-    expect(response.status).toBe(204);
-    const payloads = dispatchPayloads();
-    expect(payloads.length).toBe(2);
-    expect(payloads[0]?.event_type).toBe('aptu-triage');
-    expect(payloads[1]?.event_type).toBe('aptu-lint-issue');
-    expect(payloads[1]?.client_payload).toEqual({
-      originating_repo: 'owner/repo',
-      issue_number: 5,
-      issue_body: 'x'.repeat(60000),
-      lint_spec: '.github/lint-specs.toml',
-      installation_token: 'mock-installation-token',
-    });
-  });
-
-  it('omits lint_spec from the aptu-lint-issue payload when lint.spec is absent', async () => {
-    mockConfig('version: 1\ntriage:\n  enabled: true\nlint:\n  enabled: true');
-
-    await callIssues('opened', 'short body');
-
-    const payloads = dispatchPayloads();
-    expect(payloads.length).toBe(2);
-    expect(payloads[1]?.event_type).toBe('aptu-lint-issue');
-    expect(payloads[1]?.client_payload).not.toHaveProperty('lint_spec');
-  });
-
-  it('does not dispatch aptu-lint-issue when lint is absent while triage is unaffected', async () => {
-    mockConfig('version: 1\ntriage:\n  enabled: true');
-
     const response = await callIssues('opened', 'body');
 
     expect(response.status).toBe(204);
     const payloads = dispatchPayloads();
     expect(payloads.length).toBe(1);
     expect(payloads[0]?.event_type).toBe('aptu-triage');
-  });
-
-  it('does not dispatch aptu-lint-issue when lint.enabled is false', async () => {
-    mockConfig('version: 1\ntriage:\n  enabled: true\nlint:\n  enabled: false');
-
-    const response = await callIssues('opened', 'body');
-
-    expect(response.status).toBe(204);
-    const payloads = dispatchPayloads();
-    expect(payloads.length).toBe(1);
-    expect(payloads[0]?.event_type).toBe('aptu-triage');
-  });
-
-  it('dispatches aptu-lint-issue only on issues.edited without re-triage', async () => {
-    mockConfig(
-      'version: 1\ntriage:\n  enabled: true\nlint:\n  enabled: true\n  spec: specs.toml'
-    );
-
-    const response = await callIssues('edited', 'edited body');
-
-    expect(response.status).toBe(204);
-    const payloads = dispatchPayloads();
-    expect(payloads.length).toBe(1);
-    expect(payloads[0]?.event_type).toBe('aptu-lint-issue');
-    expect(payloads[0]?.client_payload).toMatchObject({
-      originating_repo: 'owner/repo',
-      issue_number: 5,
-      issue_body: 'edited body',
-      lint_spec: 'specs.toml',
-    });
   });
 
   it('returns 200 on issues.edited when lint is not enabled', async () => {
@@ -3504,72 +3443,6 @@ describe('lint dispatch', () => {
 
     expect(response.status).toBe(200);
     expect(dispatchPayloads().length).toBe(0);
-  });
-
-  it('skips lint silently when lint quota is exhausted while triage on opened still proceeds', async () => {
-    mockConfig(
-      'version: 1\ntriage:\n  enabled: true\nlint:\n  enabled: true\n  spec: specs.toml'
-    );
-    quotaControl.overrides = {
-      lint: { body: JSON.stringify({ exceeded: true }), status: 429 },
-    };
-
-    const response = await callIssues('opened', 'body');
-
-    expect(response.status).toBe(204);
-    const payloads = dispatchPayloads();
-    expect(payloads.length).toBe(1);
-    expect(payloads[0]?.event_type).toBe('aptu-triage');
-  });
-
-  it('skips lint dispatch and does not return 500 on issues.edited when the dispatch token fails', async () => {
-    mockConfig(
-      'version: 1\ntriage:\n  enabled: true\nlint:\n  enabled: true\n  spec: specs.toml'
-    );
-    const { createAppAuth } = await import('@octokit/auth-app');
-    // biome-ignore lint/suspicious/noExplicitAny: mocking requires casting to any
-    (createAppAuth as any).mockImplementation(
-      () => (opts: { permissions?: Record<string, unknown> }) => {
-        if (opts.permissions?.contents === 'write') {
-          return Promise.reject(new Error('Failed to mint dispatch token'));
-        }
-        return Promise.resolve({ token: 'mock-installation-token' });
-      }
-    );
-
-    const response = await callIssues('edited', 'body');
-
-    expect(response.status).toBe(200);
-    expect(dispatchPayloads().length).toBe(0);
-    // biome-ignore lint/suspicious/noExplicitAny: restoring the mocked auth factory
-    (createAppAuth as any).mockImplementation(() =>
-      vi.fn().mockResolvedValue({ token: 'mock-installation-token' })
-    );
-  });
-
-  it('skips lint dispatch and does not return 500 on issues.edited when the lint installation token fails', async () => {
-    mockConfig(
-      'version: 1\ntriage:\n  enabled: true\nlint:\n  enabled: true\n  spec: specs.toml'
-    );
-    const { createAppAuth } = await import('@octokit/auth-app');
-    // biome-ignore lint/suspicious/noExplicitAny: mocking requires casting to any
-    (createAppAuth as any).mockImplementation(
-      () => (opts: { permissions?: Record<string, unknown> }) => {
-        if (opts.permissions?.issues === 'write') {
-          return Promise.reject(new Error('Failed to mint lint token'));
-        }
-        return Promise.resolve({ token: 'mock-installation-token' });
-      }
-    );
-
-    const response = await callIssues('edited', 'body');
-
-    expect(response.status).toBe(200);
-    expect(dispatchPayloads().length).toBe(0);
-    // biome-ignore lint/suspicious/noExplicitAny: restoring the mocked auth factory
-    (createAppAuth as any).mockImplementation(() =>
-      vi.fn().mockResolvedValue({ token: 'mock-installation-token' })
-    );
   });
 });
 
@@ -3947,7 +3820,7 @@ describe('workflow provisioning', () => {
     );
   });
 
-  it('creates all four missing files with base64 content, message, scoped permissions, and headers', async () => {
+  it('creates all missing files with base64 content, message, scoped permissions, and headers', async () => {
     fetchSpy.mockImplementation((url, init) => {
       const value = String(url);
       if (value.startsWith(rawPrefix))
@@ -3963,7 +3836,7 @@ describe('workflow provisioning', () => {
     const puts = fetchSpy.mock.calls.filter(
       ([, init]) => (init as RequestInit | undefined)?.method === 'PUT'
     );
-    expect(puts).toHaveLength(4);
+    expect(puts).toHaveLength(3);
     for (const [url, init] of puts) {
       const name = String(url).split('/').pop();
       const request = init as RequestInit;
@@ -4007,7 +3880,7 @@ describe('workflow provisioning', () => {
       fetchSpy.mock.calls.filter(
         ([, init]) => (init as RequestInit | undefined)?.method === 'PUT'
       )
-    ).toHaveLength(3);
+    ).toHaveLength(2);
   });
   it('continues after PUT 403', async () => {
     let puts = 0;
@@ -4062,12 +3935,12 @@ describe('workflow provisioning', () => {
     });
     const response = await callHandler(value, signed('installation', value));
     expect(response.status).toBe(200);
-    // 8 provisioning calls (4 existing-GET + 4 PUT) plus 1 welcome config GET
+    // 3 provisioning calls (3 existing-GET + 3 PUT) plus 1 welcome config GET
     expect(
       fetchSpy.mock.calls.filter(([url]) =>
         String(url).includes('/owner/second/contents/')
       )
-    ).toHaveLength(9);
+    ).toHaveLength(7);
   });
 
   it('routes installation.created to provisioning', async () => {
