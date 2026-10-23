@@ -1115,7 +1115,7 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         labels?: Array<{ name?: string }>;
       };
 
-      if (action === 'opened' && pr.draft) {
+      if ((action === 'opened' || action === 'synchronize') && pr.draft) {
         return new Response(null, { status: 204 });
       }
 
