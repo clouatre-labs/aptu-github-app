@@ -393,6 +393,53 @@ export async function shouldSkipPrDispatch(
 }
 
 // ---------------------------------------------------------------------------
+// Reviewed-SHA short-circuit (synchronize only)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true when the PR's latest aptu review marker targets the current
+ * head SHA, meaning a review for this exact commit already ran. Fail-open:
+ * any fetch or parse error returns false so dispatch proceeds.
+ */
+export async function shouldSkipReviewedSha(
+  repoFullName: string,
+  prNumber: number,
+  headSha: string,
+  token: string
+): Promise<boolean> {
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/${repoFullName}/pulls/${prNumber}/reviews?per_page=100`,
+      {
+        signal: AbortSignal.timeout(REPO_CONFIG_FETCH_TIMEOUT_MS),
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'aptu-webhook/1.0',
+        },
+      }
+    );
+    if (!response.ok) return false;
+
+    interface GitHubReview {
+      body?: string;
+    }
+    const reviews = (await response.json()) as GitHubReview[];
+    if (!Array.isArray(reviews)) return false;
+
+    for (let i = reviews.length - 1; i >= 0; i--) {
+      const body = reviews[i]?.body ?? '';
+      const match = body.match(/<!-- APTU_REVIEW:([0-9a-f]+):/);
+      if (match) return match[1] === headSha;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Quota
 // ---------------------------------------------------------------------------
 
@@ -1089,6 +1136,21 @@ export default withSentry((env: Env) => ({ dsn: env.SENTRY_DSN }), {
         return new Response(reviewWouldSkip ? null : 'OK', {
           status: reviewWouldSkip ? 204 : 200,
         });
+
+      // Synchronize-only short-circuit: if the latest aptu review marker
+      // targets the current head SHA, a review for this exact commit already
+      // ran; skip dispatch entirely (fail-open inside the helper).
+      if (
+        action === 'synchronize' &&
+        (await shouldSkipReviewedSha(
+          repo,
+          pr.number,
+          pr.head?.sha ?? '',
+          configToken
+        ))
+      ) {
+        return new Response(null, { status: 204 });
+      }
 
       const dispatchToken = await getTokenOr500(
         env,
