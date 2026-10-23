@@ -27,10 +27,6 @@ class_name = "TelemetryRollup"
 name = "TELEMETRY_RATE_LIMIT"
 class_name = "TelemetryRateLimit"
 
-[[durable_objects.bindings]]
-name = "INSTALLATION_USAGE"
-class_name = "InstallationUsage"
-
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["InstallationQuota"]
@@ -50,6 +46,10 @@ new_sqlite_classes = ["TelemetryRateLimit"]
 [[migrations]]
 tag = "v7"
 new_sqlite_classes = ["InstallationUsage"]
+
+[[migrations]]
+tag = "v8"
+deleted_classes = ["InstallationUsage"]
 
 [vars]
 # SENTRY_DSN = ""  # Set via: bunx wrangler secret put SENTRY_DSN
