@@ -1809,6 +1809,98 @@ describe('shouldSkipPrDispatch direct unit tests', () => {
   });
 });
 
+describe('synchronize reviewed-SHA short-circuit', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+
+  function mockSynchronizeFetch(reviews: Response | Error) {
+    fetchSpy.mockImplementation((url) => {
+      const urlStr =
+        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+      if (urlStr.includes('/contents/.github/aptu.yml')) {
+        return Promise.resolve(
+          makeConfigResponse('version: 1\nreview:\n  enabled: true')
+        );
+      }
+      if (urlStr.includes('/pulls/') && urlStr.includes('/reviews')) {
+        return reviews instanceof Error
+          ? Promise.reject(reviews)
+          : Promise.resolve(reviews);
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+  }
+
+  async function callSynchronize(headSha: string) {
+    const body = JSON.stringify({
+      action: 'synchronize',
+      installation: { id: 1 },
+      pull_request: { number: 7, title: 'Test PR', head: { sha: headSha } },
+      repository: { full_name: 'owner/repo', owner: { login: 'owner' } },
+    });
+    const sig = sign(mockEnv.WEBHOOK_SECRET, body);
+    return callHandler(body, {
+      'X-GitHub-Event': 'pull_request',
+      'X-Hub-Signature-256': sig,
+      'Content-Type': 'application/json',
+    });
+  }
+
+  it('returns 204 with no dispatch when head SHA equals latest aptu marker SHA', async () => {
+    mockSynchronizeFetch(
+      new Response(
+        JSON.stringify([
+          { body: 'unrelated comment' },
+          { body: '<!-- APTU_REVIEW:abc1234: summary -->' },
+        ]),
+        { status: 200 }
+      )
+    );
+    const response = await callSynchronize('abc1234');
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(0);
+  });
+
+  it('dispatches normally when head SHA differs from latest marker SHA', async () => {
+    mockSynchronizeFetch(
+      new Response(
+        JSON.stringify([{ body: '<!-- APTU_REVIEW:oldsha9: summary -->' }]),
+        { status: 200 }
+      )
+    );
+    const response = await callSynchronize('abc1234');
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
+  });
+
+  it('requests up to 100 reviews per page when checking the reviewed SHA', async () => {
+    mockSynchronizeFetch(new Response(JSON.stringify([]), { status: 200 }));
+    await callSynchronize('abc1234');
+    const reviewsCall = fetchSpy.mock.calls.find((call) =>
+      String(call[0]).includes('/reviews')
+    );
+    expect(String(reviewsCall?.[0])).toContain('per_page=100');
+  });
+
+  it('fails open and dispatches when the reviews fetch errors', async () => {
+    mockSynchronizeFetch(new Error('network down'));
+    const response = await callSynchronize('abc1234');
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(1);
+  });
+});
+
 describe('Quota check integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
