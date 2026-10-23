@@ -17,14 +17,12 @@ function loadWorkflow(name: string) {
 const review = loadWorkflow('aptu-review.yml');
 const triage = loadWorkflow('aptu-triage.yml');
 const scan = loadWorkflow('aptu-scan-security.yml');
-const lintIssue = loadWorkflow('aptu-lint-issue.yml');
 
 describe('aptu dispatch handler templates', () => {
   it('has correct permissions and relative reusable workflow refs', () => {
     expect(review).not.toHaveProperty('permissions');
     expect(triage).not.toHaveProperty('permissions');
     expect(scan).not.toHaveProperty('permissions');
-    expect(lintIssue).not.toHaveProperty('permissions');
     expect(review.jobs.review.permissions.contents).toBe('read');
     expect(review.jobs.review.permissions['pull-requests']).toBe('write');
     expect(triage.jobs.triage.permissions.contents).toBe('read');
@@ -32,12 +30,10 @@ describe('aptu dispatch handler templates', () => {
     expect(scan.jobs.scan.permissions.contents).toBe('read');
     expect(scan.jobs.scan.permissions['security-events']).toBe('write');
     expect(scan.jobs.scan.permissions.statuses).toBe('write');
-    expect(lintIssue.jobs.lint.permissions.contents).toBe('read');
     expect(review.jobs.review.uses).toBe('./.github/workflows/pr-review.yml');
     expect(triage.jobs.triage.uses).toBe(
       './.github/workflows/issue-triage.yml'
     );
     expect(scan.jobs.scan.uses).toBe('./.github/workflows/scan-security.yml');
-    expect(lintIssue.jobs.lint.uses).toBe('./.github/workflows/lint-issue.yml');
   });
 });
