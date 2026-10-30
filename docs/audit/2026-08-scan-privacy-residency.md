@@ -202,13 +202,13 @@ The architecture processes personal data when GitHub event content includes comm
 
 No repository documentation defines data residency, processing locations, cross-border transfers, regional controls, or provider subprocessors.
 
-| Component | Processing Location | Region Control | Documented |
-| --- | --- | --- | --- |
-| GitHub-hosted runners | GitHub/Microsoft Azure; region not selectable by runner label | No geographic guarantee from `ubuntu-24.04-arm` | No |
-| Cloudflare Worker | Cloudflare global edge network | No Regional Services or Data Localization Suite configured | No |
-| AI providers (Gemini, Anthropic) | Provider-specific; depends on account tier and endpoint | No regional endpoint configured | No |
-| OpenRouter | Multi-provider routing; EU/US in-region available for enterprise | No routing control; fallback to OpenRouter on provider failure | No |
-| SARIF storage | Caller's GitHub repo (code scanning) | Follows caller's GitHub data residency | Correct target |
+| Component                        | Processing Location                                              | Region Control                                                 | Documented     |
+| -------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------- | -------------- |
+| GitHub-hosted runners            | GitHub/Microsoft Azure; region not selectable by runner label    | No geographic guarantee from `ubuntu-24.04-arm`                | No             |
+| Cloudflare Worker                | Cloudflare global edge network                                   | No Regional Services or Data Localization Suite configured     | No             |
+| AI providers (Gemini, Anthropic) | Provider-specific; depends on account tier and endpoint          | No regional endpoint configured                                | No             |
+| OpenRouter                       | Multi-provider routing; EU/US in-region available for enterprise | No routing control; fallback to OpenRouter on provider failure | No             |
+| SARIF storage                    | Caller's GitHub repo (code scanning)                             | Follows caller's GitHub data residency                         | Correct target |
 
 For a Canadian organization, PIPEDA does not prohibit cross-border processing but requires accountability, notice, safeguards, contractual oversight, and transfer transparency.
 
@@ -218,13 +218,13 @@ For a Canadian organization, PIPEDA does not prohibit cross-border processing bu
 
 ## Summary
 
-*Table: Finding counts by category.*
+_Table: Finding counts by category._
 
-| Category | Count | Severity breakdown |
-| --- | --- | --- |
-| Scan workflow correctness | 4 findings | 1 High, 2 Medium, 1 Low |
-| Privacy | 7 findings | 2 High, 3 Medium, 1 Low, 1 Info |
-| Data residency | 1 finding | 1 Medium |
+| Category                  | Count      | Severity breakdown              |
+| ------------------------- | ---------- | ------------------------------- |
+| Scan workflow correctness | 4 findings | 1 High, 2 Medium, 1 Low         |
+| Privacy                   | 7 findings | 2 High, 3 Medium, 1 Low, 1 Info |
+| Data residency            | 1 finding  | 1 Medium                        |
 
 **Three issues opened.** The scan workflow's `target_url` is broken for all external viewers. The installation token in `client_payload` is a bearer credential with masking that protects log text only. No privacy policy, data-flow inventory, or residency documentation exists despite the architecture processing caller source code, commit metadata, and issue text across GitHub-hosted runners, Cloudflare's global edge, and third-party AI providers.
 
@@ -232,29 +232,29 @@ For a Canadian organization, PIPEDA does not prohibit cross-border processing bu
 
 ## Not-Findings
 
-*Table: Items checked and confirmed clean.*
+_Table: Items checked and confirmed clean._
 
-| Item | Result |
-| --- | --- |
-| SARIF upload target and ref pairing | Correct: `originating_repo` with `commit_sha=head_sha` and `ref=refs/pull/{pull_number}/head` |
-| Only scan-security.yml posts status checks | Confirmed: `pr-review.yml` and `issue-triage.yml` contain no status or `target_url` step |
-| Worker token scoping | Correct: per-operation scoped tokens via `PERMS` lookup, minimum permissions, not cached |
-| HMAC signature validation | Correct: `crypto.subtle.verify` (constant-time), first gate before JSON parse, no bypass found |
-| Error response leakage | Clean: all error responses use fixed literals, no interpolation of error messages or secrets |
-| `TARGET_REPO` not attacker-influenceable | Confirmed: hardcoded Wrangler var, never derived from webhook payload |
-| Replay deduplication | Correct: `ReplayGuard` Durable Object with atomic check-and-record, 300s alarm cleanup |
-| IP validation | Correct: fail-open with 3600s cache against GitHub `/meta` hooks CIDRs |
-| `ALLOWED_OWNERS` gate | Confirmed active: hard 403 on non-allowed owners before any dispatch |
-| Quota enforcement (per-installation) | Correct: 50 events per event type per 24h rolling window, bypassed when `ai` block present |
+| Item                                       | Result                                                                                         |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| SARIF upload target and ref pairing        | Correct: `originating_repo` with `commit_sha=head_sha` and `ref=refs/pull/{pull_number}/head`  |
+| Only scan-security.yml posts status checks | Confirmed: `pr-review.yml` and `issue-triage.yml` contain no status or `target_url` step       |
+| Worker token scoping                       | Correct: per-operation scoped tokens via `PERMS` lookup, minimum permissions, not cached       |
+| HMAC signature validation                  | Correct: `crypto.subtle.verify` (constant-time), first gate before JSON parse, no bypass found |
+| Error response leakage                     | Clean: all error responses use fixed literals, no interpolation of error messages or secrets   |
+| `TARGET_REPO` not attacker-influenceable   | Confirmed: hardcoded Wrangler var, never derived from webhook payload                          |
+| Replay deduplication                       | Correct: `ReplayGuard` Durable Object with atomic check-and-record, 300s alarm cleanup         |
+| IP validation                              | Correct: fail-open with 3600s cache against GitHub `/meta` hooks CIDRs                         |
+| `ALLOWED_OWNERS` gate                      | Confirmed active: hard 403 on non-allowed owners before any dispatch                           |
+| Quota enforcement (per-installation)       | Correct: 50 events per event type per 24h rolling window, bypassed when `ai` block present     |
 
 ---
 
 ## Open Issues Cross-Reference
 
-| Issue | Title | Findings |
-| --- | --- | --- |
-| [#136](https://github.com/clouatre-labs/aptu-github-app/issues/136) | fix(scan): broken target_url, silent SARIF failures, binary status | V01, V02, V03, V04 |
-| [#137](https://github.com/clouatre-labs/aptu-github-app/issues/137) | fix(security): installation token in dispatch payload and masking limitations | V05, V06, V07 |
-| [#138](https://github.com/clouatre-labs/aptu-github-app/issues/138) | docs: privacy policy, data inventory, and residency documentation | V08, V09, V10, V11, V12 |
-| [#147](https://github.com/clouatre-labs/aptu-github-app/issues/147) | docs: rescoped privacy policy, data-flow inventory, and audit amendment | V08, V09 (amended), V10, V11, V12 |
-| [aptu#1494](https://github.com/clouatre-labs/aptu/issues/1494) | feat(scan): SARIF content policy, data minimization, and provider data controls | V08, V10 |
+| Issue                                                               | Title                                                                           | Findings                          |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------- |
+| [#136](https://github.com/clouatre-labs/aptu-github-app/issues/136) | fix(scan): broken target_url, silent SARIF failures, binary status              | V01, V02, V03, V04                |
+| [#137](https://github.com/clouatre-labs/aptu-github-app/issues/137) | fix(security): installation token in dispatch payload and masking limitations   | V05, V06, V07                     |
+| [#138](https://github.com/clouatre-labs/aptu-github-app/issues/138) | docs: privacy policy, data inventory, and residency documentation               | V08, V09, V10, V11, V12           |
+| [#147](https://github.com/clouatre-labs/aptu-github-app/issues/147) | docs: rescoped privacy policy, data-flow inventory, and audit amendment         | V08, V09 (amended), V10, V11, V12 |
+| [aptu#1494](https://github.com/clouatre-labs/aptu/issues/1494)      | feat(scan): SARIF content policy, data minimization, and provider data controls | V08, V10                          |

@@ -9,9 +9,9 @@
   ],
   "overrides": {
     "nanoid": "6.0.2",
-    "undici": "8.12.2"
+    "undici": "8.12.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.15"
+    "@biomejs/biome": "2.6.3"
   }
 }

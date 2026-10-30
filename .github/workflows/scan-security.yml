@@ -18,7 +18,7 @@ on:
       scan_path:
         required: false
         type: string
-        default: '.'
+        default: "."
       fail_on:
         required: false
         type: string
@@ -113,7 +113,7 @@ jobs:
           scan-path: ${{ inputs.scan_path }}
           scan-security-diff: ${{ steps.diff.outputs.diff_path }}
           fail-on: ${{ inputs.fail_on }}
-          sarif-upload: 'false'
+          sarif-upload: "false"
 
       - name: Upload SARIF to caller
         id: upload-sarif

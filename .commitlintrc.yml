@@ -3,7 +3,7 @@
 # See: https://commitlint.js.org/reference/rules.html
 
 extends:
-  - '@commitlint/config-conventional'
+  - "@commitlint/config-conventional"
 
 rules:
   # config-conventional leaves these as warnings; promote to errors for parity with local hooks.

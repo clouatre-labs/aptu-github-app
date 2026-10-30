@@ -16,11 +16,11 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20261016.1",
+    "@cloudflare/workers-types": "5.20261027.1",
     "typescript": "7.0.2",
     "vitest": "5.0.5",
     "@types/node": "26.6.5",
     "@types/picomatch": "4.0.3",
-    "wrangler": "4.151.0"
+    "wrangler": "4.153.0"
   }
 }

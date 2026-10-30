@@ -35,4 +35,3 @@ jobs:
           min-severity: medium
           advanced-security: true
           token: ${{ secrets.GITHUB_TOKEN }}
-

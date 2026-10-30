@@ -1,4 +1,5 @@
 ---
+
 name: Bug
 about: Report a defect or unexpected behavior
 title: "[BUG] "
@@ -7,11 +8,13 @@ assignees: ""
 ---
 
 ## Summary
+
 <!-- 1-2 sentences: what is broken? Be specific about the symptom, not the suspected cause. -->
 
 Example: "The Cloudflare Worker returns 500 when processing a webhook with a missing X-Hub-Signature-256 header."
 
 ## Steps to Reproduce
+
 <!-- Numbered list of exact steps to trigger the bug. Include component name and inputs. -->
 
 1.
@@ -19,9 +22,11 @@ Example: "The Cloudflare Worker returns 500 when processing a webhook with a mis
 3.
 
 ## Expected Behavior
+
 <!-- What should happen? -->
 
 ## Actual Behavior
+
 <!-- What actually happens? Include error messages or stack traces. -->
 
 ```
@@ -42,9 +47,11 @@ Example: "The Cloudflare Worker returns 500 when processing a webhook with a mis
 ```
 
 ## Root Cause Analysis
+
 <!-- Optional: hypothesis with file path and line range. -->
 
 ## Fix Direction
+
 <!-- Optional: suggested approach or pattern to follow. -->
 
 ## Acceptance Criteria

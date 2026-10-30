@@ -33,16 +33,16 @@ Direct verification against live sources: `gh api`/`gh issue view`/`gh secret li
 
 ## Summary Table
 
-| # | Finding | Severity | Confirmed | Status |
-| --- | --- | --- | --- | --- |
-| R1 | Zero of 11 opted-in repos have the required dispatch-handler file; triage/review/scan is silently non-functional fleet-wide, right now | **Critical** | Yes | Open |
-| R2 | Issue #169 is scoped well beyond what today's fleet needs; several of its sub-tasks are already moot | High | Yes | Open -- recommendation below |
-| P1 | The two-file install (`aptu.yml` + a static dispatch-handler workflow) is a GitHub Actions platform constraint, not a design choice -- "one file only" is not achievable without reintroducing AI-key custody | Info (sound, closes the KISS question) | Yes | N/A |
-| D2 | `docs/ARCHITECTURE.md` still self-contradicts: stale centralized-model sections survive three PRs (#156, #167, #170) that each touched this file | Medium | Yes (reconfirmed) | Open |
-| S1 | Dormant `APTU_AI_KEY` repo secret, unused since creation, still present | Low | Yes (reconfirmed) | Open |
-| C1 | No aggregate quota ceiling; Cloudflare Durable Object cost scales unbounded with install count | Medium | Yes (reconfirmed) | Open, deliberate |
-| F1/F2/F3 | Repo-public, secret scanning, and branch protection (prior audit's blockers) | Info (sound) | Yes | Resolved since last audit |
-| CI3 | `aptu` action's input/routing contract matches every field the three reusable workflows send | Info (sound) | Yes | N/A |
+| #        | Finding                                                                                                                                                                                                       | Severity                               | Confirmed         | Status                       |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ----------------- | ---------------------------- |
+| R1       | Zero of 11 opted-in repos have the required dispatch-handler file; triage/review/scan is silently non-functional fleet-wide, right now                                                                        | **Critical**                           | Yes               | Open                         |
+| R2       | Issue #169 is scoped well beyond what today's fleet needs; several of its sub-tasks are already moot                                                                                                          | High                                   | Yes               | Open -- recommendation below |
+| P1       | The two-file install (`aptu.yml` + a static dispatch-handler workflow) is a GitHub Actions platform constraint, not a design choice -- "one file only" is not achievable without reintroducing AI-key custody | Info (sound, closes the KISS question) | Yes               | N/A                          |
+| D2       | `docs/ARCHITECTURE.md` still self-contradicts: stale centralized-model sections survive three PRs (#156, #167, #170) that each touched this file                                                              | Medium                                 | Yes (reconfirmed) | Open                         |
+| S1       | Dormant `APTU_AI_KEY` repo secret, unused since creation, still present                                                                                                                                       | Low                                    | Yes (reconfirmed) | Open                         |
+| C1       | No aggregate quota ceiling; Cloudflare Durable Object cost scales unbounded with install count                                                                                                                | Medium                                 | Yes (reconfirmed) | Open, deliberate             |
+| F1/F2/F3 | Repo-public, secret scanning, and branch protection (prior audit's blockers)                                                                                                                                  | Info (sound)                           | Yes               | Resolved since last audit    |
+| CI3      | `aptu` action's input/routing contract matches every field the three reusable workflows send                                                                                                                  | Info (sound)                           | Yes               | N/A                          |
 
 ---
 
@@ -58,7 +58,7 @@ options-trading-mcp, setup-goose-action, setup-kiro-action, setup-q-cli-action, 
 -- all 404 on .github/workflows/aptu.yml (verified via GitHub Contents API, 2026-08-23)
 ```
 
-Confirmed independently on `aptu-coder`: its last 15 Actions runs (through PR #1426) show only CI/CodeQL/Security/Scorecard/REUSE jobs -- no `aptu-review`/`aptu-triage` dispatch job has run. This is the direct cause of "nothing is working": #156/#167/#170 fixed the *code path*, but the *rollout* to existing installers never happened. Issue #168 was closed on the strength of the code fix, without verifying the fleet.
+Confirmed independently on `aptu-coder`: its last 15 Actions runs (through PR #1426) show only CI/CodeQL/Security/Scorecard/REUSE jobs -- no `aptu-review`/`aptu-triage` dispatch job has run. This is the direct cause of "nothing is working": #156/#167/#170 fixed the _code path_, but the _rollout_ to existing installers never happened. Issue #168 was closed on the strength of the code fix, without verifying the fleet.
 
 **Good news that shrinks this fix:** every one of the 11 repos sets `ai.provider: openrouter` (`template-repo` has no `ai` block at all), and `OPENROUTER_API_KEY` is a `clouatre-labs` **organization** secret with visibility `all` (confirmed via `gh api orgs/clouatre-labs/actions/secrets`). Every repo already inherits it. **No secret setup is required anywhere in the fleet** -- the only missing artifact, fleet-wide, is one identical, already-written file (`README.md:148-212`).
 
@@ -95,7 +95,7 @@ Building the full bot now is solving a scaling problem before there is any scale
 4. **Defer:** the auto-provisioning bot (idempotency, backoff, 403-handling, coordinated
    re-authorization) until there is an actual external installer, or the fleet grows to a size where per-repo manual tracking genuinely breaks down. Neither condition holds today.
 
-This was independently adversarially reviewed: the one legitimate gap in "just do the manual rollout" is that it doesn't prevent a *future* 12th repo from silently missing the handler with no alert. Items 2 and 3 above close that gap cheaply, without building the bot.
+This was independently adversarially reviewed: the one legitimate gap in "just do the manual rollout" is that it doesn't prevent a _future_ 12th repo from silently missing the handler with no alert. Items 2 and 3 above close that gap cheaply, without building the bot.
 
 **Resolved:** Not resolved. This is a scoping recommendation, applied in place to [#169](https://github.com/clouatre-labs/aptu-github-app/issues/169) (rescoped to items 2 and 3 above; item 4 deferred, no issue filed).
 
@@ -125,7 +125,7 @@ First flagged in the prior audit and folded into issue #162 (closed). PR #156, #
   tokens via `actions/create-github-app-token`." False -- `rg -n 'create-github-app-token' .github/workflows/*.yml` returns zero matches; the reusable workflows use `secrets.GITHUB_TOKEN` in the caller's own context.
 - **Lines 68-73, 260-268:** Describe a `GlobalQuota` Durable Object and
   `enforceQuota`/`checkGlobalQuota` functions removed in PR #123 and never restored (confirmed: `rg 'GlobalQuota|enforceQuota|checkGlobalQuota' worker/src/*.ts` returns zero matches; `wrangler.toml` line 28 records `deleted_classes = ["GlobalQuota"]`).
-- **Line 169:** Lists `OPENROUTER_API_KEY` as a required *organization* secret operational
+- **Line 169:** Lists `OPENROUTER_API_KEY` as a required _organization_ secret operational
   prerequisite for the Worker. False under BYOK -- no Worker code or reusable workflow reads this for its own operation; it is a caller-side secret name convention only.
 
 **Fix:** Rewrite these five spots to match the file's own correct Token Model / Caller-Supplied AI Keys / Security Boundaries sections (lines 128-251), which are accurate. This is a documentation-only change with no code risk.
