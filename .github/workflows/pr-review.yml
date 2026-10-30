@@ -91,9 +91,15 @@ jobs:
         env:
           PR_REVIEW_OUTCOME: ${{ steps.review.outputs.pr-review-outcome }}
         run: |
-          echo "::warning::AI review step did not succeed (outcome: ${PR_REVIEW_OUTCOME:-unknown}; continue-on-error kept the job green) - check the Review PR step logs"
+          echo "::warning::AI review step did not succeed (outcome: ${PR_REVIEW_OUTCOME:-unknown}) - the job will fail; check the Review PR step logs"
           echo "### :warning: AI review ${PR_REVIEW_OUTCOME:-unknown}" >> "$GITHUB_STEP_SUMMARY"
-          echo "The Review PR step did not succeed but did not block this job (continue-on-error: true). See the Review PR step logs for details." >> "$GITHUB_STEP_SUMMARY"
+          echo "The Review PR step did not succeed; a gate step at the end of this job exits 1 so the run is marked as failed. See the Review PR step logs for details." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail job on review failure
+        if: always() && steps.review.outputs.pr-review-outcome != 'success'
+        run: |
+          echo "::error::AI review step did not succeed (outcome: ${{ steps.review.outputs.pr-review-outcome || 'unknown' }}) - failing the job"
+          exit 1
 
       - name: Report telemetry rollup
         if: inputs.telemetry_enabled
