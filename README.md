@@ -36,28 +36,28 @@ Each repository opts in by adding a `.github/aptu.yml` file. The Worker fetches 
 ### Schema
 
 ```yaml
-version: 1                                        # required; must be 1
+version: 1 # required; must be 1
 
 triage:
-  enabled: true                                   # required if triage block present
+  enabled: true # required if triage block present
 
 review:
-  enabled: true                                   # required if review block present
-  instructions-file: .github/instructions/pr-review.md  # optional; path in the target repo
-  skip-labeled: false                             # optional; aptu skips review if PR has a label
-  skip-label: aptu:skip                           # optional; PRs carrying this label are skipped pre-dispatch (empty string disables)
-  paths:                                          # optional; suppress PR review AND scan when no file qualifies
-    - "src/**"                                    # bare patterns are includes
-    - "!src/data/**"                              # '!'-prefixed patterns are excludes
+  enabled: true # required if review block present
+  instructions-file: .github/instructions/pr-review.md # optional; path in the target repo
+  skip-labeled: false # optional; aptu skips review if PR has a label
+  skip-label: aptu:skip # optional; PRs carrying this label are skipped pre-dispatch (empty string disables)
+  paths: # optional; suppress PR review AND scan when no file qualifies
+    - "src/**" # bare patterns are includes
+    - "!src/data/**" # '!'-prefixed patterns are excludes
 
 scan:
-  enabled: true                                   # required if scan block present
-  fail-on: critical,high                          # optional: comma-separated severities that fail the scan
-  path: src/                                      # optional: root directory to scan (default ".")
+  enabled: true # required if scan block present
+  fail-on: critical,high # optional: comma-separated severities that fail the scan
+  path: src/ # optional: root directory to scan (default ".")
 
 ai:
-  provider: openrouter                            # required if ai block present
-  model: google/gemma-4-26b-a4b-it                # required if ai block present
+  provider: openrouter # required if ai block present
+  model: google/gemma-4-26b-a4b-it # required if ai block present
 ```
 
 ### Scan configuration
@@ -76,21 +76,21 @@ All aptu workflows use `concurrency` groups keyed on the originating repository 
 
 ### Field reference
 
-| Field | Type | Default | Description |
-| --- | --- | --- | --- |
-| `version` | integer | -- | Config schema version. Must be `1`. |
-| `triage.enabled` | boolean | -- | Dispatch `aptu-triage` on `issues.opened` events. |
-| `review.enabled` | boolean | -- | Dispatch `aptu-review` on `pull_request` opened/synchronize/reopened/ready_for_review events. |
-| `review.instructions-file` | string | `.github/instructions/pr-review.md` | Path to PR review instructions file, relative to the target repo root. Passed to aptu as `--instructions-file`. |
-| `review.skip-labeled` | boolean | `false` | Passed to aptu as `--skip-labeled`. When true, aptu skips review if the PR already carries a label. |
-| `review.skip-label` | string | `aptu:skip` | Label that suppresses both review and scan dispatch pre-dispatch when present on the PR. Set to an empty string to disable the gate. |
-| `review.paths` | string[] | `['!**/*.md', '!docs/**']` | Glob patterns (picomatch) evaluated against the full PR file list. Bare patterns are includes; `!`-prefixed patterns are excludes. A PR is dispatched if at least one file qualifies. If no file qualifies, both the review and scan dispatches are suppressed. When unset, the default excludes skip markdown-only and docs-only PRs; explicit `paths` fully replace the defaults; an explicit empty array (`paths: []`) disables path filtering entirely. Gates apply regardless of repository visibility. |
-| `ai.provider` | string | -- | AI provider name passed to aptu as `--provider`. Supported: `gemini`, `anthropic`, `openrouter`. Required if `ai` block present. Also selects which of the caller's own repository secrets (`GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`) the dispatch handler resolves. |
-| `ai.model` | string | -- | AI model name passed to aptu as `--model`. Required if `ai` block present. |
-| `scan.enabled` | boolean | `false` | Enable aptu scan-security on pull requests. Runs local pattern-based secret scanning and uploads SARIF results to GitHub Code Scanning. No `ai` block required. |
-| `scan.fail-on` | string | -- | Comma-separated severities that fail the scan (`critical`, `high`, `medium`, `low`). Omit to report findings without failing the check. |
-| `scan.path` | string | `.` | Root directory to scan. |
-| `telemetry.enabled` | boolean | `false` | Opt in to POST anonymized review-context counters (`reviews_total`, `truncation_events_total`, `files_truncated_total`, `budget_drop_reason_counts`, `finish_reasons_counts`, `model_tier_counts`, `prompt_budget_pct_histogram`) to the hosted Worker for aggregate product analytics. No repo, PR, or actor identifiers are ever included; a failed or unreachable POST never fails the PR review job. Off by default. |
+| Field                      | Type     | Default                             | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------- | -------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `version`                  | integer  | --                                  | Config schema version. Must be `1`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `triage.enabled`           | boolean  | --                                  | Dispatch `aptu-triage` on `issues.opened` events.                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `review.enabled`           | boolean  | --                                  | Dispatch `aptu-review` on `pull_request` opened/synchronize/reopened/ready_for_review events.                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `review.instructions-file` | string   | `.github/instructions/pr-review.md` | Path to PR review instructions file, relative to the target repo root. Passed to aptu as `--instructions-file`.                                                                                                                                                                                                                                                                                                                                                                                              |
+| `review.skip-labeled`      | boolean  | `false`                             | Passed to aptu as `--skip-labeled`. When true, aptu skips review if the PR already carries a label.                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `review.skip-label`        | string   | `aptu:skip`                         | Label that suppresses both review and scan dispatch pre-dispatch when present on the PR. Set to an empty string to disable the gate.                                                                                                                                                                                                                                                                                                                                                                         |
+| `review.paths`             | string[] | `['!**/*.md', '!docs/**']`          | Glob patterns (picomatch) evaluated against the full PR file list. Bare patterns are includes; `!`-prefixed patterns are excludes. A PR is dispatched if at least one file qualifies. If no file qualifies, both the review and scan dispatches are suppressed. When unset, the default excludes skip markdown-only and docs-only PRs; explicit `paths` fully replace the defaults; an explicit empty array (`paths: []`) disables path filtering entirely. Gates apply regardless of repository visibility. |
+| `ai.provider`              | string   | --                                  | AI provider name passed to aptu as `--provider`. Supported: `gemini`, `anthropic`, `openrouter`. Required if `ai` block present. Also selects which of the caller's own repository secrets (`GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`) the dispatch handler resolves.                                                                                                                                                                                                                      |
+| `ai.model`                 | string   | --                                  | AI model name passed to aptu as `--model`. Required if `ai` block present.                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `scan.enabled`             | boolean  | `false`                             | Enable aptu scan-security on pull requests. Runs local pattern-based secret scanning and uploads SARIF results to GitHub Code Scanning. No `ai` block required.                                                                                                                                                                                                                                                                                                                                              |
+| `scan.fail-on`             | string   | --                                  | Comma-separated severities that fail the scan (`critical`, `high`, `medium`, `low`). Omit to report findings without failing the check.                                                                                                                                                                                                                                                                                                                                                                      |
+| `scan.path`                | string   | `.`                                 | Root directory to scan.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `telemetry.enabled`        | boolean  | `false`                             | Opt in to POST anonymized review-context counters (`reviews_total`, `truncation_events_total`, `files_truncated_total`, `budget_drop_reason_counts`, `finish_reasons_counts`, `model_tier_counts`, `prompt_budget_pct_histogram`) to the hosted Worker for aggregate product analytics. No repo, PR, or actor identifiers are ever included; a failed or unreachable POST never fails the PR review job. Off by default.                                                                                     |
 
 All fields under `triage`, `review`, `scan`, `ai`, and `telemetry` are validated strictly: unknown keys are ignored, but a missing `enabled` boolean causes the entire config to be rejected (no dispatch). Both `ai` fields (`provider` and `model`) are required if the `ai` block is present; a partial or empty-string block is rejected.
 
@@ -171,9 +171,9 @@ Wrangler variables (in `wrangler.toml` `[vars]`):
 
 The Worker is bound to the route `aptu.dev/webhook` via `wrangler.toml`. Cloudflare route bindings require a proxied DNS record for the zone root:
 
-| Type | Name | Content | Proxied |
-| --- | --- | --- | --- |
-| AAAA | aptu.dev | `100::` | Yes |
+| Type | Name     | Content | Proxied |
+| ---- | -------- | ------- | ------- |
+| AAAA | aptu.dev | `100::` | Yes     |
 
 `100::` is the [Cloudflare-documented placeholder](https://developers.cloudflare.com/workers/configuration/routing/routes/) for route-based Workers with no real origin.
 

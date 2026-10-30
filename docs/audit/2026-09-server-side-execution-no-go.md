@@ -23,12 +23,12 @@ Direct verification against the repository at commit `79488f1`: `worker/wrangler
 
 ## Findings
 
-| # | Finding | Severity | Confirmed | Status |
-| --- | --- | --- | --- | --- |
-| N1 | Server-side execution inverts BYOK: the Worker would have to hold per-installation AI keys | **Critical** | Yes | Blocking |
-| N2 | Storage gap: no KV or D1 bindings exist; adding key custody requires a new storage binding plus a key-submission, rotation, and deletion lifecycle | High | Yes | Blocking |
-| N3 | Execution gap: the Worker has no AI provider integration; the AI call today lives entirely in the `aptu` action on caller runners, and a wasm provider layer does not exist | High | Yes | Blocking |
-| N4 | Custody burden: server-side key storage expands breach scope, creates an abuse magnet, and adds key-exposure-via-logs risk | High | Yes | Blocking |
+| #   | Finding                                                                                                                                                                     | Severity     | Confirmed | Status   |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | --------- | -------- |
+| N1  | Server-side execution inverts BYOK: the Worker would have to hold per-installation AI keys                                                                                  | **Critical** | Yes       | Blocking |
+| N2  | Storage gap: no KV or D1 bindings exist; adding key custody requires a new storage binding plus a key-submission, rotation, and deletion lifecycle                          | High         | Yes       | Blocking |
+| N3  | Execution gap: the Worker has no AI provider integration; the AI call today lives entirely in the `aptu` action on caller runners, and a wasm provider layer does not exist | High         | Yes       | Blocking |
+| N4  | Custody burden: server-side key storage expands breach scope, creates an abuse magnet, and adds key-exposure-via-logs risk                                                  | High         | Yes       | Blocking |
 
 ### N1 -- BYOK inversion: the key would pass through the Worker
 

@@ -1,4 +1,5 @@
 ---
+
 name: Documentation
 about: Improve or add documentation
 title: "[DOCS] "
@@ -7,11 +8,13 @@ assignees: ""
 ---
 
 ## Summary
+
 <!-- 1-2 sentences: what to create or improve and why. Be specific about the gap. -->
 
 Example: "Document the Worker deployment process in README so users can set up without referencing clouatre-labs/aptu#94."
 
 ## Location
+
 <!-- File path, section in existing doc, or new file. -->
 
 Example:
@@ -19,11 +22,13 @@ Example:
 - Or: New file `docs/deployment.md`
 
 ## Current State
+
 <!-- What exists today and what is missing or incomplete. -->
 
 Gap: <specific missing information>
 
 ## Proposed Changes
+
 <!-- What to add or update. Include content structure and key topics. -->
 
 ## Acceptance Criteria

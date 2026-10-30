@@ -38,10 +38,10 @@ The Worker is stateless beyond the Durable Object quota store. It never calls th
 
 The caller's `.github/workflows/aptu-{review,triage,scan-security}.yml` handlers listen for their respective `repository_dispatch` event types fired by the Worker and call reusable workflows hosted in `clouatre-labs/aptu-github-app`. The reusable workflows run the aptu CLI using the caller's `GITHUB_TOKEN` and caller-provided AI API key secret.
 
-| Workflow | Trigger event type | aptu command |
-| --- | --- | --- |
-| `issue-triage.yml` | `aptu-triage` | `aptu issue triage` |
-| `pr-review.yml` | `aptu-review` | `aptu pr review` |
+| Workflow           | Trigger event type | aptu command        |
+| ------------------ | ------------------ | ------------------- |
+| `issue-triage.yml` | `aptu-triage`      | `aptu issue triage` |
+| `pr-review.yml`    | `aptu-review`      | `aptu pr review`    |
 
 The reusable workflows are defined in this repository (`clouatre-labs/aptu-github-app`) but run in the originating repository's context. The originating repo, PR or issue number, and installation ID arrive via `github.event.client_payload`. The aptu CLI runs with the caller's `GITHUB_TOKEN` (scoped to the caller's repository by GitHub Actions) to read the originating repo and post review comments or labels.
 
@@ -53,7 +53,7 @@ Persists per-installation event counters using Cloudflare Durable Object SQLite-
 
 `aptu-dev` has exactly one GitHub App installation, covering the entire `clouatre-labs` org (`repository_selection: "all"`). Because the quota key is `installationId`-only with no per-repo dimension, that single installation means quota is a de facto **org-wide** bucket across every clouatre-labs repo combined, not per-repo -- a normal day of active development across several repos can exhaust it. Decision (2026-08-24): the Worker checks `owner === env.OPERATOR_ORG` (`clouatre-labs`, set in `worker/wrangler.toml`) before every quota check/record call and skips both entirely for the operator's own org. Quota's remaining purpose -- after BYOK removed the shared-AI-key-cost rationale for it -- is abuse protection for untrusted external installations, which doesn't apply to the operator's own repos.
 
-There is still no org-wide aggregate *spend* ceiling (Durable Objects usage-based billing); this is an accepted gap at the current scale, mitigated by the Cloudflare account-level Budget Alert dashboard setting (no API exists to configure this programmatically) rather than application logic. Revisit both the exemption and the spend gap before `aptu-dev` is ever installed on an org other than `clouatre-labs`.
+There is still no org-wide aggregate _spend_ ceiling (Durable Objects usage-based billing); this is an accepted gap at the current scale, mitigated by the Cloudflare account-level Budget Alert dashboard setting (no API exists to configure this programmatically) rather than application logic. Revisit both the exemption and the spend gap before `aptu-dev` is ever installed on an org other than `clouatre-labs`.
 
 ### Config Parser (`worker/src/config.ts`)
 
@@ -110,12 +110,12 @@ graph TD
 
 ### Processing Locations
 
-| Component / Stage | Processing Location | Notes |
-| --- | --- | --- |
-| GitHub-hosted Actions runners | GitHub/Microsoft-managed infrastructure | `ubuntu-24.04-arm`; runner region is not selectable or guaranteed |
-| Cloudflare Worker edge | Cloudflare global edge network | No Regional Services or Data Localization Suite configured; no region pinning |
-| AI providers (OpenRouter, Anthropic, Gemini) | Provider-specific, per caller's BYOK `ai.provider` selection | No regional endpoint pinning; routing follows each provider's own infrastructure |
-| Sentry (Worker exception capture) | Undocumented | `SENTRY_DSN` not yet provisioned in `worker/wrangler.toml`; integration is wired in code but inactive in production |
+| Component / Stage                            | Processing Location                                          | Notes                                                                                                               |
+| -------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| GitHub-hosted Actions runners                | GitHub/Microsoft-managed infrastructure                      | `ubuntu-24.04-arm`; runner region is not selectable or guaranteed                                                   |
+| Cloudflare Worker edge                       | Cloudflare global edge network                               | No Regional Services or Data Localization Suite configured; no region pinning                                       |
+| AI providers (OpenRouter, Anthropic, Gemini) | Provider-specific, per caller's BYOK `ai.provider` selection | No regional endpoint pinning; routing follows each provider's own infrastructure                                    |
+| Sentry (Worker exception capture)            | Undocumented                                                 | `SENTRY_DSN` not yet provisioned in `worker/wrangler.toml`; integration is wired in code but inactive in production |
 
 See [PRIVACY.md](https://github.com/clouatre-labs/aptu-github-app/blob/main/docs/PRIVACY.md#data-residency)
 for the full data residency statement.
@@ -124,13 +124,13 @@ for the full data residency statement.
 
 Every webhook event uses per-operation scoped installation tokens issued by the GitHub App via `@octokit/auth-app`. Each token is scoped to the originating repository with the minimum permissions required for its operation.
 
-| Token | Permissions | Purpose |
-| --- | --- | --- |
-| Config token | `contents:read`, `pull_requests:read` | Fetch `.github/aptu.yml`, fetch PR file list, check collaborator permission |
-| Dispatch token | `contents:write` | Scoped to originating repo; calls `POST /repos/{originating_repo}/dispatches` |
-| Triage token | `contents:read`, `issues:write` | Scoped to originating repo; forwarded via `client_payload.installation_token` for issue triage |
-| Review token | `contents:read`, `pull_requests:write` | Scoped to originating repo; forwarded via `client_payload.installation_token` for PR review |
-| Scan token | `contents:read`, `security_events:write`, `statuses:write` | Scoped to originating repo; forwarded via `client_payload.installation_token` for security scan |
+| Token          | Permissions                                                | Purpose                                                                                         |
+| -------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Config token   | `contents:read`, `pull_requests:read`                      | Fetch `.github/aptu.yml`, fetch PR file list, check collaborator permission                     |
+| Dispatch token | `contents:write`                                           | Scoped to originating repo; calls `POST /repos/{originating_repo}/dispatches`                   |
+| Triage token   | `contents:read`, `issues:write`                            | Scoped to originating repo; forwarded via `client_payload.installation_token` for issue triage  |
+| Review token   | `contents:read`, `pull_requests:write`                     | Scoped to originating repo; forwarded via `client_payload.installation_token` for PR review     |
+| Scan token     | `contents:read`, `security_events:write`, `statuses:write` | Scoped to originating repo; forwarded via `client_payload.installation_token` for security scan |
 
 All tokens are short-lived (1 hour, GitHub default). The Worker mints operation-scoped tokens (triage, review, scan) and forwards them via `client_payload.installation_token`. Caller handlers map this token into a `secrets:` block on the reusable workflow call. Reusable workflows receive the installation token from the Worker via the caller handler's `secrets:` block (not inputs, ensuring log masking). The Worker passes `ai_provider` and `ai_model` in the `client_payload`; the AI API key is resolved by the caller's workflow from the caller's own repository secrets.
 
@@ -146,23 +146,23 @@ The Worker validates the `CF-Connecting-IP` header against GitHub's published we
 
 The following GitHub variables and secrets must be provisioned before the app can handle webhook events or run workflows:
 
-| Name | Type | Scope | Value |
-| --- | --- | --- | --- |
-| `APP_ID` | Repository variable | `aptu-github-app` | GitHub App numeric ID |
-| `APP_PRIVATE_KEY` | Repository secret | `aptu-github-app` | PKCS#8 PEM private key for the `aptu-dev` App |
+| Name              | Type                | Scope             | Value                                         |
+| ----------------- | ------------------- | ----------------- | --------------------------------------------- |
+| `APP_ID`          | Repository variable | `aptu-github-app` | GitHub App numeric ID                         |
+| `APP_PRIVATE_KEY` | Repository secret   | `aptu-github-app` | PKCS#8 PEM private key for the `aptu-dev` App |
 
 ## Configuration
 
 ### Worker environment (`wrangler.toml`)
 
-| Variable | Type | Description |
-| --- | --- | --- |
-| `APP_ID` | var | GitHub App numeric ID |
-| `APTU_BOT_ID` | var | GitHub numeric user ID of the `aptu[bot]` account; gates the self-mention loop guard |
-| `WEBHOOK_SECRET` | secret | HMAC key matching the GitHub App webhook secret |
-| `APP_PRIVATE_KEY` | secret | PKCS#8 PEM private key for the GitHub App; used by Worker to mint installation tokens |
-| `QUOTA` | Durable Object binding | `InstallationQuota` namespace |
-| `REPLAY_GUARD` | Durable Object binding | `ReplayGuard` namespace |
+| Variable          | Type                   | Description                                                                           |
+| ----------------- | ---------------------- | ------------------------------------------------------------------------------------- |
+| `APP_ID`          | var                    | GitHub App numeric ID                                                                 |
+| `APTU_BOT_ID`     | var                    | GitHub numeric user ID of the `aptu[bot]` account; gates the self-mention loop guard  |
+| `WEBHOOK_SECRET`  | secret                 | HMAC key matching the GitHub App webhook secret                                       |
+| `APP_PRIVATE_KEY` | secret                 | PKCS#8 PEM private key for the GitHub App; used by Worker to mint installation tokens |
+| `QUOTA`           | Durable Object binding | `InstallationQuota` namespace                                                         |
+| `REPLAY_GUARD`    | Durable Object binding | `ReplayGuard` namespace                                                               |
 
 ### Repository opt-in (`.github/aptu.yml`)
 
@@ -176,14 +176,14 @@ triage:
 
 review:
   enabled: true
-  instructions-file: .github/instructions/pr-review.md  # optional
-  skip-labeled: false                                     # optional
-  skip-label: aptu:skip                                   # optional; PRs carrying this label are skipped pre-dispatch
-  paths:                                          # optional; suppress PR review AND scan when no file qualifies
-    - "src/**"                                    # bare patterns are includes
-    - "!src/data/**"                              # '!'-prefixed patterns are excludes
+  instructions-file: .github/instructions/pr-review.md # optional
+  skip-labeled: false # optional
+  skip-label: aptu:skip # optional; PRs carrying this label are skipped pre-dispatch
+  paths: # optional; suppress PR review AND scan when no file qualifies
+    - "src/**" # bare patterns are includes
+    - "!src/data/**" # '!'-prefixed patterns are excludes
 
-ai:                          # optional
+ai: # optional
   provider: openrouter
   model: google/gemma-4-26b-a4b-it
 ```
@@ -200,15 +200,15 @@ The AI API key secret value never passes through the Worker or the webhook dispa
 
 ## Security Boundaries
 
-| Boundary | Mechanism |
-| --- | --- |
-| Webhook authenticity | HMAC-SHA256 via Web Crypto API; `WEBHOOK_SECRET` never leaves the Worker |
-| Token isolation | Installation tokens are minted by the Worker scoped per-repo; dispatch tokens are scoped to the originating repo |
-| Quota enforcement | Durable Object per installation; 500 events per event type per 24h rolling window; enforced for all installations regardless of AI config, except the operator's own org (`OPERATOR_ORG`) |
-| Caller AI keys | BYOK: caller provides AI API key via a repository secret in their own repo, named after the provider selected via `ai.provider` in their own `.github/aptu.yml` (`ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `OPENROUTER_API_KEY`); the dispatch handler statically selects one of these three fixed names per-dispatch and passes the secret to the reusable workflow via `secrets:`; operator keys never exposed |
-| Config validation | Strict field-level validation; unknown keys ignored; partial blocks rejected |
-| Self-mention loop | `APTU_BOT_ID` check prevents the bot from triggering itself via `@aptu` |
-| Path filtering | `review.paths` evaluated against full PR file list before dispatch; the same single fetch result also gates scan dispatch. Default excludes (`**/*.md`, `docs/**`) apply when `review.paths` is unset; an explicit empty array disables path filtering entirely. Bot-authored PRs are skipped unless carrying the `aptu:run` label; a PR carrying `review.skip-label` (default `aptu:skip`) is skipped pre-dispatch. Gates apply regardless of repository visibility. |
+| Boundary             | Mechanism                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Webhook authenticity | HMAC-SHA256 via Web Crypto API; `WEBHOOK_SECRET` never leaves the Worker                                                                                                                                                                                                                                                                                                                                                                                              |
+| Token isolation      | Installation tokens are minted by the Worker scoped per-repo; dispatch tokens are scoped to the originating repo                                                                                                                                                                                                                                                                                                                                                      |
+| Quota enforcement    | Durable Object per installation; 500 events per event type per 24h rolling window; enforced for all installations regardless of AI config, except the operator's own org (`OPERATOR_ORG`)                                                                                                                                                                                                                                                                             |
+| Caller AI keys       | BYOK: caller provides AI API key via a repository secret in their own repo, named after the provider selected via `ai.provider` in their own `.github/aptu.yml` (`ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `OPENROUTER_API_KEY`); the dispatch handler statically selects one of these three fixed names per-dispatch and passes the secret to the reusable workflow via `secrets:`; operator keys never exposed                                                       |
+| Config validation    | Strict field-level validation; unknown keys ignored; partial blocks rejected                                                                                                                                                                                                                                                                                                                                                                                          |
+| Self-mention loop    | `APTU_BOT_ID` check prevents the bot from triggering itself via `@aptu`                                                                                                                                                                                                                                                                                                                                                                                               |
+| Path filtering       | `review.paths` evaluated against full PR file list before dispatch; the same single fetch result also gates scan dispatch. Default excludes (`**/*.md`, `docs/**`) apply when `review.paths` is unset; an explicit empty array disables path filtering entirely. Bot-authored PRs are skipped unless carrying the `aptu:run` label; a PR carrying `review.skip-label` (default `aptu:skip`) is skipped pre-dispatch. Gates apply regardless of repository visibility. |
 
 ## Key Abstractions
 

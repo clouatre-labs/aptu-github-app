@@ -31,33 +31,33 @@ Three independent read-only scout delegates analyzed the codebase in parallel ag
 
 ## Summary Table
 
-| # | Axis | Severity | Finding | Confirmed | Blocks public release | Resolved |
-| --- | --- | --- | --- | --- | --- | --- |
-| S1 | Security | **Critical** | Caller-supplied AI key model broken: `secrets[ai_key_secret]` resolves against owner's org, not caller's | Yes | **Yes** | PR #87 (partial: docs updated; full fix via `ALLOWED_OWNERS` gate) |
-| S2 | Security | **High** | `ALLOWED_OWNERS` gate removed in #59; README and ARCHITECTURE.md still describe it as active | Yes | **Yes** | PR #87 |
-| C3 | Cost | **High** | No aggregate quota ceiling across installations; GitHub Actions minutes scale unboundedly | Yes | **Yes** | PR #88 |
-| S6 | Security | **Medium** | `handleMentionCommand` calls `getInstallationToken` + `checkCollaboratorPermission` before `enforceQuota` | Yes | Yes | PR #94 |
-| S7 | Security | **Medium** | No cross-installation aggregate quota cap | Yes | Yes | PR #88 |
-| C5 | Cost | **Medium** | DO `storage.put` runs on every exceeded-quota request, not just on state changes | Yes | No | PR #93 (`InstallationQuota`); PR #97 (`GlobalQuota`) |
-| S10 | Security | **Medium** | 8 known advisories in devDependency chains (postcss, esbuild, undici); no CI gate blocks on them | Yes | No | PR #95 |
-| CI-F4 | CI | **Medium** | `bun-version: latest` in ci.yml -- floating toolchain | Yes | No | PR #90 |
-| CI-F10 | CI | **Medium** | Renovate automerges all github-actions updates including majors unconditionally | Yes | No | PR #89 |
-| CI-F13 | CI | **Medium** | No `bun audit` or equivalent dependency vulnerability scan in CI | Yes | No | PR #95 |
-| CI-F8 | CI | **Low** | `ai_key_secret` validated only by regex `^[A-Z0-9_]+$`, not an allowlist | Yes | No | Deferred -- see hardening section |
-| S4 | Security | **Low** | Installation token transmitted in `client_payload`; no `::add-mask::` in workflows | Yes | No | PR #92 |
-| S9 | Security | **Low** | Cloudflare deploy uses static long-lived API token rather than OIDC | Yes | No | Deferred -- no Cloudflare OIDC support for wrangler-action yet |
-| S12 | Security | **Low** | No Cloudflare-side rate limiting rules on the webhook route | Yes | No | Deferred -- Cloudflare dashboard config, not in-repo |
-| CI-F12 | CI | **Low** | `required_approving_review_count: 0` -- merges require only passing CI, no human review | Yes | No | Deferred -- accepted for current team size |
-| C8 | Cost | **Info** | GitHub App JWT rate-limit pool may be shared across installations (unconfirmed) | No | No | Deferred -- follow-up required |
-| C10 | Cost | **Info** | DO quota concurrency safety relies on Cloudflare input-gate semantics (not load-tested) | No | No | Deferred -- load test follow-up required |
-| CI-F9 | CI | **Info** | `bun.lock` unannotated in REUSE.toml; no `LICENSES/Apache-2.0.txt` present | Yes | No | PR #91 |
-| CI-F11 | CI | **Info** | No explicit `vulnerabilityAlerts` in renovate.json | Yes | No | Deferred -- Renovate defaults acceptable |
-| S3 | Security | **Info** | HMAC validation: correct, constant-time, first gate -- no bypass found | Yes | N/A (sound) | N/A (sound) |
-| S5 | Security | **Info** | Token scoping: installation vs dispatch tokens correctly minimal and not cached | Yes | N/A (sound) | N/A (sound) |
-| S8 | Security | **Info** | Error responses: fixed literals only, no secret/stack-trace leakage | Yes | N/A (sound) | N/A (sound) |
-| S11 | Security | **Info** | `TARGET_REPO` hardcoded in `wrangler.toml`, never payload-derived | Yes | N/A (sound) | N/A (sound) |
-| C7 | Cost | **Info** | GitHub API calls use installation-scoped tokens, isolated per-installation | Yes | N/A (sound) | N/A (sound) |
-| C9 | Cost | **Info** | Sentry exposure bounded by same per-installation quota as dispatches | Yes | N/A (sound) | N/A (sound) |
+| #      | Axis     | Severity     | Finding                                                                                                   | Confirmed | Blocks public release | Resolved                                                           |
+| ------ | -------- | ------------ | --------------------------------------------------------------------------------------------------------- | --------- | --------------------- | ------------------------------------------------------------------ |
+| S1     | Security | **Critical** | Caller-supplied AI key model broken: `secrets[ai_key_secret]` resolves against owner's org, not caller's  | Yes       | **Yes**               | PR #87 (partial: docs updated; full fix via `ALLOWED_OWNERS` gate) |
+| S2     | Security | **High**     | `ALLOWED_OWNERS` gate removed in #59; README and ARCHITECTURE.md still describe it as active              | Yes       | **Yes**               | PR #87                                                             |
+| C3     | Cost     | **High**     | No aggregate quota ceiling across installations; GitHub Actions minutes scale unboundedly                 | Yes       | **Yes**               | PR #88                                                             |
+| S6     | Security | **Medium**   | `handleMentionCommand` calls `getInstallationToken` + `checkCollaboratorPermission` before `enforceQuota` | Yes       | Yes                   | PR #94                                                             |
+| S7     | Security | **Medium**   | No cross-installation aggregate quota cap                                                                 | Yes       | Yes                   | PR #88                                                             |
+| C5     | Cost     | **Medium**   | DO `storage.put` runs on every exceeded-quota request, not just on state changes                          | Yes       | No                    | PR #93 (`InstallationQuota`); PR #97 (`GlobalQuota`)               |
+| S10    | Security | **Medium**   | 8 known advisories in devDependency chains (postcss, esbuild, undici); no CI gate blocks on them          | Yes       | No                    | PR #95                                                             |
+| CI-F4  | CI       | **Medium**   | `bun-version: latest` in ci.yml -- floating toolchain                                                     | Yes       | No                    | PR #90                                                             |
+| CI-F10 | CI       | **Medium**   | Renovate automerges all github-actions updates including majors unconditionally                           | Yes       | No                    | PR #89                                                             |
+| CI-F13 | CI       | **Medium**   | No`bun audit` or equivalent dependency vulnerability scan in CI                                           | Yes       | No                    | PR #95                                                             |
+| CI-F8  | CI       | **Low**      | `ai_key_secret` validated only by regex `^[A-Z0-9_]+$`, not an allowlist                                  | Yes       | No                    | Deferred -- see hardening section                                  |
+| S4     | Security | **Low**      | Installation token transmitted in `client_payload`; no `::add-mask::` in workflows                        | Yes       | No                    | PR #92                                                             |
+| S9     | Security | **Low**      | Cloudflare deploy uses static long-lived API token rather than OIDC                                       | Yes       | No                    | Deferred -- no Cloudflare OIDC support for wrangler-action yet     |
+| S12    | Security | **Low**      | No Cloudflare-side rate limiting rules on the webhook route                                               | Yes       | No                    | Deferred -- Cloudflare dashboard config, not in-repo               |
+| CI-F12 | CI       | **Low**      | `required_approving_review_count: 0` -- merges require only passing CI, no human review                   | Yes       | No                    | Deferred -- accepted for current team size                         |
+| C8     | Cost     | **Info**     | GitHub App JWT rate-limit pool may be shared across installations (unconfirmed)                           | No        | No                    | Deferred -- follow-up required                                     |
+| C10    | Cost     | **Info**     | DO quota concurrency safety relies on Cloudflare input-gate semantics (not load-tested)                   | No        | No                    | Deferred -- load test follow-up required                           |
+| CI-F9  | CI       | **Info**     | `bun.lock` unannotated in REUSE.toml; no `LICENSES/Apache-2.0.txt` present                                | Yes       | No                    | PR #91                                                             |
+| CI-F11 | CI       | **Info**     | No explicit `vulnerabilityAlerts` in renovate.json                                                        | Yes       | No                    | Deferred -- Renovate defaults acceptable                           |
+| S3     | Security | **Info**     | HMAC validation: correct, constant-time, first gate -- no bypass found                                    | Yes       | N/A (sound)           | N/A (sound)                                                        |
+| S5     | Security | **Info**     | Token scoping: installation vs dispatch tokens correctly minimal and not cached                           | Yes       | N/A (sound)           | N/A (sound)                                                        |
+| S8     | Security | **Info**     | Error responses: fixed literals only, no secret/stack-trace leakage                                       | Yes       | N/A (sound)           | N/A (sound)                                                        |
+| S11    | Security | **Info**     | `TARGET_REPO` hardcoded in `wrangler.toml`, never payload-derived                                         | Yes       | N/A (sound)           | N/A (sound)                                                        |
+| C7     | Cost     | **Info**     | GitHub API calls use installation-scoped tokens, isolated per-installation                                | Yes       | N/A (sound)           | N/A (sound)                                                        |
+| C9     | Cost     | **Info**     | Sentry exposure bounded by same per-installation quota as dispatches                                      | Yes       | N/A (sound)           | N/A (sound)                                                        |
 
 **Verdict: RESOLVED. S1, S2, and C3 fixes are in PR #87 and PR #88. All pre-release findings are closed. Hardening findings are deferred with documented decisions. The App may be made public after PRs #87-#95 are merged.**
 
@@ -365,19 +365,19 @@ All `captureException` calls in the `issues.opened` and `pull_request` flows occ
 
 ## Recommended Resolution Order
 
-| Priority | Finding(s) | Action |
-| --- | --- | --- |
-| 1 -- Blocking | S1, S2 | Reinstate owner allowlist OR redesign caller-key model; update docs |
-| 2 -- Blocking | C3, S7 | Add global aggregate quota with hard ceiling and alerting |
-| 3 -- Pre-public | S6 | Move `enforceQuota` before `getInstallationToken` in `handleMentionCommand` |
-| 4 -- Pre-public | S4 | Add `::add-mask::` for `installation_token` in both workflow files |
-| 5 -- Hardening | S10, CI-F13 | Add `bun audit --audit-level high` to CI |
-| 6 -- Hardening | CI-F4 | Pin `bun-version` in ci.yml |
-| 7 -- Hardening | CI-F10 | Exclude majors from Renovate github-actions automerge |
-| 8 -- Hardening | C5 | Skip DO `storage.put` on exceeded path when state unchanged |
-| 9 -- Hardening | S12 | Add Cloudflare rate limiting rules on the webhook route |
-| 10 -- Cleanup | CI-F8, CI-F9, CI-F11, CI-F12 | Pattern allowlist, REUSE gaps, Renovate alerts, review policy |
-| 11 -- Follow-up | C8, C10 | JWT rate-limit research, DO concurrency load test |
+| Priority        | Finding(s)                   | Action                                                                      |
+| --------------- | ---------------------------- | --------------------------------------------------------------------------- |
+| 1 -- Blocking   | S1, S2                       | Reinstate owner allowlist OR redesign caller-key model; update docs         |
+| 2 -- Blocking   | C3, S7                       | Add global aggregate quota with hard ceiling and alerting                   |
+| 3 -- Pre-public | S6                           | Move `enforceQuota` before `getInstallationToken` in `handleMentionCommand` |
+| 4 -- Pre-public | S4                           | Add `::add-mask::` for `installation_token` in both workflow files          |
+| 5 -- Hardening  | S10, CI-F13                  | Add `bun audit --audit-level high` to CI                                    |
+| 6 -- Hardening  | CI-F4                        | Pin `bun-version` in ci.yml                                                 |
+| 7 -- Hardening  | CI-F10                       | Exclude majors from Renovate github-actions automerge                       |
+| 8 -- Hardening  | C5                           | Skip DO `storage.put` on exceeded path when state unchanged                 |
+| 9 -- Hardening  | S12                          | Add Cloudflare rate limiting rules on the webhook route                     |
+| 10 -- Cleanup   | CI-F8, CI-F9, CI-F11, CI-F12 | Pattern allowlist, REUSE gaps, Renovate alerts, review policy               |
+| 11 -- Follow-up | C8, C10                      | JWT rate-limit research, DO concurrency load test                           |
 
 ---
 
@@ -409,12 +409,12 @@ A post-merge verification pass identified two issues not covered by PRs #87-#95.
 
 The following findings were accepted as deferred during the original audit. They are tracked here as the canonical record; no separate issues were opened.
 
-| Finding | Decision | Condition for revisit |
-| --- | --- | --- |
-| CI-F8 -- `ai_key_secret` regex only | Moot while `ALLOWED_OWNERS` blocks all external installs | Revisit when per-caller credential model is designed |
-| S9 -- Long-lived Cloudflare API token | No OIDC alternative available for `wrangler-action` | Revisit when Cloudflare adds OIDC support |
-| S12 -- No Cloudflare-side rate limiting | Dashboard config, not in-repo | Configure post-release in Cloudflare dashboard |
-| CI-F12 -- No required human review | Accepted for current team size | Revisit if team grows or external contributors are added |
+| Finding                                        | Decision                                                                   | Condition for revisit                                     |
+| ---------------------------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------- |
+| CI-F8 -- `ai_key_secret` regex only            | Moot while `ALLOWED_OWNERS` blocks all external installs                   | Revisit when per-caller credential model is designed      |
+| S9 -- Long-lived Cloudflare API token          | No OIDC alternative available for `wrangler-action`                        | Revisit when Cloudflare adds OIDC support                 |
+| S12 -- No Cloudflare-side rate limiting        | Dashboard config, not in-repo                                              | Configure post-release in Cloudflare dashboard            |
+| CI-F12 -- No required human review             | Accepted for current team size                                             | Revisit if team grows or external contributors are added  |
 | CI-F11 -- No `vulnerabilityAlerts` in Renovate | `bun audit --audit-level high` in CI provides equivalent blocking coverage | Revisit if Renovate advisory PR cadence becomes important |
-| C8 -- JWT rate-limit pool isolation | Not confirmed; requires research against live GitHub docs | Verify and cache tokens if pool is shared |
-| C10 -- DO concurrency safety | Not load-tested; Cloudflare input-gate semantics assumed correct | Run load test before scaling to high install counts |
+| C8 -- JWT rate-limit pool isolation            | Not confirmed; requires research against live GitHub docs                  | Verify and cache tokens if pool is shared                 |
+| C10 -- DO concurrency safety                   | Not load-tested; Cloudflare input-gate semantics assumed correct           | Run load test before scaling to high install counts       |

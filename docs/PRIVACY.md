@@ -56,14 +56,14 @@ sold to third parties.
 
 ## Recipients / Subprocessors
 
-| Recipient | Purpose | Processing basis |
-| --- | --- | --- |
-| GitHub | Hosts the App installation, webhook delivery, Actions runners, and the caller's repository (source of truth for all processed content) | Necessary to provide the service; caller's own GitHub account relationship |
-| Cloudflare | Runs the stateless Worker at the edge and the Durable Objects listed under [Retention by Data Store](#retention-by-data-store) | Necessary to provide the service (webhook receipt, quota, replay protection, telemetry) |
-| OpenRouter (and its upstream model providers) | Default AI routing target when a caller selects `ai.provider: openrouter`; may route to third-party model providers behind OpenRouter | Caller's explicit opt-in via `.github/aptu.yml`; BYOK -- caller's own API key |
-| Anthropic | AI provider when a caller selects `ai.provider: anthropic` | Caller's explicit opt-in via `.github/aptu.yml`; BYOK -- caller's own API key |
-| Gemini (Google) | AI provider when a caller selects `ai.provider: gemini` | Caller's explicit opt-in via `.github/aptu.yml`; BYOK -- caller's own API key |
-| Sentry | Worker exception capture for operational error tracking | Necessary to operate and maintain the service; not yet active (see [Data Residency](#data-residency)) |
+| Recipient                                     | Purpose                                                                                                                                | Processing basis                                                                                      |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| GitHub                                        | Hosts the App installation, webhook delivery, Actions runners, and the caller's repository (source of truth for all processed content) | Necessary to provide the service; caller's own GitHub account relationship                            |
+| Cloudflare                                    | Runs the stateless Worker at the edge and the Durable Objects listed under [Retention by Data Store](#retention-by-data-store)         | Necessary to provide the service (webhook receipt, quota, replay protection, telemetry)               |
+| OpenRouter (and its upstream model providers) | Default AI routing target when a caller selects `ai.provider: openrouter`; may route to third-party model providers behind OpenRouter  | Caller's explicit opt-in via `.github/aptu.yml`; BYOK -- caller's own API key                         |
+| Anthropic                                     | AI provider when a caller selects `ai.provider: anthropic`                                                                             | Caller's explicit opt-in via `.github/aptu.yml`; BYOK -- caller's own API key                         |
+| Gemini (Google)                               | AI provider when a caller selects `ai.provider: gemini`                                                                                | Caller's explicit opt-in via `.github/aptu.yml`; BYOK -- caller's own API key                         |
+| Sentry                                        | Worker exception capture for operational error tracking                                                                                | Necessary to operate and maintain the service; not yet active (see [Data Residency](#data-residency)) |
 
 No AI provider is contacted unless a caller has configured an `ai` block in
 their own `.github/aptu.yml`; `scan` runs local pattern-based scanning with no
@@ -97,17 +97,17 @@ this document does not restate that implementation detail.
 
 ## Retention by Data Store
 
-| Data store | Retention | Notes |
-| --- | --- | --- |
-| GitHub Actions workflow logs | Governed by the org/repo GitHub Actions log retention setting; currently the 90-day GitHub default, with no documented override in this repository | Revisit before GitHub's 2026-10-01 retention-scope unification; see [issue #138](https://github.com/clouatre-labs/aptu-github-app/issues/138) |
-| SARIF scan artifact | 30 days | Set via `retention-days: 30` on the `findings-sarif` artifact in `scan-security.yml`; the SARIF result itself is uploaded to the caller's own GitHub Code Scanning, governed by the caller's repository settings |
-| `InstallationQuota` Durable Object | Rolling 24-hour window per installation/event-type counter | Timestamps older than 24 hours are pruned on each request |
-| `ReplayGuard` Durable Object | 300-second delivery-ID TTL | Deduplicates `X-GitHub-Delivery` IDs; expires after 300 seconds of inactivity |
-| `TelemetryRollup` Durable Object | Indefinite, aggregate-only | Stores a single global aggregate of anonymized, opt-in counters with no repo, PR, or actor identifiers |
-| `TelemetryRateLimit` Durable Object | Rolling window, per-IP | Bounds unauthenticated telemetry POST volume |
-| `InstallationUsage` Durable Object | 90-day inactivity retention; entry cap of 1000 installations (least-recently-active evicted first) | Per-installation usage counters keyed by installation id/event type/outcome only; installation id is pseudonymous |
-| OpenRouter (provider-side) | Zero-data-retention (`zdr`/`deny`) per [clouatre-labs/aptu#1494](https://github.com/clouatre-labs/aptu/issues/1494) | Applies when a caller routes through OpenRouter |
-| Anthropic / Gemini (provider-side) | Not documented at this project's account tier | Open item; flagged rather than assumed |
+| Data store                          | Retention                                                                                                                                          | Notes                                                                                                                                                                                                            |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub Actions workflow logs        | Governed by the org/repo GitHub Actions log retention setting; currently the 90-day GitHub default, with no documented override in this repository | Revisit before GitHub's 2026-10-01 retention-scope unification; see [issue #138](https://github.com/clouatre-labs/aptu-github-app/issues/138)                                                                    |
+| SARIF scan artifact                 | 30 days                                                                                                                                            | Set via `retention-days: 30` on the `findings-sarif` artifact in `scan-security.yml`; the SARIF result itself is uploaded to the caller's own GitHub Code Scanning, governed by the caller's repository settings |
+| `InstallationQuota` Durable Object  | Rolling 24-hour window per installation/event-type counter                                                                                         | Timestamps older than 24 hours are pruned on each request                                                                                                                                                        |
+| `ReplayGuard` Durable Object        | 300-second delivery-ID TTL                                                                                                                         | Deduplicates `X-GitHub-Delivery` IDs; expires after 300 seconds of inactivity                                                                                                                                    |
+| `TelemetryRollup` Durable Object    | Indefinite, aggregate-only                                                                                                                         | Stores a single global aggregate of anonymized, opt-in counters with no repo, PR, or actor identifiers                                                                                                           |
+| `TelemetryRateLimit` Durable Object | Rolling window, per-IP                                                                                                                             | Bounds unauthenticated telemetry POST volume                                                                                                                                                                     |
+| `InstallationUsage` Durable Object  | 90-day inactivity retention; entry cap of 1000 installations (least-recently-active evicted first)                                                 | Per-installation usage counters keyed by installation id/event type/outcome only; installation id is pseudonymous                                                                                                |
+| OpenRouter (provider-side)          | Zero-data-retention (`zdr`/`deny`) per [clouatre-labs/aptu#1494](https://github.com/clouatre-labs/aptu/issues/1494)                                | Applies when a caller routes through OpenRouter                                                                                                                                                                  |
+| Anthropic / Gemini (provider-side)  | Not documented at this project's account tier                                                                                                      | Open item; flagged rather than assumed                                                                                                                                                                           |
 
 ## Data Residency
 
