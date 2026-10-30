@@ -11,9 +11,9 @@ A single Cloudflare Worker validates GitHub webhook HMAC signatures and dispatch
 ## Key Files
 
 - `worker/` -- Cloudflare Worker source
-- `worker/src/worker.ts` -- Webhook handler (HMAC validation, dispatch)
-- `worker/src/worker.test.ts` -- Worker test suite
-- `worker/wrangler.jsonc` -- Worker configuration (secrets, routes)
+- `worker/src/index.ts` -- Webhook handler (HMAC validation, dispatch)
+- `worker/src/index.test.ts` -- Worker test suite
+- `worker/wrangler.toml` -- Worker configuration (secrets, routes)
 - `.github/workflows/` -- CI, deploy, issue-triage, pr-review workflows
 - `.github/workflows/ci.yml` -- Lint, typecheck, test, ci-result
 - `.github/workflows/deploy.yml` -- Deploy Worker to Cloudflare
