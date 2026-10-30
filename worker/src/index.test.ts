@@ -1853,7 +1853,9 @@ describe('synchronize reviewed-SHA short-circuit', () => {
       new Response(
         JSON.stringify([
           { body: 'unrelated comment' },
-          { body: '<!-- APTU_REVIEW:abc1234: summary -->' },
+          {
+            body: '<!-- APTU_REVIEW:abc1234 -->\ncurrent marker without diff hash',
+          },
         ]),
         { status: 200 }
       )
@@ -1869,7 +1871,7 @@ describe('synchronize reviewed-SHA short-circuit', () => {
   it('dispatches normally when head SHA differs from latest marker SHA', async () => {
     mockSynchronizeFetch(
       new Response(
-        JSON.stringify([{ body: '<!-- APTU_REVIEW:oldsha9: summary -->' }]),
+        JSON.stringify([{ body: '<!-- APTU_REVIEW:oldsha9 -->\nsummary' }]),
         { status: 200 }
       )
     );
@@ -1879,6 +1881,23 @@ describe('synchronize reviewed-SHA short-circuit', () => {
       String(call[0]).includes('/dispatches')
     );
     expect(dispatchCalls.length).toBe(1);
+  });
+
+  it('still matches the legacy marker form with a trailing diff hash', async () => {
+    mockSynchronizeFetch(
+      new Response(
+        JSON.stringify([
+          { body: '<!-- APTU_REVIEW:abc1234:deadbeef -->\nlegacy marker' },
+        ]),
+        { status: 200 }
+      )
+    );
+    const response = await callSynchronize('abc1234');
+    expect(response.status).toBe(204);
+    const dispatchCalls = fetchSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('/dispatches')
+    );
+    expect(dispatchCalls.length).toBe(0);
   });
 
   it('requests up to 100 reviews per page when checking the reviewed SHA', async () => {

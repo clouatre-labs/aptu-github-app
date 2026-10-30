@@ -429,7 +429,7 @@ export async function shouldSkipReviewedSha(
 
     for (let i = reviews.length - 1; i >= 0; i--) {
       const body = reviews[i]?.body ?? '';
-      const match = body.match(/<!-- APTU_REVIEW:([0-9a-f]+):/);
+      const match = body.match(/<!-- APTU_REVIEW:([0-9a-f]+)/);
       if (match) return match[1] === headSha;
     }
     return false;
