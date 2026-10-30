@@ -1,6 +1,9 @@
 {
   "name": "aptu-github-app",
   "private": true,
+  "scripts": {
+    "lint": "biome check ."
+  },
   "workspaces": [
     "worker"
   ],
