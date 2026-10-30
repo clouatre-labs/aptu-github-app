@@ -54,3 +54,5 @@ Acceptance for the install-time flow itself (welcome issue posted for missing/in
 - No workflows provisioned: the App installation needs the Workflows permission; check the installation page and the Worker logs (`Provisioning ...` entries).
 - No welcome issue on a fresh install: check that `issues: write` re-authorization completed (Step 1 note), then check Worker logs for `Welcome ...` entries.
 - Review workflow fails immediately: usually a missing or misnamed AI secret (Step 3). The name must match the provider mapping exactly.
+
+End-to-end verification entry for aptu review pipeline (test/e2e-review-verification).
