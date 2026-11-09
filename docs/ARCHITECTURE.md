@@ -185,7 +185,7 @@ review:
 
 ai: # optional
   provider: openrouter
-  model: google/gemma-4-26b-a4b-it
+  model: deepseek/deepseek-v4.1-flash-1017
 ```
 
 When the `ai` block is configured, the dispatch payload carries `ai_provider` and `ai_model` (with `provider` defaulting to `openrouter` and `model` to an empty string when omitted or empty). The caller's static dispatch handler derives which repository secret to use from `ai_provider` via a static mapping (`anthropic` -> `secrets.ANTHROPIC_API_KEY`, `gemini` -> `secrets.GEMINI_API_KEY`, otherwise `secrets.OPENROUTER_API_KEY`), resolved inside the caller's own workflow run against the caller's own repository secrets. Every secret name in that mapping is a fixed literal, not a caller-supplied string -- this avoids GitHub Actions' requirement to provision the entire secrets context for a dynamically-computed secret key (zizmor's `overprovisioned-secrets` audit).
