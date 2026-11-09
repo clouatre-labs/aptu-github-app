@@ -18,6 +18,7 @@ Example: "Document the Worker deployment process in README so users can set up w
 <!-- File path, section in existing doc, or new file. -->
 
 Example:
+
 - Update section "Development" in `README.md`
 - Or: New file `docs/deployment.md`
 
