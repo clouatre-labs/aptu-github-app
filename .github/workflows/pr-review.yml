@@ -27,7 +27,7 @@ on:
       ai_model:
         required: false
         type: string
-        default: "google/gemma-4-26b-a4b-it"
+        default: "deepseek/deepseek-v4.1-flash-1017"
       telemetry_enabled:
         required: false
         type: boolean
@@ -77,13 +77,12 @@ jobs:
           model: ${{ inputs.ai_model }}
           skip-labeled: ${{ inputs.skip_labeled }}
           fallback-provider: "openrouter"
-          fallback-model: "inception/mercury-2"
+          fallback-model: "google/gemma-4-26b-a4b-it"
           instructions-file: ${{ inputs.instructions_file }}
           repo-path: ${{ github.workspace }}
           repo: ${{ inputs.originating_repo }}
           pull-number: ${{ inputs.pull_number }}
           max-prompt-chars: "200000"
-          max-full-content-files: "0"
           telemetry-rollup: ${{ inputs.telemetry_enabled }}
 
       - name: Summarize review outcome

@@ -78,16 +78,15 @@ caller's own dispatch handler workflow then resolves one of three fixed
 repository secret names -- `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, or
 `OPENROUTER_API_KEY` -- from the caller's own repository, and passes it to the
 reusable workflow via the `secrets:` block. The default model when `ai.provider`
-is unset is `openrouter` / `google/gemma-4-26b-a4b-it`, with `openrouter` /
-`inception/mercury-2` as the fallback. See
+is unset is `openrouter` / `deepseek/deepseek-v4.1-flash-1017`, with `openrouter` /
+`google/gemma-4-26b-a4b-it` as the fallback. See
 [ARCHITECTURE.md's Caller-Supplied AI Keys section](https://github.com/clouatre-labs/aptu-github-app/blob/main/docs/ARCHITECTURE.md#caller-supplied-ai-keys-byok)
 for the full mechanism.
 
 ## Content Minimization
 
 The `pr-review.yml` reusable workflow bounds how much caller content reaches an
-AI provider: `max-prompt-chars: '200000'` and `max-full-content-files: '0'`
-(no full-file content is sent by default; only diffs). Redaction of sensitive
+AI provider: `max-prompt-chars: '200000'` (only diffs are sent by default). Redaction of sensitive
 content, SARIF content policy, and OpenRouter zero-data-retention (ZDR)
 provider controls are implemented and documented upstream in
 [clouatre-labs/aptu#1494](https://github.com/clouatre-labs/aptu/issues/1494)

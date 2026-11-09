@@ -215,7 +215,7 @@ const WELCOME_ISSUE_BODY = [
   '  enabled: true',
   'ai:',
   '  provider: openrouter',
-  '  model: google/gemma-4-26b-a4b-it',
+  '  model: deepseek/deepseek-v4.1-flash-1017',
   '```',
   '',
   'The `ai` block contains no secret. It selects the provider and model, which determines which repository secret the dispatch handler resolves:',
