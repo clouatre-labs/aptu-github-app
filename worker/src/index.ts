@@ -218,6 +218,8 @@ const WELCOME_ISSUE_BODY = [
   '  model: deepseek/deepseek-v4.1-flash-1017',
   '```',
   '',
+  'The dispatch workflows also configure a fallback model (`google/gemma-4-26b-a4b-it` via `fallback-model` in `.github/workflows/pr-review.yml`), used automatically when the primary provider fails. You can override the model per dispatch with `client_payload.ai_model`.',
+  '',
   'The `ai` block contains no secret. It selects the provider and model, which determines which repository secret the dispatch handler resolves:',
   '',
   '- `provider: gemini` -> `GEMINI_API_KEY`',
