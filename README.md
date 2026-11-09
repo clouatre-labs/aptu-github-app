@@ -57,8 +57,10 @@ scan:
 
 ai:
   provider: openrouter # required if ai block present
-  model: google/gemma-4-26b-a4b-it # required if ai block present
+  model: deepseek/deepseek-v4.1-flash-1017 # required if ai block present
 ```
+
+The dispatch workflows pair this primary model with a fallback (`google/gemma-4-26b-a4b-it`, set via `fallback-model` in the reusable workflows) used automatically when the primary provider fails. Operators can override the model per dispatch with `client_payload.ai_model`.
 
 ### Scan configuration
 
@@ -108,7 +110,7 @@ triage:
   enabled: true
 ai:
   provider: openrouter
-  model: google/gemma-4-26b-a4b-it
+  model: deepseek/deepseek-v4.1-flash-1017
 ```
 
 The `ai` block contains no secret. It selects the provider and model, which determines which of your repository secrets the dispatch handler resolves: `gemini` -> `GEMINI_API_KEY`, `anthropic` -> `ANTHROPIC_API_KEY`, `openrouter` -> `OPENROUTER_API_KEY`. Create the matching secret yourself; the Worker cannot verify that it exists. Security scanning works without the `ai` block.
@@ -125,7 +127,7 @@ review:
   enabled: true
 ai:
   provider: openrouter
-  model: google/gemma-4-26b-a4b-it
+  model: deepseek/deepseek-v4.1-flash-1017
 ```
 
 ## Installation

@@ -30,7 +30,7 @@ triage:
   enabled: true
 ai:
   provider: openrouter
-  model: google/gemma-4-26b-a4b-it
+  model: deepseek/deepseek-v4.1-flash-1017
 ```
 
 This file is parsed by the Worker's `parseConfig`; `version` must be `1`, each feature block needs an `enabled` boolean, and the `ai` block itself is optional. When `ai` is present, a missing or empty `provider` defaults to `openrouter` and a missing or empty `model` defaults to an empty string; only a non-object `ai` block is rejected.
