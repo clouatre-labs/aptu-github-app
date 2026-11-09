@@ -35,6 +35,7 @@ Do not report security vulnerabilities through public GitHub issues.
 Send details to: **hugues+aptu-github-app-security@linux.com**
 
 Include:
+
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact

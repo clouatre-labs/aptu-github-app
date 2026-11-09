@@ -76,12 +76,14 @@ All commits must be GPG-signed with DCO sign-off (`git commit -S --signoff`).
 REUSE compliance is managed via `REUSE.toml`. Inline headers are required only for TypeScript and YAML files. Markdown files are covered by the `**.md` annotation in `REUSE.toml` -- do not add `<!-- SPDX-... -->` comments to `.md` files.
 
 **YAML:**
+
 ```yaml
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 aptu-github-app Contributors
 ```
 
 **TypeScript:**
+
 ```typescript
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 aptu-github-app Contributors

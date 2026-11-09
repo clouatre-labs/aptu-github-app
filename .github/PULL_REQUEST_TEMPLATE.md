@@ -25,16 +25,19 @@
 - [ ] No scope creep (changes match assigned issue)
 
 **Cloudflare Worker** (if `worker/` changed):
+
 - [ ] Build passes (`bunx wrangler build`)
 - [ ] No hardcoded secrets (use Wrangler bindings)
 - [ ] HMAC signature validation present for all webhook paths
 - [ ] TypeScript type check passes (`bun run tsc --noEmit`)
 
 **GitHub Actions** (if `.github/workflows/` changed):
+
 - [ ] Action pins use commit SHAs, not mutable tags
 - [ ] `permissions:` blocks are present and minimal
 - [ ] No sensitive data in `run:` scripts (use `env:` blocks)
 
 **Tests** (if `tests/` changed):
+
 - [ ] Tests pass (`bun test`)
 - [ ] One happy path and one edge case per behavior
