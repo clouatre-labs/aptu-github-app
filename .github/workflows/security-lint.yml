@@ -1,0 +1,31 @@
+# Reusable security and lint checks (secret scan, zizmor, REUSE, markdownlint)
+# provided by clouatre-labs/.github; see clouatre-labs/.github#86.
+name: Security & Lint
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  security-lint:
+    name: Security Result
+    permissions:
+      contents: read
+      security-events: write # needed for SARIF upload
+      actions: read # codeql-action upload bookkeeping
+    uses: clouatre-labs/.github/.github/workflows/security-lint-sarif.yml@63aaff705d670fd4ba58af006a6ec474562015b0
+    with:
+      label: ubuntu-26.04-arm
+      reuse: false
+      markdownlint-globs: |
+        **/*.md
+        #.worktrees
+        #.handoff
