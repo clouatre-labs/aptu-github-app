@@ -1,9 +1,6 @@
 <p align="center">
-  <a href="https://github.com/clouatre-labs/aptu-github-app/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/badge/CI-passing-brightgreen.svg?style=for-the-badge" height="20"></a>
-  <a href="https://github.com/clouatre-labs/aptu-github-app/actions/workflows/deploy.yml"><img alt="Deploy" src="https://img.shields.io/badge/Deploy-Cloudflare%20Workers-blue.svg?style=for-the-badge" height="20"></a>
-  <a href="https://github.com/clouatre-labs/aptu-github-app/actions/workflows/scorecard.yml"><img alt="Scorecard" src="https://img.shields.io/badge/Scorecard-enabled-blue.svg?style=for-the-badge" height="20"></a>
-  <a href="https://github.com/clouatre-labs/aptu-github-app/actions/workflows/security-lint.yml"><img alt="Security" src="https://img.shields.io/badge/Security-linted-orange.svg?style=for-the-badge" height="20"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=for-the-badge" height="20"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Apache--2.0-blue.svg?style=for-the-badge" height="28"></a>
+  <a href="https://api.reuse.software/info/github.com/clouatre-labs/aptu-github-app"><img alt="REUSE" src="https://img.shields.io/reuse/compliance/github.com/clouatre-labs/aptu-github-app?style=for-the-badge" height="28"></a>
 </p>
 
 <h1 align="center">aptu-github-app</h1>
@@ -13,10 +10,10 @@ A Cloudflare Worker and GitHub Actions that automate issue triage and PR review 
 ## Architecture
 
 <p align="center">
-  <img alt="Architecture diagram: a GitHub event reaches the Cloudflare Worker, which runs HMAC verification, ReplayGuard deduplication, IP allowlist, aptu.yml config, quota, draft and bot gates in parallel; passing events dispatch to triage, review, and scan handlers that call reusable workflows running the aptu CLI with the caller's AI key, posting comments and telemetry rollup" src="docs/diagrams/architecture.svg" width="560">
+  <img alt="Architecture diagram: a GitHub webhook reaches the Cloudflare Worker, which runs request guards, then dispatches to triage, review, and scan handlers that post comments and telemetry" src="docs/diagrams/architecture.svg" width="720">
 </p>
 
-*Figure 1: Webhook flow from GitHub event through the Worker gates to repository_dispatch and reusable workflows.*
+*Figure 1: GitHub webhook flows through the Worker guards to triage, review, and scan handlers.*
 
 The diagram convention is documented in [docs/diagrams/README.md](docs/diagrams/README.md): the diagram source (`docs/diagrams/architecture.mmd`) is committed alongside its rendered `.svg`; re-render the SVG in the same change as any source edit.
 
