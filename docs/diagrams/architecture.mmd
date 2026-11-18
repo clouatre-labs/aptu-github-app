@@ -1,0 +1,28 @@
+graph TD
+    GH[GitHub Event] --> W[Cloudflare Worker]
+    W --> SIG[Verify HMAC]
+    W --> RG[ReplayGuard Dedup]
+    W --> ACL[IP Allowlist]
+    W --> CFG[Read aptu.yml]
+    W --> QUOTA[Installation Quota]
+    W --> DRAFT[Skip Draft PRs]
+    W --> BOTS[Skip Bot Authors]
+    SIG --> GATES{Gates Pass}
+    RG --> GATES
+    ACL --> GATES
+    CFG --> GATES
+    QUOTA --> GATES
+    DRAFT --> GATES
+    BOTS --> GATES
+    GATES -->|no| DROP[Drop Event]
+    GATES -->|yes| DISP[repository_dispatch]
+    DISP --> TRIAGE[Triage Handler]
+    DISP --> REVIEW[Review Handler]
+    DISP --> SCAN[Scan Handler]
+    TRIAGE --> REU[Reusable Workflow]
+    REVIEW --> REU
+    SCAN --> REU
+    REU --> CLI[aptu CLI]
+    REU --> KEY[Caller AI Key]
+    CLI --> API[GitHub API Comments]
+    CLI --> TELE[Telemetry Rollup]
