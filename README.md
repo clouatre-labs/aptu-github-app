@@ -1,27 +1,24 @@
-# aptu-github-app
+<p align="center">
+  <a href="https://github.com/clouatre-labs/aptu-github-app/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/badge/CI-passing-brightgreen.svg?style=for-the-badge" height="20"></a>
+  <a href="https://github.com/clouatre-labs/aptu-github-app/actions/workflows/deploy.yml"><img alt="Deploy" src="https://img.shields.io/badge/Deploy-Cloudflare%20Workers-blue.svg?style=for-the-badge" height="20"></a>
+  <a href="https://github.com/clouatre-labs/aptu-github-app/actions/workflows/scorecard.yml"><img alt="Scorecard" src="https://img.shields.io/badge/Scorecard-enabled-blue.svg?style=for-the-badge" height="20"></a>
+  <a href="https://github.com/clouatre-labs/aptu-github-app/actions/workflows/security-lint.yml"><img alt="Security" src="https://img.shields.io/badge/Security-linted-orange.svg?style=for-the-badge" height="20"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=for-the-badge" height="20"></a>
+</p>
+
+<h1 align="center">aptu-github-app</h1>
 
 A Cloudflare Worker and GitHub Actions that automate issue triage and PR review for any repository with the aptu GitHub App installed, powered by [aptu](https://aptu.dev). The Worker validates GitHub webhook signatures, reads each repository's `.github/aptu.yml` opt-in config, and dispatches `repository_dispatch` events to the originating repository to trigger aptu-powered triage, review, and security scan workflows via reusable workflows.
 
 ## Architecture
 
-```text
-GitHub event (issues.opened|edited / pull_request.opened|synchronize|reopened|ready_for_review
-              / issue_comment.created / pull_request_review_comment.created)
-  -> Cloudflare Worker
-       1. Verify X-Hub-Signature-256 (HMAC)
-       2. Deduplicate by X-GitHub-Delivery (ReplayGuard Durable Object)
-       3. Validate source IP against GitHub /meta hook CIDRs (fail-open)
-       4. Get installation token (scoped to originating repo)
-       5. Fetch .github/aptu.yml from originating repo
-       6. Check per-installation quota (enforced for all installations)
-       7. For PRs: skip draft PRs; evaluate review.paths filters
-       8. Get dispatch token (scoped to originating repo)
-       9. POST repository_dispatch to originating repo
-  -> Caller's .github/workflows/aptu-{review,triage,scan-security}.yml (repository_dispatch handlers)
-       -> Calls reusable workflow from aptu-github-app repo
-            -> Checkout caller repo, run aptu CLI with caller's AI API key
-  -> GitHub Reviews API (inline comments as github-actions[bot])
-```
+<p align="center">
+  <img alt="Architecture diagram: a GitHub event reaches the Cloudflare Worker, which runs HMAC verification, ReplayGuard deduplication, IP allowlist, aptu.yml config, quota, draft and bot gates in parallel; passing events dispatch to triage, review, and scan handlers that call reusable workflows running the aptu CLI with the caller's AI key, posting comments and telemetry rollup" src="docs/diagrams/architecture.svg" width="560">
+</p>
+
+*Figure 1: Webhook flow from GitHub event through the Worker gates to repository_dispatch and reusable workflows.*
+
+The diagram convention is documented in [docs/diagrams/README.md](docs/diagrams/README.md): the diagram source (`docs/diagrams/architecture.mmd`) is committed alongside its rendered `.svg`; re-render the SVG in the same change as any source edit.
 
 The Worker uses two Durable Objects: `InstallationQuota` for per-installation rate limiting (50 events per event type per 24h rolling window, enforced for all installations), and `ReplayGuard` for webhook deduplication. No external database is required.
 
