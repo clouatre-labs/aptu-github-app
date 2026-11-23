@@ -79,7 +79,6 @@ jobs:
           fallback-provider: "openrouter"
           fallback-model: "google/gemma-4-26b-a4b-it"
           instructions-file: ${{ inputs.instructions_file }}
-          repo-path: ${{ github.workspace }}
           repo: ${{ inputs.originating_repo }}
           pull-number: ${{ inputs.pull_number }}
           max-prompt-chars: "200000"
